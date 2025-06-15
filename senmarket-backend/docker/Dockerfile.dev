@@ -1,14 +1,15 @@
-# docker/Dockerfile.dev
-FROM golang:1.22-alpine AS development
+# ==================================================
+# Dockerfile.dev - VERSION CORRIGÉE FINALE
+# ==================================================
+FROM golang:1.24-alpine
 
 # Installer les dépendances système
 RUN apk add --no-cache git curl make
 
-# Définir le répertoire de travail
 WORKDIR /app
 
-# Installer air pour hot reload (version latest compatible)
-RUN go install github.com/cosmtrek/air@latest
+# Installer air pour hot reload (nouveau package name)
+RUN go install github.com/air-verse/air@latest
 
 # Installer migrate pour les migrations
 RUN go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
@@ -19,7 +20,7 @@ COPY go.mod go.sum ./
 # Télécharger les dépendances
 RUN go mod download
 
-# Copier le reste du code source
+# Copier le code source
 COPY . .
 
 # Exposer le port

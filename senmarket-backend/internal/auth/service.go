@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
-	"strconv"
+	// "strconv"
 	"time"
 
 	"senmarket/internal/models"
@@ -34,7 +34,7 @@ type SMSService interface {
 
 type RegisterRequest struct {
 	Phone     string `json:"phone" validate:"required,e164"`
-	Email     string `json:"email" validate:"email"`
+	Email     string `json:"email" validate:"omitempty,email"`  // ✅ CORRECTION: omitempty pour email optionnel
 	Password  string `json:"password" validate:"required,min=6"`
 	FirstName string `json:"first_name" validate:"required,min=2,max=50"`
 	LastName  string `json:"last_name" validate:"required,min=2,max=50"`
@@ -66,10 +66,17 @@ func NewService(db *gorm.DB, jwtService *JWTService, smsService SMSService) *Ser
 
 // Register crée un nouveau compte utilisateur
 func (s *Service) Register(req *RegisterRequest) (*AuthResponse, error) {
-	// Vérifier si l'utilisateur existe déjà
+	// ✅ CORRECTION 1: Vérifier d'abord par téléphone seulement
 	var existingUser models.User
-	if err := s.db.Where("phone = ? OR email = ?", req.Phone, req.Email).First(&existingUser).Error; err == nil {
-		return nil, ErrUserExists
+	if err := s.db.Where("phone = ?", req.Phone).First(&existingUser).Error; err == nil {
+		return nil, fmt.Errorf("un compte existe déjà avec ce numéro de téléphone")
+	}
+
+	// ✅ CORRECTION 2: Vérifier email seulement s'il est fourni et non vide
+	if req.Email != "" {
+		if err := s.db.Where("email = ?", req.Email).First(&existingUser).Error; err == nil {
+			return nil, fmt.Errorf("un compte existe déjà avec cet email")
+		}
 	}
 
 	// Hasher le mot de passe
@@ -78,10 +85,10 @@ func (s *Service) Register(req *RegisterRequest) (*AuthResponse, error) {
 		return nil, fmt.Errorf("erreur hachage mot de passe: %w", err)
 	}
 
-	// Créer l'utilisateur
+	// ✅ CORRECTION 3: Créer l'utilisateur avec gestion correcte de l'email
 	user := models.User{
 		Phone:        req.Phone,
-		Email:        req.Email,
+		Email:        req.Email, // Si vide, sera géré par la base comme NULL
 		PasswordHash: hashedPassword,
 		FirstName:    req.FirstName,
 		LastName:     req.LastName,
@@ -89,8 +96,27 @@ func (s *Service) Register(req *RegisterRequest) (*AuthResponse, error) {
 		IsVerified:   false, // Nécessite vérification SMS
 	}
 
-	if err := s.db.Create(&user).Error; err != nil {
-		return nil, fmt.Errorf("erreur création utilisateur: %w", err)
+	// ✅ CORRECTION 4: Si email vide, ne pas l'envoyer à la base
+	if req.Email == "" {
+		// Créer sans email pour éviter les contraintes unique
+		userWithoutEmail := models.User{
+			Phone:        req.Phone,
+			// Email omis volontairement
+			PasswordHash: hashedPassword,
+			FirstName:    req.FirstName,
+			LastName:     req.LastName,
+			Region:       req.Region,
+			IsVerified:   false,
+		}
+		
+		if err := s.db.Omit("email").Create(&userWithoutEmail).Error; err != nil {
+			return nil, fmt.Errorf("erreur création utilisateur: %w", err)
+		}
+		user = userWithoutEmail
+	} else {
+		if err := s.db.Create(&user).Error; err != nil {
+			return nil, fmt.Errorf("erreur création utilisateur: %w", err)
+		}
 	}
 
 	// Envoyer le code de vérification SMS
@@ -182,52 +208,115 @@ func (s *Service) GetUserByID(userID string) (*models.User, error) {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrUserNotFound
 		}
-		return nil, fmt.Errorf("erreur recherche utilisateur: %w", err)
+		return nil, fmt.Errorf("erreur récupération utilisateur: %w", err)
 	}
 	return &user, nil
 }
 
-// sendVerificationCode génère et envoie un code de vérification
+// UpdateProfile met à jour le profil utilisateur
+func (s *Service) UpdateProfile(userID string, updates map[string]interface{}) (*models.User, error) {
+	var user models.User
+	if err := s.db.Where("id = ?", userID).First(&user).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("erreur récupération utilisateur: %w", err)
+	}
+
+	// Mettre à jour les champs autorisés
+	allowedFields := map[string]bool{
+		"first_name": true,
+		"last_name":  true,
+		"email":      true,
+		"avatar_url": true,
+		"region":     true,
+	}
+
+	filteredUpdates := make(map[string]interface{})
+	for key, value := range updates {
+		if allowedFields[key] {
+			filteredUpdates[key] = value
+		}
+	}
+
+	if len(filteredUpdates) > 0 {
+		if err := s.db.Model(&user).Updates(filteredUpdates).Error; err != nil {
+			return nil, fmt.Errorf("erreur mise à jour profil: %w", err)
+		}
+	}
+
+	// Recharger l'utilisateur mis à jour
+	if err := s.db.Where("id = ?", userID).First(&user).Error; err != nil {
+		return nil, fmt.Errorf("erreur rechargement utilisateur: %w", err)
+	}
+
+	return &user, nil
+}
+
+// =====================================================
+// MÉTHODES PRIVÉES
+// =====================================================
+
+// hashPassword hache un mot de passe avec bcrypt
+func (s *Service) hashPassword(password string) (string, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", err
+	}
+	return string(hash), nil
+}
+
+// checkPassword vérifie un mot de passe contre son hash
+func (s *Service) checkPassword(password, hash string) bool {
+	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
+	return err == nil
+}
+
+// sendVerificationCode génère et envoie un code SMS
 func (s *Service) sendVerificationCode(phone string) error {
 	// Générer un code à 6 chiffres
-	code := s.generateVerificationCode()
-
-	// Créer l'enregistrement de vérification
+	code := fmt.Sprintf("%06d", rand.Intn(1000000))
+	
+	// Sauvegarder en base avec expiration dans 10 minutes
 	verification := models.SMSVerification{
 		Phone:     phone,
 		Code:      code,
 		Verified:  false,
 		ExpiresAt: time.Now().Add(10 * time.Minute),
 	}
-
+	
 	if err := s.db.Create(&verification).Error; err != nil {
-		return fmt.Errorf("erreur sauvegarde code: %w", err)
+		return fmt.Errorf("erreur sauvegarde code SMS: %w", err)
 	}
-
+	
 	// Envoyer le SMS
 	message := fmt.Sprintf("🇸🇳 SenMarket: Votre code de vérification est %s. Valable 10 minutes.", code)
 	if err := s.sms.SendSMS(phone, message); err != nil {
 		return fmt.Errorf("erreur envoi SMS: %w", err)
 	}
+	
+	return nil
+}
+
+// ResetPassword réinitialise le mot de passe (pour future implémentation)
+func (s *Service) ResetPassword(phone, newPassword string) error {
+	hashedPassword, err := s.hashPassword(newPassword)
+	if err != nil {
+		return fmt.Errorf("erreur hachage mot de passe: %w", err)
+	}
+
+	if err := s.db.Model(&models.User{}).Where("phone = ?", phone).
+		Update("password_hash", hashedPassword).Error; err != nil {
+		return fmt.Errorf("erreur mise à jour mot de passe: %w", err)
+	}
 
 	return nil
 }
 
-// generateVerificationCode génère un code à 6 chiffres
-func (s *Service) generateVerificationCode() string {
-	rand.Seed(time.Now().UnixNano())
-	code := rand.Intn(900000) + 100000 // Entre 100000 et 999999
-	return strconv.Itoa(code)
-}
-
-// hashPassword hache un mot de passe
-func (s *Service) hashPassword(password string) (string, error) {
-	bytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	return string(bytes), err
-}
-
-// checkPassword vérifie un mot de passe
-func (s *Service) checkPassword(password, hash string) bool {
-	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
-	return err == nil
+// DeleteAccount supprime un compte utilisateur (soft delete)
+func (s *Service) DeleteAccount(userID string) error {
+	if err := s.db.Where("id = ?", userID).Delete(&models.User{}).Error; err != nil {
+		return fmt.Errorf("erreur suppression compte: %w", err)
+	}
+	return nil
 }

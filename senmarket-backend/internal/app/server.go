@@ -34,6 +34,7 @@ type Application struct {
 	categoryService *services.CategoryService
 	paymentService  *services.PaymentService
 	imageService    *services.ImageService
+	contactService  *services.ContactService
 }
 
 func New(cfg *config.Config) *Application {
@@ -61,6 +62,7 @@ func New(cfg *config.Config) *Application {
 	authMiddleware := auth.NewMiddleware(jwtService, authService)
 	listingService := services.NewListingService(db)
 	categoryService := services.NewCategoryService(db)
+	contactService := services.NewContactService(db)
 	
 	// Services paiements et images
 	paymentService := services.NewPaymentService(
@@ -83,6 +85,7 @@ func New(cfg *config.Config) *Application {
 		categoryService: categoryService,
 		paymentService:  paymentService,
 		imageService:    imageService,
+		contactService:  contactService,
 	}
 
 	// Configurer les middlewares et routes
@@ -112,6 +115,12 @@ func (a *Application) setupMiddleware() {
 		
 		c.Next()
 	})
+
+	// Servir les fichiers PWA
+a.router.Static("/public", "./public")
+a.router.StaticFile("/manifest.json", "./public/manifest.json")
+a.router.StaticFile("/sw.js", "./public/sw.js")
+a.router.StaticFile("/offline.html", "./public/offline.html")
 	
 	// Servir les fichiers statiques (images)
 	a.router.Static("/uploads", "./uploads")
@@ -149,6 +158,7 @@ func (a *Application) setupRoutes() {
 		categoryHandler := handlers.NewCategoryHandler(a.categoryService)
 		paymentHandler := handlers.NewPaymentHandler(a.paymentService)
 		imageHandler := handlers.NewImageHandler(a.imageService)
+		contactHandler := handlers.NewContactHandler(a.contactService)
 
 		// Routes d'authentification (publiques)
 		auth := api.Group("/auth")
@@ -200,6 +210,22 @@ func (a *Application) setupRoutes() {
 			listingsProtected.POST("/:id/pay", paymentHandler.PayForListing)
 		}
 
+		// Routes contact (publiques avec auth optionnelle)
+		contacts := api.Group("/contacts")
+		contacts.Use(a.middleware.OptionalAuth())
+		{
+			contacts.POST("", contactHandler.ContactSeller)
+		}
+
+		// Routes contact protégées
+		contactsProtected := api.Group("/contacts")
+		contactsProtected.Use(a.middleware.RequireAuth())
+		{
+			contactsProtected.GET("/my", contactHandler.GetMyContacts)
+			contactsProtected.PUT("/:id/read", contactHandler.MarkContactAsRead)
+			contactsProtected.GET("/stats", contactHandler.GetContactStats)
+		}
+
 		// Routes paiements
 		payments := api.Group("/payments")
 		{
@@ -246,14 +272,16 @@ func (a *Application) setupRoutes() {
 				userID := c.GetString("user_id")
 				
 				var stats struct {
-					TotalListings    int64   `json:"total_listings"`
-					ActiveListings   int64   `json:"active_listings"`
-					SoldListings     int64   `json:"sold_listings"`
-					DraftListings    int64   `json:"draft_listings"`
-					TotalViews       int64   `json:"total_views"`
-					TotalPayments    int64   `json:"total_payments"`
-					CompletedPayments int64  `json:"completed_payments"`
-					TotalRevenue     float64 `json:"total_revenue"`
+					TotalListings     int64   `json:"total_listings"`
+					ActiveListings    int64   `json:"active_listings"`
+					SoldListings      int64   `json:"sold_listings"`
+					DraftListings     int64   `json:"draft_listings"`
+					TotalViews        int64   `json:"total_views"`
+					TotalPayments     int64   `json:"total_payments"`
+					CompletedPayments int64   `json:"completed_payments"`
+					TotalRevenue      float64 `json:"total_revenue"`
+					TotalContacts     int64   `json:"total_contacts"`
+					UnreadContacts    int64   `json:"unread_contacts"`
 				}
 				
 				// Comptage des annonces
@@ -271,6 +299,14 @@ func (a *Application) setupRoutes() {
 				a.db.Model(&models.Payment{}).Where("user_id = ? AND status = ?", userID, "completed").Count(&stats.CompletedPayments)
 				a.db.Model(&models.Payment{}).Select("COALESCE(SUM(amount), 0)").
 					Where("user_id = ? AND status = ?", userID, "completed").Scan(&stats.TotalRevenue)
+				
+				// Statistiques contacts
+				a.db.Model(&models.Contact{}).
+					Joins("JOIN listings ON contacts.listing_id = listings.id").
+					Where("listings.user_id = ?", userID).Count(&stats.TotalContacts)
+				a.db.Model(&models.Contact{}).
+					Joins("JOIN listings ON contacts.listing_id = listings.id").
+					Where("listings.user_id = ? AND contacts.is_read = ?", userID, false).Count(&stats.UnreadContacts)
 				
 				c.JSON(http.StatusOK, gin.H{
 					"message": "Bienvenue sur votre dashboard !",
@@ -348,6 +384,10 @@ func (a *Application) Run() error {
 		log.Printf("📷 Image endpoints:")
 		log.Printf("   POST /api/v1/images/upload (protected)")
 		log.Printf("   POST /api/v1/images/upload-multiple (protected)")
+		log.Printf("💬 Contact endpoints:")
+		log.Printf("   POST /api/v1/contacts (public)")
+		log.Printf("   GET  /api/v1/contacts/my (protected)")
+		log.Printf("   GET  /api/v1/contacts/stats (protected)")
 		log.Printf("🏠 Dashboard:")
 		log.Printf("   GET  /api/v1/dashboard (protected)")
 		log.Printf("📁 Static files:")

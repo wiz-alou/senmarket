@@ -242,7 +242,7 @@ func (s *PaymentService) HandleWebhook(provider string, payload map[string]inter
 	}
 }
 
-// handleOrangeMoneyWebhook traite les webhooks Orange Money
+// handleOrangeMoneyWebhook traite les webhooks Orange Money - VERSION CORRIGÉE
 func (s *PaymentService) handleOrangeMoneyWebhook(payload map[string]interface{}) error {
 	orderID, ok := payload["order_id"].(string)
 	if !ok {
@@ -254,10 +254,17 @@ func (s *PaymentService) handleOrangeMoneyWebhook(payload map[string]interface{}
 		return errors.New("status manquant")
 	}
 
-	// Récupérer le paiement
+	// Récupérer le paiement - accepter à la fois UUID complet et transaction_id
 	var payment models.Payment
-	if err := s.db.Where("id = ?", orderID).First(&payment).Error; err != nil {
-		return fmt.Errorf("paiement non trouvé: %w", err)
+	err := s.db.Where("id = ?", orderID).First(&payment).Error
+	if err != nil {
+		// Si pas trouvé par ID, essayer par transaction_id
+		if len(orderID) >= 8 {
+			err = s.db.Where("transaction_id LIKE ?", "SENMARKET-"+orderID[:8]+"%").First(&payment).Error
+		}
+		if err != nil {
+			return fmt.Errorf("paiement non trouvé: %w", err)
+		}
 	}
 
 	// Mettre à jour selon le statut
@@ -314,7 +321,7 @@ func (s *PaymentService) GetPaymentByID(paymentID string) (*models.Payment, erro
 	return &payment, nil
 }
 
-// GetUserPayments récupère les paiements d'un utilisateur
+// GetUserPayments récupère les paiements d'un utilisateur avec relations complètes
 func (s *PaymentService) GetUserPayments(userID string, page, limit int) ([]models.Payment, int64, error) {
 	if page <= 0 {
 		page = 1
@@ -329,9 +336,14 @@ func (s *PaymentService) GetUserPayments(userID string, page, limit int) ([]mode
 	// Comptage
 	s.db.Model(&models.Payment{}).Where("user_id = ?", userID).Count(&total)
 
-	// Récupération avec pagination
+	// Récupération avec relations complètes
 	offset := (page - 1) * limit
-	err := s.db.Preload("Listing").
+	err := s.db.Preload("User").
+		Preload("Listing").
+		Preload("Listing.Category").
+		Preload("Listing.User", func(db *gorm.DB) *gorm.DB {
+			return db.Select("id", "first_name", "last_name", "phone", "region", "is_verified")
+		}).
 		Where("user_id = ?", userID).
 		Order("created_at DESC").
 		Offset(offset).Limit(limit).
