@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
-
+    "github.com/lib/pq"  
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
@@ -46,7 +46,7 @@ type Listing struct {
 	Price       float64        `json:"price" gorm:"type:decimal(12,2);not null" validate:"required,min=0"`
 	Currency    string         `json:"currency" gorm:"default:'XOF'"`
 	Region      string         `json:"region" gorm:"not null" validate:"required"`
-	Images      StringArray    `json:"images" gorm:"type:jsonb"`
+	Images      pq.StringArray `json:"images" gorm:"type:text[]"`
 	Status      string         `json:"status" gorm:"default:'draft'" validate:"oneof=draft active sold expired"`
 	ViewsCount  int            `json:"views_count" gorm:"default:0"`
 	IsFeatured  bool           `json:"is_featured" gorm:"default:false"`

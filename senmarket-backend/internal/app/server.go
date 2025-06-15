@@ -9,10 +9,11 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
-
+	"senmarket/internal/models"  
 	"senmarket/internal/auth"
 	"senmarket/internal/config"
 	"senmarket/internal/handlers"
+	"senmarket/internal/services"
 	"senmarket/internal/utils"
 
 	"github.com/gin-gonic/gin"
@@ -21,13 +22,15 @@ import (
 )
 
 type Application struct {
-	config      *config.Config
-	db          *gorm.DB
-	redis       *redis.Client
-	router      *gin.Engine
-	authService *auth.Service
-	jwtService  *auth.JWTService
-	middleware  *auth.Middleware
+	config          *config.Config
+	db              *gorm.DB
+	redis           *redis.Client
+	router          *gin.Engine
+	authService     *auth.Service
+	jwtService      *auth.JWTService
+	middleware      *auth.Middleware
+	listingService  *services.ListingService
+	categoryService *services.CategoryService
 }
 
 func New(cfg *config.Config) *Application {
@@ -53,15 +56,19 @@ func New(cfg *config.Config) *Application {
 	smsService := utils.NewMockSMSService() // Mock pour le développement
 	authService := auth.NewService(db, jwtService, smsService)
 	authMiddleware := auth.NewMiddleware(jwtService, authService)
+	listingService := services.NewListingService(db)
+	categoryService := services.NewCategoryService(db)
 
 	app := &Application{
-		config:      cfg,
-		db:          db,
-		redis:       redisClient,
-		router:      gin.New(),
-		authService: authService,
-		jwtService:  jwtService,
-		middleware:  authMiddleware,
+		config:          cfg,
+		db:              db,
+		redis:           redisClient,
+		router:          gin.New(),
+		authService:     authService,
+		jwtService:      jwtService,
+		middleware:      authMiddleware,
+		listingService:  listingService,
+		categoryService: categoryService,
 	}
 
 	// Configurer les middlewares et routes
@@ -121,6 +128,8 @@ func (a *Application) setupRoutes() {
 
 		// Initialiser les handlers
 		authHandler := handlers.NewAuthHandler(a.authService)
+		listingHandler := handlers.NewListingHandler(a.listingService)
+		categoryHandler := handlers.NewCategoryHandler(a.categoryService)
 
 		// Routes d'authentification (publiques)
 		auth := api.Group("/auth")
@@ -139,28 +148,70 @@ func (a *Application) setupRoutes() {
 			protected.PUT("/auth/profile", authHandler.UpdateProfile)
 		}
 
-		// Routes nécessitant une vérification (utilisateur vérifié)
-		verified := api.Group("/")
-		verified.Use(a.middleware.RequireVerifiedUser())
+		// Routes catégories (publiques)
+		categories := api.Group("/categories")
 		{
-			// TODO: Ajouter les routes pour listings, payments, etc.
-			verified.GET("/dashboard", func(c *gin.Context) {
+			categories.GET("", categoryHandler.GetCategories)
+			categories.GET("/stats", categoryHandler.GetCategoriesWithStats)
+			categories.GET("/:id", categoryHandler.GetCategory)
+			categories.GET("/slug/:slug", categoryHandler.GetCategoryBySlug)
+			categories.GET("/:id/listings", categoryHandler.GetListingsByCategory)
+			categories.GET("/:id/stats", categoryHandler.GetCategoryStats)
+		}
+
+		// Routes annonces (publiques avec auth optionnelle)
+		listings := api.Group("/listings")
+		listings.Use(a.middleware.OptionalAuth())
+		{
+			// Routes publiques
+			listings.GET("", listingHandler.GetListings)
+			listings.GET("/search", listingHandler.SearchListings)
+			listings.GET("/:id", listingHandler.GetListing)
+		}
+
+		// Routes annonces protégées (utilisateur vérifié)
+		listingsProtected := api.Group("/listings")
+		listingsProtected.Use(a.middleware.RequireVerifiedUser())
+		{
+			listingsProtected.POST("", listingHandler.CreateListing)
+			listingsProtected.PUT("/:id", listingHandler.UpdateListing)
+			listingsProtected.DELETE("/:id", listingHandler.DeleteListing)
+			listingsProtected.POST("/:id/publish", listingHandler.PublishListing)
+			listingsProtected.GET("/my", listingHandler.GetMyListings)
+		}
+
+		// Dashboard (utilisateur vérifié)
+		dashboard := api.Group("/dashboard")
+		dashboard.Use(a.middleware.RequireVerifiedUser())
+		{
+			dashboard.GET("", func(c *gin.Context) {
 				user, _ := c.Get("user")
+				
+				// Statistiques utilisateur
+				userID := c.GetString("user_id")
+				
+				var stats struct {
+					TotalListings  int64 `json:"total_listings"`
+					ActiveListings int64 `json:"active_listings"`
+					SoldListings   int64 `json:"sold_listings"`
+					DraftListings  int64 `json:"draft_listings"`
+					TotalViews     int64 `json:"total_views"`
+				}
+				
+				// Comptage des annonces
+				a.db.Model(&models.Listing{}).Where("user_id = ?", userID).Count(&stats.TotalListings)
+				a.db.Model(&models.Listing{}).Where("user_id = ? AND status = ?", userID, "active").Count(&stats.ActiveListings)
+				a.db.Model(&models.Listing{}).Where("user_id = ? AND status = ?", userID, "sold").Count(&stats.SoldListings)
+				a.db.Model(&models.Listing{}).Where("user_id = ? AND status = ?", userID, "draft").Count(&stats.DraftListings)
+				
+				// Total des vues
+				a.db.Model(&models.Listing{}).Select("COALESCE(SUM(views_count), 0)").
+					Where("user_id = ?", userID).Scan(&stats.TotalViews)
+				
 				c.JSON(http.StatusOK, gin.H{
 					"message": "Bienvenue sur votre dashboard !",
 					"user":    user,
-				})
-			})
-		}
-
-		// Routes avec authentification optionnelle
-		public := api.Group("/")
-		public.Use(a.middleware.OptionalAuth())
-		{
-			// TODO: Routes publiques avec auth optionnelle (listings publics)
-			public.GET("/listings", func(c *gin.Context) {
-				c.JSON(http.StatusOK, gin.H{
-					"message": "Liste des annonces (publique)",
+					"stats":   stats,
 				})
 			})
 		}
@@ -205,6 +256,16 @@ func (a *Application) Run() error {
 		log.Printf("   POST /api/v1/auth/login") 
 		log.Printf("   POST /api/v1/auth/verify")
 		log.Printf("   GET  /api/v1/auth/profile (protected)")
+		log.Printf("📊 Category endpoints:")
+		log.Printf("   GET  /api/v1/categories")
+		log.Printf("   GET  /api/v1/categories/stats")
+		log.Printf("📝 Listing endpoints:")
+		log.Printf("   GET  /api/v1/listings")
+		log.Printf("   GET  /api/v1/listings/search")
+		log.Printf("   POST /api/v1/listings (protected)")
+		log.Printf("   GET  /api/v1/listings/my (protected)")
+		log.Printf("🏠 Dashboard:")
+		log.Printf("   GET  /api/v1/dashboard (protected)")
 		
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Erreur démarrage serveur: %v", err)
