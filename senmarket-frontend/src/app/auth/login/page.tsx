@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import Image from 'next/image'
 import { 
   EyeIcon,
   EyeSlashIcon,
@@ -14,11 +14,14 @@ import {
   UserGroupIcon,
   CheckIcon
 } from '@heroicons/react/24/outline'
-import { 
-  StarIcon as StarSolid 
-} from '@heroicons/react/24/solid'
+import { StarIcon as StarSolid } from '@heroicons/react/24/solid'
+import { useAuth } from '@/hooks/useAuth'
+import { formatSenegalPhone, validateLoginForm } from '@/utils/validation'
 
 export default function LoginPage() {
+  const router = useRouter()
+  const { login, isAuthenticated } = useAuth()
+  
   const [formData, setFormData] = useState({
     phone: '',
     password: ''
@@ -30,14 +33,25 @@ export default function LoginPage() {
 
   useEffect(() => {
     setIsVisible(true)
-  }, [])
+    // Rediriger si déjà connecté
+    if (isAuthenticated) {
+      router.push('/dashboard')
+    }
+  }, [isAuthenticated, router])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
+    
+    let formattedValue = value
+    if (name === 'phone') {
+      formattedValue = formatPhoneNumber(value)
+    }
+    
     setFormData(prev => ({
       ...prev,
-      [name]: value
+      [name]: formattedValue
     }))
+    
     // Clear error when user starts typing
     if (errors[name]) {
       setErrors(prev => ({
@@ -48,22 +62,9 @@ export default function LoginPage() {
   }
 
   const validateForm = () => {
-    const newErrors: {[key: string]: string} = {}
-
-    if (!formData.phone) {
-      newErrors.phone = 'Le numéro de téléphone est requis'
-    } else if (!/^\+221[0-9]{9}$/.test(formData.phone)) {
-      newErrors.phone = 'Format: +221XXXXXXXXX'
-    }
-
-    if (!formData.password) {
-      newErrors.password = 'Le mot de passe est requis'
-    } else if (formData.password.length < 6) {
-      newErrors.password = 'Minimum 6 caractères'
-    }
-
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
+    const validation = validateLoginForm(formData.phone, formData.password)
+    setErrors(validation.errors)
+    return validation.isValid
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -74,95 +75,85 @@ export default function LoginPage() {
     setIsLoading(true)
     
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000))
+      console.log('🔐 [LOGIN] Tentative de connexion:', { phone: formData.phone })
       
-      // Redirect to dashboard or home
-      console.log('Login successful:', formData)
+      await login(formatSenegalPhone(formData.phone), formData.password)
       
-    } catch (error) {
-      console.error('Login error:', error)
+      console.log('✅ [LOGIN] Connexion réussie')
+      router.push('/dashboard')
+      
+    } catch (error: any) {
+      console.error('❌ [LOGIN] Erreur connexion:', error)
+      setErrors({ 
+        general: error.message || 'Erreur de connexion' 
+      })
     } finally {
       setIsLoading(false)
     }
   }
 
   const formatPhoneNumber = (value: string) => {
-    // Auto-format phone number
-    const cleaned = value.replace(/\D/g, '')
-    if (cleaned.startsWith('221')) {
-      return '+' + cleaned
-    } else if (cleaned.startsWith('77') || cleaned.startsWith('76') || cleaned.startsWith('75') || cleaned.startsWith('78')) {
-      return '+221' + cleaned
-    }
-    return value
+    return formatSenegalPhone(value)
   }
 
   return (
     <div className="min-h-screen flex">
       {/* Left Side - Login Form */}
       <div className="w-full lg:w-1/2 flex flex-col justify-center px-8 sm:px-12 lg:px-16 xl:px-20 bg-white relative overflow-hidden">
-        {/* Back to Home Button */}
-        <div className={`absolute top-6 left-6 z-50 ${isVisible ? 'animate-fade-in-down' : 'opacity-0'}`}>
-          <Link
-            href="/"
-            className="inline-flex items-center space-x-2 text-gray-600 hover:text-primary-600 transition-colors group bg-white/80 backdrop-blur-sm rounded-xl px-4 py-2 shadow-sm hover:shadow-md"
-          >
-            <div className="w-8 h-8 rounded-full bg-gray-100 group-hover:bg-primary-50 flex items-center justify-center transition-colors">
-              <ArrowRightIcon className="w-4 h-4 rotate-180" />
+        
+        {/* Back to Home */}
+        <div className={`absolute top-6 left-6 z-50 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'} transition-all duration-700`}>
+          <Link href="/" className="inline-flex items-center space-x-2 text-gray-600 hover:text-senegal-green transition-colors group">
+            <div className="w-8 h-8 rounded-full bg-gray-100 group-hover:bg-senegal-green/10 flex items-center justify-center transition-colors">
+              <ArrowRightIcon className="h-4 w-4 rotate-180" />
             </div>
-            <span className="text-sm font-medium">Retour à l'accueil</span>
+            <span className="text-sm font-medium">Retour</span>
           </Link>
         </div>
 
-        {/* Background Effects */}
-        <div className="absolute inset-0 opacity-5">
-          <div className="absolute top-20 left-20 w-64 h-64 bg-primary-500 rounded-full blur-3xl"></div>
-          <div className="absolute bottom-20 right-20 w-48 h-48 bg-senegal-green rounded-full blur-3xl"></div>
-        </div>
-
-        <div className="relative z-10 max-w-md mx-auto w-full">
+        {/* Form Container */}
+        <div className={`w-full max-w-md mx-auto ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'} transition-all duration-700 delay-200`}>
+          
           {/* Header */}
-          <div className={`text-center mb-12 ${isVisible ? 'animate-fade-in-up' : 'opacity-0'}`}>
-            {/* Logo */}
-            <Link href="/" className="inline-flex items-center space-x-3 mb-8 group hover:scale-105 transition-transform">
-              <div className="w-14 h-14 bg-gradient-to-br from-primary-600 to-primary-800 rounded-2xl flex items-center justify-center shadow-lg group-hover:shadow-xl transition-all duration-300">
+          <div className="text-center mb-8">
+            <div className="flex items-center justify-center space-x-3 mb-6">
+              <div className="w-16 h-16 bg-gradient-to-br from-senegal-green to-green-600 rounded-3xl flex items-center justify-center shadow-lg">
                 <span className="text-white text-2xl font-bold">🇸🇳</span>
               </div>
-              <div className="text-3xl font-display font-bold text-gray-900 group-hover:text-primary-600 transition-colors">
-                SenMarket
-              </div>
-            </Link>
-
-            {/* Title */}
-            <h1 className="text-4xl font-display font-bold text-gray-900 mb-4">
-              Bon retour ! 👋
+            </div>
+            <h1 className="text-3xl font-display font-bold text-gray-900 mb-3">
+              Bon retour !
             </h1>
-            <p className="text-lg text-gray-600">
-              Connectez-vous pour accéder à votre marketplace préféré
+            <p className="text-gray-600">
+              Connectez-vous pour accéder à votre compte SenMarket
             </p>
           </div>
 
+          {/* Error Message */}
+          {errors.general && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl">
+              <p className="text-red-600 text-sm">{errors.general}</p>
+            </div>
+          )}
+
           {/* Login Form */}
-          <form onSubmit={handleSubmit} className={`space-y-6 ${isVisible ? 'animate-fade-in-up animate-delayed' : 'opacity-0'}`}>
-            {/* Phone Input */}
+          <form onSubmit={handleSubmit} className="space-y-6">
+            
+            {/* Phone */}
             <div>
               <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-2">
                 Numéro de téléphone
               </label>
               <div className="relative">
-                <PhoneIcon className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <PhoneIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
                 <input
                   type="tel"
                   id="phone"
                   name="phone"
                   value={formData.phone}
-                  onChange={(e) => {
-                    const formatted = formatPhoneNumber(e.target.value)
-                    setFormData(prev => ({ ...prev, phone: formatted }))
-                  }}
-                  placeholder="+221 77 123 45 67"
-                  className={`w-full pl-12 pr-4 py-4 text-lg border rounded-2xl focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200 ${
+                  onChange={handleInputChange}
+                  placeholder="+221771234567"
+                  className={`w-full pl-10 pr-4 py-3 border rounded-xl focus:ring-2 focus:ring-senegal-green focus:border-transparent transition-all duration-200 ${
                     errors.phone 
                       ? 'border-red-500 focus:ring-red-500' 
                       : 'border-gray-300 hover:border-gray-400'
@@ -170,17 +161,17 @@ export default function LoginPage() {
                 />
               </div>
               {errors.phone && (
-                <p className="mt-2 text-sm text-red-600">{errors.phone}</p>
+                <p className="mt-1 text-sm text-red-600">{errors.phone}</p>
               )}
             </div>
 
-            {/* Password Input */}
+            {/* Password */}
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
                 Mot de passe
               </label>
               <div className="relative">
-                <LockClosedIcon className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <LockClosedIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   id="password"
@@ -188,7 +179,7 @@ export default function LoginPage() {
                   value={formData.password}
                   onChange={handleInputChange}
                   placeholder="Votre mot de passe"
-                  className={`w-full pl-12 pr-12 py-4 text-lg border rounded-2xl focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200 ${
+                  className={`w-full pl-10 pr-12 py-3 border rounded-xl focus:ring-2 focus:ring-senegal-green focus:border-transparent transition-all duration-200 ${
                     errors.password 
                       ? 'border-red-500 focus:ring-red-500' 
                       : 'border-gray-300 hover:border-gray-400'
@@ -197,7 +188,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
                 >
                   {showPassword ? (
                     <EyeSlashIcon className="h-5 w-5" />
@@ -207,173 +198,81 @@ export default function LoginPage() {
                 </button>
               </div>
               {errors.password && (
-                <p className="mt-2 text-sm text-red-600">{errors.password}</p>
+                <p className="mt-1 text-sm text-red-600">{errors.password}</p>
               )}
-            </div>
-
-            {/* Remember & Forgot */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <input
-                  id="remember"
-                  name="remember"
-                  type="checkbox"
-                  className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
-                />
-                <label htmlFor="remember" className="ml-2 block text-sm text-gray-700">
-                  Se souvenir de moi
-                </label>
-              </div>
-              <Link
-                href="/auth/forgot-password"
-                className="text-sm text-primary-600 hover:text-primary-700 font-medium"
-              >
-                Mot de passe oublié ?
-              </Link>
             </div>
 
             {/* Submit Button */}
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full btn-senegal btn-lg group relative overflow-hidden"
+              className="w-full bg-gradient-to-r from-senegal-green to-green-600 text-white font-semibold py-3 px-6 rounded-xl hover:from-green-600 hover:to-green-700 focus:ring-4 focus:ring-senegal-green/25 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
             >
               {isLoading ? (
-                <div className="flex items-center justify-center">
-                  <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                  Connexion...
-                </div>
+                <>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                  <span>Connexion...</span>
+                </>
               ) : (
                 <>
-                  <ShieldCheckIcon className="w-6 h-6" />
-                  Se connecter
-                  <ArrowRightIcon className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                  <span>Se connecter</span>
+                  <ArrowRightIcon className="h-5 w-5" />
                 </>
               )}
             </button>
           </form>
 
-          {/* Signup Link */}
-          <div className={`text-center mt-8 ${isVisible ? 'animate-fade-in-up animate-delayed-2' : 'opacity-0'}`}>
-            <p className="text-gray-600">
-              Nouveau sur SenMarket ?{' '}
-              <Link
-                href="/auth/register"
-                className="text-primary-600 hover:text-primary-700 font-semibold"
-              >
-                Créer un compte gratuitement
-              </Link>
-            </p>
-          </div>
-
-          {/* Back to Home Link */}
-          <div className={`text-center mt-4 ${isVisible ? 'animate-fade-in-up animate-delayed-2' : 'opacity-0'}`}>
-            <Link
-              href="/"
-              className="inline-flex items-center space-x-2 text-gray-500 hover:text-gray-700 transition-colors group"
-            >
-              <ArrowRightIcon className="w-4 h-4 rotate-180 group-hover:-translate-x-1 transition-transform" />
-              <span className="text-sm">Retourner à l'accueil</span>
+          {/* Footer */}
+          <div className="mt-8 text-center space-y-4">
+            <Link href="/auth/forgot-password" className="text-senegal-green hover:text-green-600 font-medium transition-colors">
+              Mot de passe oublié ?
             </Link>
-          </div>
-
-          {/* Security Note */}
-          <div className={`mt-8 p-4 bg-green-50 border border-green-200 rounded-xl ${isVisible ? 'animate-fade-in-up animate-delayed-3' : 'opacity-0'}`}>
-            <div className="flex items-start space-x-3">
-              <ShieldCheckIcon className="w-5 h-5 text-green-600 mt-0.5" />
-              <div className="text-sm text-green-800">
-                <p className="font-medium mb-1">Connexion sécurisée</p>
-                <p>Vos données sont protégées par un chiffrement de niveau bancaire.</p>
-              </div>
+            
+            <div className="flex items-center justify-center space-x-2 text-gray-600">
+              <span>Pas encore de compte ?</span>
+              <Link href="/auth/register" className="text-senegal-green hover:text-green-600 font-semibold transition-colors">
+                S'inscrire
+              </Link>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Right Side - Visual & Features */}
+      {/* Right Side - Visual */}
       <div className="hidden lg:block lg:w-1/2 relative overflow-hidden">
-        {/* Background Gradient */}
-        <div className="absolute inset-0 bg-gradient-to-br from-primary-600 via-primary-700 to-primary-900"></div>
-        <div className="absolute inset-0 bg-gradient-to-tr from-senegal-green/20 via-transparent to-primary-800/20"></div>
+        <div className="absolute inset-0 bg-gradient-to-br from-senegal-green via-green-600 to-teal-600"></div>
+        <div className="absolute inset-0 bg-gradient-to-tr from-senegal-yellow/20 via-transparent to-green-800/20"></div>
         
-        {/* Particles Effect */}
-        <div className="absolute inset-0 particles"></div>
-        
-        {/* Floating Elements */}
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-20 left-20 w-64 h-64 bg-senegal-yellow rounded-full blob float-1"></div>
-          <div className="absolute bottom-20 right-20 w-48 h-48 bg-senegal-green rounded-full blob float-2"></div>
-          <div className="absolute top-1/2 left-1/2 w-32 h-32 bg-white rounded-full blob float-3"></div>
-        </div>
-
-        {/* Content */}
         <div className="relative z-10 h-full flex flex-col justify-center px-12 xl:px-16 text-white">
-          {/* Badge */}
-          <div className={`inline-flex items-center space-x-2 bg-white/10 backdrop-blur-xl border border-white/20 rounded-full px-6 py-3 mb-8 self-start ${isVisible ? 'animate-fade-in-down' : 'opacity-0'}`}>
-            <StarSolid className="w-5 h-5 text-senegal-yellow" />
-            <span className="text-sm font-medium">Déjà 50,000+ utilisateurs</span>
-          </div>
-
-          {/* Main Content */}
-          <div className={`mb-12 ${isVisible ? 'animate-fade-in-up animate-delayed' : 'opacity-0'}`}>
+          <div className={`${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'} transition-all duration-1000 delay-500`}>
+            <div className="inline-flex items-center space-x-2 bg-white/10 backdrop-blur-xl border border-white/20 rounded-full px-4 py-2 mb-8">
+              <ShieldCheckIcon className="h-5 w-5" />
+              <span className="text-sm font-medium">Connexion Sécurisée</span>
+            </div>
+            
             <h2 className="text-5xl font-display font-bold mb-6 leading-tight">
-              Retrouvez votre
+              Accédez à votre
               <span className="block text-senegal-yellow">marketplace</span>
-              <span className="block">préféré ! 🇸🇳</span>
             </h2>
-            <p className="text-xl text-primary-100 leading-relaxed">
-              Accédez à des milliers d'annonces, gérez vos ventes et 
-              connectez-vous avec la communauté SenMarket.
+            
+            <p className="text-xl text-white/90 mb-12 leading-relaxed">
+              Gérez vos annonces, suivez vos ventes et développez votre business sur SenMarket.
             </p>
-          </div>
-
-          {/* Features */}
-          <div className={`space-y-6 ${isVisible ? 'animate-fade-in-up animate-delayed-2' : 'opacity-0'}`}>
-            {[
-              {
-                icon: UserGroupIcon,
-                title: 'Communauté active',
-                desc: 'Plus de 50,000 sénégalais actifs'
-              },
-              {
-                icon: ShieldCheckIcon,
-                title: 'Paiements sécurisés',
-                desc: 'Orange Money intégré et sécurisé'
-              },
-              {
-                icon: SparklesIcon,
-                title: 'Publication facile',
-                desc: 'Créez une annonce en 2 minutes'
-              }
-            ].map((feature, index) => (
-              <div key={feature.title} className="flex items-center space-x-4">
-                <div className="w-12 h-12 bg-white/10 backdrop-blur rounded-xl flex items-center justify-center">
-                  <feature.icon className="w-6 h-6 text-senegal-yellow" />
+            
+            <div className="space-y-4">
+              {[
+                { icon: SparklesIcon, text: 'Tableau de bord personnalisé' },
+                { icon: UserGroupIcon, text: 'Messagerie intégrée' },
+                { icon: CheckIcon, text: 'Paiements Orange Money' }
+              ].map((item, index) => (
+                <div key={index} className="flex items-center space-x-3">
+                  <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+                    <item.icon className="h-5 w-5" />
+                  </div>
+                  <span className="text-lg">{item.text}</span>
                 </div>
-                <div>
-                  <div className="font-semibold text-lg">{feature.title}</div>
-                  <div className="text-primary-200">{feature.desc}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Stats */}
-          <div className={`grid grid-cols-3 gap-6 mt-16 ${isVisible ? 'animate-fade-in-up animate-delayed-3' : 'opacity-0'}`}>
-            {[
-              { value: '50K+', label: 'Utilisateurs' },
-              { value: '18K+', label: 'Annonces' },
-              { value: '98%', label: 'Satisfaction' }
-            ].map((stat, index) => (
-              <div key={stat.label} className="text-center">
-                <div className="text-3xl font-black text-senegal-yellow mb-1">
-                  {stat.value}
-                </div>
-                <div className="text-sm text-primary-200">
-                  {stat.label}
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       </div>
