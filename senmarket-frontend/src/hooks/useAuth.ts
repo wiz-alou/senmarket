@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useContext, createContext } from 'react';
+import React, { useState, useEffect, useContext, createContext, useCallback } from 'react';
 
 // Types simplifiés
 interface User {
@@ -79,11 +79,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    checkAuth();
-  }, []);
-
-  const checkAuth = async () => {
+  // FIX: Memoiser checkAuth pour éviter les re-créations
+  const checkAuth = useCallback(async () => {
     try {
       const token = authService.getToken();
       console.log('🔍 [AUTH] Vérification token:', token ? 'TROUVÉ' : 'ABSENT');
@@ -115,9 +112,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, []); // Pas de dépendances pour éviter les boucles
 
-  const login = async (phone: string, password: string) => {
+  // FIX: useEffect avec dépendance stable
+  useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
+
+  // FIX: Memoiser login pour éviter les re-renders
+  const login = useCallback(async (phone: string, password: string) => {
     try {
       console.log('🔐 [AUTH] Tentative connexion:', phone);
       
@@ -143,9 +146,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error('❌ [AUTH] Erreur login:', error);
       throw error;
     }
-  };
+  }, []);
 
-  const register = async (data: RegisterRequest) => {
+  // FIX: Memoiser register pour éviter les re-renders
+  const register = useCallback(async (data: RegisterRequest) => {
     try {
       console.log('📝 [AUTH] Inscription:', data.phone);
       
@@ -189,9 +193,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error('❌ [AUTH] Erreur registration:', error);
       throw error;
     }
-  };
+  }, []);
 
-  const logout = () => {
+  // FIX: Memoiser logout pour éviter les re-renders
+  const logout = useCallback(() => {
     console.log('🚪 [AUTH] Déconnexion démarrée');
     
     // Reset l'état local immédiatement
@@ -206,10 +211,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (typeof window !== 'undefined') {
       window.location.replace('/auth/login');
     }
-  };
+  }, []);
 
   // Fonction pour finaliser après vérification SMS
-  const completeRegistration = () => {
+  const completeRegistration = useCallback(() => {
     if (typeof window !== 'undefined') {
       const pendingData = sessionStorage.getItem('pending_registration');
       if (pendingData) {
@@ -221,19 +226,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
     return false;
-  };
+  }, []);
+
+  // FIX: Memoiser la valeur du contexte pour éviter les re-renders
+  const contextValue = React.useMemo(() => ({
+    user,
+    loading,
+    login,
+    register,
+    logout,
+    isAuthenticated: !!user,
+  }), [user, loading, login, register, logout]);
 
   return React.createElement(
     AuthContext.Provider,
     {
-      value: {
-        user,
-        loading,
-        login,
-        register,
-        logout,
-        isAuthenticated: !!user,
-      }
+      value: contextValue
     },
     children
   );
@@ -247,11 +255,11 @@ export function useAuth(): AuthContextType {
   return context;
 }
 
-// Hook pour vérification SMS
+// Hook pour vérification SMS (inchangé)
 export function useCompleteRegistration() {
   const { logout } = useAuth();
   
-  const completeRegistration = async (code: string) => {
+  const completeRegistration = useCallback(async (code: string) => {
     try {
       const pendingData = sessionStorage.getItem('pending_registration');
       if (!pendingData) {
@@ -285,7 +293,7 @@ export function useCompleteRegistration() {
       console.error('❌ Erreur vérification:', error);
       throw error;
     }
-  };
+  }, []);
 
   return { completeRegistration };
 }

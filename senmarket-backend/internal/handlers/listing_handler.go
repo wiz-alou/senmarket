@@ -4,9 +4,8 @@ package handlers
 import (
 	"net/http"
 
-	// "senmarket/internal/models"
 	"senmarket/internal/services"
-
+	"github.com/google/uuid"
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 )
@@ -125,13 +124,23 @@ func (h *ListingHandler) GetListings(c *gin.Context) {
 // @Description Récupère les détails d'une annonce par ID
 // @Tags listings
 // @Produce json
-// @Param id path string true "ID de l'annonce"
+// @Param id path string true "ID de l'annonce (UUID)"
 // @Success 200 {object} models.Listing
+// @Failure 400 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
 // @Router /listings/{id} [get]
 func (h *ListingHandler) GetListing(c *gin.Context) {
 	id := c.Param("id")
 	
+	// VALIDATION UUID
+	if !isValidUUID(id) {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "ID d'annonce invalide",
+			"details": "L'ID doit être un UUID valide",
+		})
+		return
+	}
+
 	listing, err := h.listingService.GetListingByID(id)
 	if err != nil {
 		status := http.StatusInternalServerError
@@ -144,6 +153,12 @@ func (h *ListingHandler) GetListing(c *gin.Context) {
 		})
 		return
 	}
+
+	// Incrémenter le compteur de vues (optionnel - en arrière-plan)
+	go func() {
+		// Note: Tu peux implémenter cette méthode dans ton service si elle n'existe pas
+		// h.listingService.IncrementViews(id)
+	}()
 
 	c.JSON(http.StatusOK, gin.H{
 		"data": listing,
@@ -174,6 +189,15 @@ func (h *ListingHandler) UpdateListing(c *gin.Context) {
 	}
 
 	id := c.Param("id")
+	
+	// VALIDATION UUID
+	if !isValidUUID(id) {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "ID d'annonce invalide",
+			"details": "L'ID doit être un UUID valide",
+		})
+		return
+	}
 	
 	var req services.UpdateListingRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -238,6 +262,15 @@ func (h *ListingHandler) DeleteListing(c *gin.Context) {
 
 	id := c.Param("id")
 	
+	// VALIDATION UUID
+	if !isValidUUID(id) {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "ID d'annonce invalide",
+			"details": "L'ID doit être un UUID valide",
+		})
+		return
+	}
+	
 	err := h.listingService.DeleteListing(id, userID.(string))
 	if err != nil {
 		status := http.StatusInternalServerError
@@ -279,6 +312,15 @@ func (h *ListingHandler) PublishListing(c *gin.Context) {
 	}
 
 	id := c.Param("id")
+	
+	// VALIDATION UUID
+	if !isValidUUID(id) {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "ID d'annonce invalide",
+			"details": "L'ID doit être un UUID valide",
+		})
+		return
+	}
 	
 	listing, err := h.listingService.PublishListing(id, userID.(string))
 	if err != nil {
@@ -396,4 +438,10 @@ func (h *ListingHandler) GetMyListings(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"data": response,
 	})
+}
+
+// Fonction utilitaire pour valider UUID
+func isValidUUID(u string) bool {
+	_, err := uuid.Parse(u)
+	return err == nil
 }
