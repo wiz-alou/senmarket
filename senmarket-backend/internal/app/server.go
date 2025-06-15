@@ -9,10 +9,11 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
-	"senmarket/internal/models"  
+
 	"senmarket/internal/auth"
 	"senmarket/internal/config"
 	"senmarket/internal/handlers"
+	"senmarket/internal/models"
 	"senmarket/internal/services"
 	"senmarket/internal/utils"
 
@@ -31,6 +32,8 @@ type Application struct {
 	middleware      *auth.Middleware
 	listingService  *services.ListingService
 	categoryService *services.CategoryService
+	paymentService  *services.PaymentService
+	imageService    *services.ImageService
 }
 
 func New(cfg *config.Config) *Application {
@@ -53,11 +56,20 @@ func New(cfg *config.Config) *Application {
 
 	// Initialiser les services
 	jwtService := auth.NewJWTService(cfg.JWT.Secret, cfg.JWT.Expiry)
-	smsService := utils.NewMockSMSService() // Mock pour le développement
+	smsService := utils.NewMockSMSService()
 	authService := auth.NewService(db, jwtService, smsService)
 	authMiddleware := auth.NewMiddleware(jwtService, authService)
 	listingService := services.NewListingService(db)
 	categoryService := services.NewCategoryService(db)
+	
+	// Services paiements et images
+	paymentService := services.NewPaymentService(
+		db,
+		os.Getenv("ORANGE_MONEY_API_URL"),
+		os.Getenv("ORANGE_MONEY_MERCHANT_KEY"),
+		os.Getenv("ORANGE_MONEY_MERCHANT_SECRET"),
+	)
+	imageService := services.NewImageService("uploads", "http://localhost:8080")
 
 	app := &Application{
 		config:          cfg,
@@ -69,6 +81,8 @@ func New(cfg *config.Config) *Application {
 		middleware:      authMiddleware,
 		listingService:  listingService,
 		categoryService: categoryService,
+		paymentService:  paymentService,
+		imageService:    imageService,
 	}
 
 	// Configurer les middlewares et routes
@@ -98,6 +112,9 @@ func (a *Application) setupMiddleware() {
 		
 		c.Next()
 	})
+	
+	// Servir les fichiers statiques (images)
+	a.router.Static("/uploads", "./uploads")
 }
 
 func (a *Application) setupRoutes() {
@@ -130,6 +147,8 @@ func (a *Application) setupRoutes() {
 		authHandler := handlers.NewAuthHandler(a.authService)
 		listingHandler := handlers.NewListingHandler(a.listingService)
 		categoryHandler := handlers.NewCategoryHandler(a.categoryService)
+		paymentHandler := handlers.NewPaymentHandler(a.paymentService)
+		imageHandler := handlers.NewImageHandler(a.imageService)
 
 		// Routes d'authentification (publiques)
 		auth := api.Group("/auth")
@@ -178,6 +197,42 @@ func (a *Application) setupRoutes() {
 			listingsProtected.DELETE("/:id", listingHandler.DeleteListing)
 			listingsProtected.POST("/:id/publish", listingHandler.PublishListing)
 			listingsProtected.GET("/my", listingHandler.GetMyListings)
+			listingsProtected.POST("/:id/pay", paymentHandler.PayForListing)
+		}
+
+		// Routes paiements
+		payments := api.Group("/payments")
+		{
+			// Webhooks publics
+			payments.POST("/webhook/orange-money", paymentHandler.OrangeMoneyWebhook)
+			payments.POST("/webhook/wave", paymentHandler.WaveWebhook)
+			payments.POST("/webhook/free-money", paymentHandler.FreeMoneyWebhook)
+		}
+
+		// Routes paiements protégées
+		paymentsProtected := api.Group("/payments")
+		paymentsProtected.Use(a.middleware.RequireVerifiedUser())
+		{
+			paymentsProtected.POST("/initiate", paymentHandler.InitiatePayment)
+			paymentsProtected.GET("/:id", paymentHandler.GetPayment)
+			paymentsProtected.GET("/my", paymentHandler.GetMyPayments)
+		}
+
+		// Routes images
+		images := api.Group("/images")
+		{
+			// Route publique pour validation
+			images.POST("/validate", imageHandler.ValidateImage)
+		}
+
+		// Routes images protégées
+		imagesProtected := api.Group("/images")
+		imagesProtected.Use(a.middleware.RequireAuth())
+		{
+			imagesProtected.POST("/upload", imageHandler.UploadImage)
+			imagesProtected.POST("/upload-multiple", imageHandler.UploadMultipleImages)
+			imagesProtected.DELETE("/delete", imageHandler.DeleteImage)
+			imagesProtected.GET("/info", imageHandler.GetImageInfo)
 		}
 
 		// Dashboard (utilisateur vérifié)
@@ -191,11 +246,14 @@ func (a *Application) setupRoutes() {
 				userID := c.GetString("user_id")
 				
 				var stats struct {
-					TotalListings  int64 `json:"total_listings"`
-					ActiveListings int64 `json:"active_listings"`
-					SoldListings   int64 `json:"sold_listings"`
-					DraftListings  int64 `json:"draft_listings"`
-					TotalViews     int64 `json:"total_views"`
+					TotalListings    int64   `json:"total_listings"`
+					ActiveListings   int64   `json:"active_listings"`
+					SoldListings     int64   `json:"sold_listings"`
+					DraftListings    int64   `json:"draft_listings"`
+					TotalViews       int64   `json:"total_views"`
+					TotalPayments    int64   `json:"total_payments"`
+					CompletedPayments int64  `json:"completed_payments"`
+					TotalRevenue     float64 `json:"total_revenue"`
 				}
 				
 				// Comptage des annonces
@@ -208,6 +266,12 @@ func (a *Application) setupRoutes() {
 				a.db.Model(&models.Listing{}).Select("COALESCE(SUM(views_count), 0)").
 					Where("user_id = ?", userID).Scan(&stats.TotalViews)
 				
+				// Statistiques paiements
+				a.db.Model(&models.Payment{}).Where("user_id = ?", userID).Count(&stats.TotalPayments)
+				a.db.Model(&models.Payment{}).Where("user_id = ? AND status = ?", userID, "completed").Count(&stats.CompletedPayments)
+				a.db.Model(&models.Payment{}).Select("COALESCE(SUM(amount), 0)").
+					Where("user_id = ? AND status = ?", userID, "completed").Scan(&stats.TotalRevenue)
+				
 				c.JSON(http.StatusOK, gin.H{
 					"message": "Bienvenue sur votre dashboard !",
 					"user":    user,
@@ -215,6 +279,19 @@ func (a *Application) setupRoutes() {
 				})
 			})
 		}
+
+		// Route pour lister les régions
+		api.GET("/regions", func(c *gin.Context) {
+			regions := []string{
+				"Dakar - Plateau", "Dakar - Almadies", "Dakar - Parcelles Assainies",
+				"Dakar - Ouakam", "Dakar - Point E", "Dakar - Pikine", "Dakar - Guédiawaye",
+				"Thiès", "Saint-Louis", "Kaolack", "Ziguinchor", "Diourbel",
+				"Louga", "Fatick", "Kolda", "Tambacounda",
+			}
+			c.JSON(http.StatusOK, gin.H{
+				"data": regions,
+			})
+		})
 	}
 }
 
@@ -264,8 +341,17 @@ func (a *Application) Run() error {
 		log.Printf("   GET  /api/v1/listings/search")
 		log.Printf("   POST /api/v1/listings (protected)")
 		log.Printf("   GET  /api/v1/listings/my (protected)")
+		log.Printf("💰 Payment endpoints:")
+		log.Printf("   POST /api/v1/payments/initiate (protected)")
+		log.Printf("   POST /api/v1/listings/:id/pay (protected)")
+		log.Printf("   GET  /api/v1/payments/my (protected)")
+		log.Printf("📷 Image endpoints:")
+		log.Printf("   POST /api/v1/images/upload (protected)")
+		log.Printf("   POST /api/v1/images/upload-multiple (protected)")
 		log.Printf("🏠 Dashboard:")
 		log.Printf("   GET  /api/v1/dashboard (protected)")
+		log.Printf("📁 Static files:")
+		log.Printf("   GET  /uploads/* (images)")
 		
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Erreur démarrage serveur: %v", err)
