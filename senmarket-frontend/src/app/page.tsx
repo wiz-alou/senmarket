@@ -8,8 +8,6 @@ import {
   MapPinIcon, 
   EyeIcon,
   HeartIcon,
-  ClockIcon,
-  StarIcon,
   ShoppingCartIcon,
   TruckIcon,
   ShieldCheckIcon,
@@ -18,9 +16,11 @@ import {
   ChatBubbleLeftRightIcon,
   SparklesIcon,
   ArrowRightIcon,
-  PlayIcon,
-  CheckIcon
-} from '@heroicons/react/24/outline'
+  CheckIcon,
+  PhoneIcon,
+  EnvelopeIcon,
+  FireIcon,
+  TagIcon} from '@heroicons/react/24/outline'
 import { 
   HeartIcon as HeartSolid,
   StarIcon as StarSolid 
@@ -205,6 +205,42 @@ const featuredListings: Listing[] = [
       verified: false
     }
   },
+  {
+    id: '5',
+    title: 'Appartement 3 chambres - Centre ville Dakar',
+    price: 45000000,
+    image: '/api/placeholder/400/300',
+    location: 'Dakar - Plateau',
+    views: 267,
+    createdAt: '2025-06-13T09:15:00Z',
+    category: 'Immobilier',
+    isLiked: false,
+    isFeatured: false,
+    rating: 4.6,
+    seller: {
+      name: 'Ousmane Fall',
+      avatar: '/api/placeholder/40/40',
+      verified: true
+    }
+  },
+  {
+    id: '6',
+    title: 'Moto Honda CBR 600RR - 2022',
+    price: 4500000,
+    image: '/api/placeholder/400/300',
+    location: 'Dakar - Pikine',
+    views: 198,
+    createdAt: '2025-06-12T16:30:00Z',
+    category: 'Véhicules',
+    isLiked: true,
+    isFeatured: false,
+    rating: 4.4,
+    seller: {
+      name: 'Ibrahima Sarr',
+      avatar: '/api/placeholder/40/40',
+      verified: false
+    }
+  }
 ]
 
 const features = [
@@ -229,7 +265,7 @@ const features = [
   {
     icon: UserGroupIcon,
     title: 'Communauté Active',
-    description: 'Plus de 50,000 utilisateurs vérifié actifs',
+    description: 'Plus de 50,000 utilisateurs vérifiés actifs',
     color: 'text-orange-600'
   }
 ]
@@ -241,6 +277,36 @@ const stats = {
   cities: 16,
   satisfaction: 98
 }
+
+const testimonials = [
+  {
+    id: 1,
+    name: 'Aminata Tall',
+    role: 'Entrepreneure',
+    avatar: '/api/placeholder/60/60',
+    content: 'SenMarket a révolutionné la façon dont je vends mes produits. Interface simple et paiements sécurisés !',
+    rating: 5,
+    location: 'Dakar'
+  },
+  {
+    id: 2,
+    name: 'Mamadou Diop',
+    role: 'Concessionnaire Auto',
+    avatar: '/api/placeholder/60/60',
+    content: 'Meilleure plateforme pour vendre des véhicules au Sénégal. Clients sérieux et transactions rapides.',
+    rating: 5,
+    location: 'Thiès'
+  },
+  {
+    id: 3,
+    name: 'Aïcha Ba',
+    role: 'Agent Immobilier',
+    avatar: '/api/placeholder/60/60',
+    content: 'Grâce à SenMarket, j\'ai vendu 15 propriétés ce mois. L\'outil parfait pour l\'immobilier !',
+    rating: 5,
+    location: 'Saint-Louis'
+  }
+]
 
 export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState('')
@@ -493,4 +559,438 @@ export default function HomePage() {
       </section>
 
       {/* Categories Section */}
-      <section className="section-padding bg-gradient-to-br from-gray-50 to-white relative"></section>
+      <section className="section-padding bg-gradient-to-br from-gray-50 to-white relative">
+        <div className="container-custom">
+          <div className="text-center mb-16">
+            <div className="inline-flex items-center space-x-2 bg-primary-50 text-primary-600 rounded-full px-6 py-3 mb-6">
+              <TagIcon className="w-5 h-5" />
+              <span className="font-medium">Explorez nos catégories</span>
+            </div>
+            <h2 className="font-display font-bold text-4xl md:text-5xl text-gray-900 mb-6">
+              Trouvez ce que vous
+              <span className="block text-primary-600">cherchez</span>
+            </h2>
+            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+              Des milliers de produits dans 8 catégories principales, 
+              partout au Sénégal.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            {categories.map((category, index) => (
+              <Link
+                key={category.id}
+                href={`/categories/${category.slug}`}
+                className="group"
+              >
+                <div className="card card-hover p-6 text-center h-full">
+                  <div className={`w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br ${category.gradient} flex items-center justify-center text-3xl mb-4 group-hover:scale-110 transition-all duration-300 shadow-lg`}>
+                    {category.icon}
+                  </div>
+                  <h3 className="font-semibold text-lg text-gray-900 mb-2">
+                    {category.name}
+                  </h3>
+                  <p className="text-gray-600 font-medium">
+                    {category.count.toLocaleString()} annonces
+                  </p>
+                  <div className="flex items-center justify-center mt-3 text-primary-600 group-hover:translate-x-1 transition-transform">
+                    <span className="text-sm font-medium mr-1">Explorer</span>
+                    <ArrowRightIcon className="w-4 h-4" />
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Featured Listings Section */}
+      <section className="section-padding bg-white">
+        <div className="container-custom">
+          <div className="flex justify-between items-center mb-12">
+            <div>
+              <div className="inline-flex items-center space-x-2 bg-primary-50 text-primary-600 rounded-full px-6 py-3 mb-4">
+                <FireIcon className="w-5 h-5" />
+                <span className="font-medium">Annonces populaires</span>
+              </div>
+              <h2 className="font-display font-bold text-4xl md:text-5xl text-gray-900">
+                Les meilleures offres
+              </h2>
+            </div>
+            <Link
+              href="/listings"
+              className="btn-primary group hidden sm:flex"
+            >
+              Voir tout
+              <ArrowRightIcon className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {featuredListings.slice(0, 6).map((listing) => (
+              <div key={listing.id} className="group">
+                <div className="card card-hover overflow-hidden">
+                  {/* Image */}
+                  <div className="relative aspect-[4/3] overflow-hidden">
+                    <Image
+                      src={listing.image}
+                      alt={listing.title}
+                      fill
+                      className="object-cover group-hover:scale-105 transition-transform duration-500"
+                    />
+                    {listing.isFeatured && (
+                      <div className="absolute top-4 left-4 bg-senegal-green text-white px-3 py-1 rounded-full text-sm font-medium">
+                        ⭐ Featured
+                      </div>
+                    )}
+                    <button
+                      onClick={() => toggleLike(listing.id)}
+                      className="absolute top-4 right-4 w-10 h-10 bg-white/90 backdrop-blur rounded-full flex items-center justify-center hover:bg-white transition-colors"
+                    >
+                      {likedItems.has(listing.id) ? (
+                        <HeartSolid className="w-5 h-5 text-red-500" />
+                      ) : (
+                        <HeartIcon className="w-5 h-5 text-gray-600" />
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Content */}
+                  <div className="p-6">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="bg-primary-50 text-primary-600 px-3 py-1 rounded-full text-sm font-medium">
+                        {listing.category}
+                      </span>
+                      <div className="flex items-center space-x-1">
+                        <StarSolid className="w-4 h-4 text-yellow-400" />
+                        <span className="text-sm font-medium text-gray-600">
+                          {listing.rating}
+                        </span>
+                      </div>
+                    </div>
+
+                    <h3 className="font-semibold text-xl text-gray-900 mb-3 group-hover:text-primary-600 transition-colors line-clamp-2">
+                      {listing.title}
+                    </h3>
+
+                    <div className="flex items-center space-x-2 text-gray-600 mb-4">
+                      <MapPinIcon className="w-4 h-4" />
+                      <span className="text-sm">{listing.location}</span>
+                      <span className="text-gray-300">•</span>
+                      <EyeIcon className="w-4 h-4" />
+                      <span className="text-sm">{listing.views} vues</span>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div className="flex flex-col">
+                        <span className="text-2xl font-bold text-gray-900">
+                          {formatPrice(listing.price)}
+                        </span>
+                        <span className="text-sm text-gray-500">
+                          {formatRelativeTime(listing.createdAt)}
+                        </span>
+                      </div>
+                      
+                      <div className="flex items-center space-x-2">
+                        <div className="flex items-center space-x-2">
+                          <Image
+                            src={listing.seller.avatar}
+                            alt={listing.seller.name}
+                            width={32}
+                            height={32}
+                            className="rounded-full"
+                          />
+                          <div className="flex items-center space-x-1">
+                            <span className="text-sm font-medium text-gray-700">
+                              {listing.seller.name.split(' ')[0]}
+                            </span>
+                            {listing.seller.verified && (
+                              <CheckIcon className="w-4 h-4 text-blue-500" />
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Call to Action */}
+          <div className="text-center mt-12">
+            <Link
+              href="/listings"
+              className="btn-primary btn-lg group"
+            >
+              Voir toutes les annonces
+              <ArrowRightIcon className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* Testimonials Section */}
+      <section className="section-padding bg-gradient-to-br from-primary-50 to-white">
+        <div className="container-custom">
+          <div className="text-center mb-16">
+            <div className="inline-flex items-center space-x-2 bg-primary-100 text-primary-700 rounded-full px-6 py-3 mb-6">
+              <ChatBubbleLeftRightIcon className="w-5 h-5" />
+              <span className="font-medium">Témoignages clients</span>
+            </div>
+            <h2 className="font-display font-bold text-4xl md:text-5xl text-gray-900 mb-6">
+              Ce que disent nos
+              <span className="block text-primary-600">utilisateurs</span>
+            </h2>
+            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+              Plus de 50,000 sénégalais nous font confiance pour leurs achats et ventes en ligne.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {testimonials.map((testimonial) => (
+              <div key={testimonial.id} className="card card-hover p-8">
+                <div className="flex items-center space-x-1 mb-6">
+                  {[...Array(testimonial.rating)].map((_, i) => (
+                    <StarSolid key={i} className="w-5 h-5 text-yellow-400" />
+                  ))}
+                </div>
+                
+                <blockquote className="text-gray-700 mb-6 leading-relaxed">
+                  "{testimonial.content}"
+                </blockquote>
+                
+                <div className="flex items-center space-x-4">
+                  <Image
+                    src={testimonial.avatar}
+                    alt={testimonial.name}
+                    width={48}
+                    height={48}
+                    className="rounded-full"
+                  />
+                  <div>
+                    <div className="font-semibold text-gray-900">
+                      {testimonial.name}
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      {testimonial.role} • {testimonial.location}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* CTA Section */}
+      <section className="section-padding bg-gradient-to-br from-primary-600 via-primary-700 to-primary-900 text-white relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-tr from-senegal-green/20 via-transparent to-senegal-yellow/20"></div>
+        <div className="absolute inset-0 particles opacity-30"></div>
+        
+        <div className="container-custom relative z-10">
+          <div className="text-center max-w-4xl mx-auto">
+            <div className="inline-flex items-center space-x-2 bg-white/10 backdrop-blur-xl border border-white/20 rounded-full px-6 py-3 mb-8">
+              <SparklesIcon className="w-5 h-5 text-senegal-yellow" />
+              <span className="text-sm font-medium">Commencez dès maintenant</span>
+            </div>
+            
+            <h2 className="font-display font-bold text-5xl md:text-6xl mb-8">
+              Prêt à rejoindre la
+              <span className="block text-transparent bg-clip-text bg-gradient-to-r from-senegal-yellow via-white to-senegal-yellow">
+                révolution ?
+              </span>
+            </h2>
+            
+            <p className="text-xl md:text-2xl text-primary-100 mb-12 leading-relaxed">
+              Créez votre compte gratuitement et commencez à vendre en moins de 5 minutes.
+              <span className="block text-senegal-yellow font-medium">
+                Première annonce = 200 FCFA seulement ! 🚀
+              </span>
+            </p>
+            
+            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+              <Link
+                href="/auth/register"
+                className="btn-senegal btn-xl group"
+              >
+                <UserGroupIcon className="w-6 h-6" />
+                Créer mon compte
+                <ArrowRightIcon className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              </Link>
+              
+              <Link
+                href="/listings/create"
+                className="btn-outline-white btn-xl group"
+              >
+                <SparklesIcon className="w-6 h-6" />
+                Publier une annonce
+                <ArrowRightIcon className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              </Link>
+            </div>
+            
+            <div className="flex items-center justify-center space-x-8 mt-12 text-primary-200">
+              <div className="flex items-center space-x-2">
+                <CheckIcon className="w-5 h-5 text-senegal-green" />
+                <span>Inscription gratuite</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <CheckIcon className="w-5 h-5 text-senegal-green" />
+                <span>Support 24/7</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <CheckIcon className="w-5 h-5 text-senegal-green" />
+                <span>Paiement sécurisé</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Newsletter Section */}
+      <section className="section-padding bg-white border-t border-gray-100">
+        <div className="container-custom">
+          <div className="max-w-4xl mx-auto text-center">
+            <h3 className="font-display font-bold text-3xl md:text-4xl text-gray-900 mb-4">
+              Restez informé des meilleures offres
+            </h3>
+            <p className="text-lg text-gray-600 mb-8">
+              Recevez chaque semaine une sélection des meilleures annonces dans votre région.
+            </p>
+            
+            <div className="flex flex-col sm:flex-row gap-4 max-w-md mx-auto">
+              <input
+                type="email"
+                placeholder="votre@email.com"
+                className="flex-1 px-6 py-4 rounded-2xl border border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              />
+              <button className="btn-primary px-8 py-4 rounded-2xl">
+                S'abonner
+              </button>
+            </div>
+            
+            <p className="text-sm text-gray-500 mt-4">
+              Pas de spam. Désabonnement en un clic.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="bg-gray-900 text-white">
+        <div className="container-custom py-16">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+            {/* Logo & Description */}
+            <div className="md:col-span-1">
+              <div className="flex items-center space-x-3 mb-6">
+                <div className="w-12 h-12 bg-gradient-to-br from-primary-500 to-primary-700 rounded-2xl flex items-center justify-center">
+                  <span className="text-white text-xl font-bold">🇸🇳</span>
+                </div>
+                <div>
+                  <div className="text-2xl font-display font-bold">
+                    SenMarket
+                  </div>
+                  <div className="text-xs text-gray-400">Marketplace #1</div>
+                </div>
+              </div>
+              <p className="text-gray-400 mb-6 leading-relaxed">
+                Le marketplace de référence au Sénégal. Achetez et vendez en toute sécurité avec Orange Money.
+              </p>
+              <div className="flex space-x-4">
+                {/* Social Media Icons */}
+                <a href="#" className="w-10 h-10 bg-gray-800 rounded-lg flex items-center justify-center hover:bg-primary-600 transition-colors">
+                  <span className="text-sm">📘</span>
+                </a>
+                <a href="#" className="w-10 h-10 bg-gray-800 rounded-lg flex items-center justify-center hover:bg-primary-600 transition-colors">
+                  <span className="text-sm">📱</span>
+                </a>
+                <a href="#" className="w-10 h-10 bg-gray-800 rounded-lg flex items-center justify-center hover:bg-primary-600 transition-colors">
+                  <span className="text-sm">📧</span>
+                </a>
+              </div>
+            </div>
+
+            {/* Navigation */}
+            <div>
+              <h4 className="font-semibold text-lg mb-6">Navigation</h4>
+              <ul className="space-y-3">
+                {[
+                  { name: 'Accueil', href: '/' },
+                  { name: 'Annonces', href: '/listings' },
+                  { name: 'Catégories', href: '/categories' },
+                  { name: 'À propos', href: '/about' },
+                  { name: 'Contact', href: '/contact' },
+                ].map((link) => (
+                  <li key={link.name}>
+                    <Link
+                      href={link.href}
+                      className="text-gray-400 hover:text-white transition-colors"
+                    >
+                      {link.name}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Catégories */}
+            <div>
+              <h4 className="font-semibold text-lg mb-6">Catégories</h4>
+              <ul className="space-y-3">
+                {categories.slice(0, 5).map((category) => (
+                  <li key={category.id}>
+                    <Link
+                      href={`/categories/${category.slug}`}
+                      className="text-gray-400 hover:text-white transition-colors"
+                    >
+                      {category.icon} {category.name}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Contact */}
+            <div>
+              <h4 className="font-semibold text-lg mb-6">Contact</h4>
+              <div className="space-y-4">
+                <div className="flex items-center space-x-3">
+                  <PhoneIcon className="w-5 h-5 text-gray-400" />
+                  <span className="text-gray-400">+221 77 708 07 57</span>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <EnvelopeIcon className="w-5 h-5 text-gray-400" />
+                  <span className="text-gray-400">support@senmarket.sn</span>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <MapPinIcon className="w-5 h-5 text-gray-400" />
+                  <span className="text-gray-400">Dakar, Sénégal</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom Bar */}
+          <div className="border-t border-gray-800 mt-12 pt-8">
+            <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
+              <div className="text-gray-400 text-sm">
+                © 2025 SenMarket. Tous droits réservés.
+              </div>
+              <div className="flex space-x-6 text-sm">
+                <Link href="/privacy" className="text-gray-400 hover:text-white transition-colors">
+                  Confidentialité
+                </Link>
+                <Link href="/terms" className="text-gray-400 hover:text-white transition-colors">
+                  Conditions
+                </Link>
+                <Link href="/help" className="text-gray-400 hover:text-white transition-colors">
+                  Aide
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </footer>
+    </div>
+  )
+}
