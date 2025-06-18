@@ -3,12 +3,14 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { useAuthStore } from '@/stores/authStore'; // ✅ Utiliser le store
 import { 
   Eye,
   EyeOff,
@@ -24,33 +26,13 @@ import {
   Smartphone
 } from 'lucide-react';
 
-interface LoginForm {
-  phone: string;
-  password: string;
-}
-
-interface LoginResponse {
-  message: string;
-  data: {
-    user: {
-      id: string;
-      phone: string;
-      email: string;
-      first_name: string;
-      last_name: string;
-      region: string;
-      is_verified: boolean;
-      created_at: string;
-    };
-    token: string;
-  };
-}
-
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const { login } = useAuthStore(); // ✅ Hook du store
   
   // États du formulaire
-  const [form, setForm] = useState<LoginForm>({
+  const [form, setForm] = useState({
     phone: '',
     password: ''
   });
@@ -61,9 +43,9 @@ export default function LoginPage() {
   const [success, setSuccess] = useState<string | null>(null);
 
   // Gestionnaires
-  const handleInputChange = (field: keyof LoginForm, value: string) => {
+  const handleInputChange = (field: string, value: string) => {
     setForm(prev => ({ ...prev, [field]: value }));
-    if (error) setError(null); // Effacer l'erreur lors de la saisie
+    if (error) setError(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -84,42 +66,20 @@ export default function LoginPage() {
     setError(null);
 
     try {
-      const response = await fetch('http://localhost:8080/api/v1/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(form)
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Erreur de connexion');
-      }
-
-      // Succès de la connexion
-      const loginData = data as LoginResponse;
-      
-      // Sauvegarder le token et les infos utilisateur
-      localStorage.setItem('senmarket_token', loginData.data.token);
-      localStorage.setItem('senmarket_user', JSON.stringify(loginData.data.user));
+      // ✅ Utiliser la méthode login du store
+      await login(form.phone, form.password);
       
       setSuccess('Connexion réussie ! Redirection...');
       
-      // Redirection après 1.5 secondes
+      // ✅ Redirection après succès
       setTimeout(() => {
-        // Rediriger vers le dashboard si l'utilisateur est vérifié, sinon vers la vérification
-        if (loginData.data.user.is_verified) {
-          router.push('/dashboard');
-        } else {
-          router.push('/auth/verify');
-        }
-      }, 1500);
+        const redirectTo = searchParams.get('redirect') || '/dashboard';
+        router.push(redirectTo);
+      }, 1000);
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erreur connexion:', error);
-      setError(error instanceof Error ? error.message : 'Erreur de connexion');
+      setError(error.message || 'Erreur de connexion');
     } finally {
       setIsLoading(false);
     }
@@ -215,7 +175,7 @@ export default function LoginPage() {
                     </motion.div>
                   )}
 
-                  <div onSubmit={handleSubmit} className="space-y-6">
+                  <form onSubmit={handleSubmit} className="space-y-6">
                     
                     {/* Numéro de téléphone */}
                     <div className="space-y-2">
@@ -301,7 +261,7 @@ export default function LoginPage() {
                         </>
                       )}
                     </Button>
-                  </div>
+                  </form>
 
                   {/* Lien vers inscription */}
                   <div className="text-center">

@@ -1,59 +1,44 @@
-import { useMutation } from '@tanstack/react-query';
-import { imagesService } from '@/lib/api';
-import { useNotifications } from '@/stores';
+import { useMutation } from '@tanstack/react-query'
+import { useNotifications } from '@/hooks/useNotifications'
+
+interface UploadResult {
+  urls: string[]
+}
 
 export const useImageUpload = () => {
-  const { showSuccess, showError } = useNotifications();
+  const { showError } = useNotifications()
 
-  // Upload d'une seule image
-  const uploadSingleMutation = useMutation({
-    mutationFn: (file: File) => imagesService.uploadImage(file),
-    onSuccess: () => {
-      showSuccess('Image uploadée', 'Votre image a été ajoutée avec succès');
-    },
-    onError: (error: Error) => {
-      showError('Erreur d\'upload', error.message);
-    },
-  });
-
-  // Upload de plusieurs images
   const uploadMultipleMutation = useMutation({
-    mutationFn: (files: File[]) => imagesService.uploadMultipleImages(files),
-    onSuccess: (images) => {
-      showSuccess(
-        'Images uploadées', 
-        `${images.length} image(s) ajoutée(s) avec succès`
-      );
-    },
-    onError: (error: Error) => {
-      showError('Erreur d\'upload', error.message);
-    },
-  });
+    mutationFn: async (files: File[]): Promise<UploadResult> => {
+      const token = localStorage.getItem('senmarket_token')
+      const formData = new FormData()
+      
+      files.forEach((file) => {
+        formData.append('images', file)
+      })
 
-  // Suppression d'image
-  const deleteMutation = useMutation({
-    mutationFn: (imagePath: string) => imagesService.deleteImage(imagePath),
-    onSuccess: () => {
-      showSuccess('Image supprimée', 'L\'image a été supprimée');
+      const response = await fetch('http://localhost:8080/api/v1/images/upload-multiple', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        body: formData,
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.message || 'Erreur lors de l\'upload')
+      }
+
+      const result = await response.json()
+      return { urls: result.data.urls }
     },
     onError: (error: Error) => {
-      showError('Erreur de suppression', error.message);
+      showError('Erreur upload', error.message)
     },
-  });
+  })
 
   return {
-    // Mutations
-    uploadSingle: uploadSingleMutation.mutate,
-    uploadMultiple: uploadMultipleMutation.mutate,
-    deleteImage: deleteMutation.mutate,
-
-    // États
-    isUploadingSingle: uploadSingleMutation.isPending,
-    isUploadingMultiple: uploadMultipleMutation.isPending,
-    isDeleting: deleteMutation.isPending,
-
-    // Données
-    uploadedImage: uploadSingleMutation.data,
-    uploadedImages: uploadMultipleMutation.data,
-  };
-};
+    uploadMultipleMutation,
+  }
+}

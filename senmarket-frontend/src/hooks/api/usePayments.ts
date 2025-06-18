@@ -1,58 +1,71 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { paymentsService } from '@/lib/api';
-import { useNotifications } from '@/stores';
-import { PaymentRequest } from '@/lib/api/types';
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { useNotifications } from '@/hooks/useNotifications'
 
-export const usePayments = (page = 1, limit = 20) => {
-  return useQuery({
-    queryKey: ['my-payments', page, limit],
-    queryFn: () => paymentsService.getMyPayments(page, limit),
-    staleTime: 1 * 60 * 1000, // 1 minute
-  });
-};
+interface InitiatePaymentRequest {
+  listing_id: string
+  amount: number
+  payment_method: string
+}
 
-export const usePayment = (id: string) => {
-  return useQuery({
-    queryKey: ['payment', id],
-    queryFn: () => paymentsService.getPayment(id),
-    enabled: !!id,
-    staleTime: 30 * 1000, // 30 secondes
-  });
-};
+interface Payment {
+  id: string
+  amount: number
+  status: string
+  payment_method: string
+  transaction_id?: string
+  created_at: string
+}
 
-export const usePaymentMutations = () => {
-  const queryClient = useQueryClient();
-  const { showSuccess, showError } = useNotifications();
+export const usePayments = () => {
+  const { showError } = useNotifications()
 
-  // Initier un paiement
-  const initiatePaymentMutation = useMutation({
-    mutationFn: ({ listingId, data }: { listingId: string; data: PaymentRequest }) =>
-      paymentsService.initiatePayment(listingId, data),
-    onSuccess: (response) => {
-      // Invalider les queries
-      queryClient.invalidateQueries({ queryKey: ['my-payments'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-      
-      showSuccess('Paiement initié', 'Suivez les instructions sur votre téléphone');
-      
-      // Ouvrir l'URL de paiement
-      if (response.payment_url) {
-        window.open(response.payment_url, '_blank');
+  const initiateMutation = useMutation({
+    mutationFn: async (data: InitiatePaymentRequest): Promise<Payment> => {
+      const token = localStorage.getItem('senmarket_token')
+      const response = await fetch('http://localhost:8080/api/v1/payments/initiate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(data),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.message || 'Erreur lors du paiement')
       }
+
+      const result = await response.json()
+      return result.data
     },
     onError: (error: Error) => {
-      showError('Erreur de paiement', error.message);
+      showError('Erreur paiement', error.message)
     },
-  });
+  })
 
   return {
-    // Mutations
-    initiatePayment: initiatePaymentMutation.mutate,
+    initiateMutation,
+  }
+}
 
-    // États
-    isInitiatingPayment: initiatePaymentMutation.isPending,
-
-    // Données
-    paymentResponse: initiatePaymentMutation.data,
-  };
-};
+export const useMyPayments = () => {
+  return useQuery({
+    queryKey: ['my-payments'],
+    queryFn: async () => {
+      const token = localStorage.getItem('senmarket_token')
+      const response = await fetch('http://localhost:8080/api/v1/payments/my', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      })
+      
+      if (!response.ok) {
+        throw new Error('Erreur lors du chargement')
+      }
+      
+      return response.json()
+    },
+    enabled: !!localStorage.getItem('senmarket_token'),
+  })
+}

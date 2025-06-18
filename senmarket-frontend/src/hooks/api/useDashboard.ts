@@ -1,12 +1,22 @@
-import { useQuery } from '@tanstack/react-query';
-import { dashboardService } from '@/lib/api';
+import { useQuery } from '@tanstack/react-query'
 
 export const useDashboard = () => {
   return useQuery({
     queryKey: ['dashboard'],
-    queryFn: dashboardService.getDashboardData,
-    staleTime: 30 * 1000, // 30 secondes
-    refetchInterval: 60 * 1000, // Refetch toutes les minutes
-  });
-};
-
+    queryFn: async () => {
+      const token = localStorage.getItem('senmarket_token')
+      const response = await fetch('http://localhost:8080/api/v1/dashboard', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      })
+      
+      if (!response.ok) {
+        throw new Error('Erreur lors du chargement')
+      }
+      
+      return response.json()
+    },
+    enabled: !!localStorage.getItem('senmarket_token'),
+  })
+}
