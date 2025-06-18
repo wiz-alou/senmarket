@@ -138,7 +138,7 @@ export function HeroSection() {
                     AM
                   </div>
                   <div>
-                    <div className="font-semibold text-slate-900">Amadou Diallo</div>
+                    <div className="font-semibold text-slate-900">Alassane SALL</div>
                     <div className="text-sm text-slate-600">CEO, TechSen Solutions</div>
                   </div>
                 </div>

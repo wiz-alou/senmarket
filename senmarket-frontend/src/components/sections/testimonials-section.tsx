@@ -19,7 +19,7 @@ export function TestimonialsSection() {
   const testimonials = [
     {
       id: 1,
-      name: "Amadou Diallo",
+      name: "Alassane SALL",
       role: "Entrepreneur",
       location: "Dakar",
       category: "Électronique",
@@ -32,7 +32,7 @@ export function TestimonialsSection() {
     },
     {
       id: 2,
-      name: "Aïssatou Mboup",
+      name: "Lamine Thiame",
       role: "Styliste",
       location: "Thiès",
       category: "Mode & Beauté",
@@ -45,7 +45,7 @@ export function TestimonialsSection() {
     },
     {
       id: 3,
-      name: "Ousmane Sarr",
+      name: "Alioune Badara Sow",
       role: "Mécanicien",
       location: "Saint-Louis",
       category: "Véhicules",
