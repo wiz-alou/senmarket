@@ -1,563 +1,311 @@
-// app/page.tsx - Version Ultra-Professionnelle
-'use client'
-
-import { useState, useEffect } from 'react'
+import { Header } from '@/components/layout/header'
+import { Footer } from '@/components/layout/footer'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { 
+  Star, 
+  TrendingUp, 
+  Shield, 
+  Zap, 
+  Heart,
+  MapPin,
+  Clock,
+  Users,
+  ShoppingBag,
+  Award
+} from 'lucide-react'
 
 export default function HomePage() {
-  const [activeCategory, setActiveCategory] = useState('all')
-  const [isScrolled, setIsScrolled] = useState(false)
-  const [currentSlide, setCurrentSlide] = useState(0)
-
-  // Effet de scroll pour le header
-  useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 20)
-    }
-    window.addEventListener('scroll', handleScroll)
-    return () => window.removeEventListener('scroll', handleScroll)
-  }, [])
-
-  // Slider automatique pour les témoignages
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentSlide(prev => (prev + 1) % testimonials.length)
-    }, 5000)
-    return () => clearInterval(timer)
-  }, [])
-
+  // Données de démonstration
   const categories = [
-    { id: 'all', name: 'Toutes catégories', icon: '🎯', count: '15,420+' },
-    { id: 'vehicles', name: 'Véhicules', icon: '🚗', count: '3,285' },
-    { id: 'real-estate', name: 'Immobilier', icon: '🏠', count: '2,150' },
-    { id: 'electronics', name: 'Électronique', icon: '📱', count: '4,680' },
-    { id: 'fashion', name: 'Mode & Beauté', icon: '👗', count: '2,890' },
-    { id: 'services', name: 'Services', icon: '🔧', count: '1,560' },
+    { name: "Véhicules", icon: "🚗", count: 1250, trending: true },
+    { name: "Immobilier", icon: "🏠", count: 890, trending: false },
+    { name: "Électronique", icon: "📱", count: 2100, trending: true },
+    { name: "Mode", icon: "👕", count: 750, trending: false },
+    { name: "Emploi", icon: "💼", count: 420, trending: true },
+    { name: "Services", icon: "🔧", count: 680, trending: false },
+    { name: "Maison", icon: "🛋️", count: 340, trending: false },
+    { name: "Animaux", icon: "🐕", count: 180, trending: false }
   ]
 
-  const featuredListings = [
+  const featuredItems = [
     {
       id: 1,
-      title: 'iPhone 15 Pro Max 256GB - État Neuf',
-      price: 950000,
-      originalPrice: 1200000,
-      location: 'Dakar - Plateau',
-      image: '📱',
-      category: 'Électronique',
+      title: "iPhone 15 Pro Max",
+      price: 850000,
+      location: "Dakar",
+      image: "📱",
+      category: "Électronique",
       featured: true,
-      verified: true,
-      views: 2845,
-      likes: 186,
-      timeAgo: '2h',
-      seller: { name: 'Boutique TechSen', rating: 4.9, sales: 245 }
+      timeAgo: "2h"
     },
     {
       id: 2,
-      title: 'Toyota Prado 2022 - Automatique, Cuir',
-      price: 28500000,
-      location: 'Dakar - Almadies',
-      image: '🚗',
-      category: 'Véhicules',
+      title: "Toyota Corolla 2020",
+      price: 12500000,
+      location: "Thiès",
+      image: "🚗",
+      category: "Véhicules",
       featured: true,
-      verified: true,
-      views: 1892,
-      likes: 124,
-      timeAgo: '4h',
-      seller: { name: 'AutoSen Premium', rating: 4.8, sales: 89 }
+      timeAgo: "5h"
     },
     {
       id: 3,
-      title: 'Villa Moderne 5 Chambres avec Piscine',
-      price: 125000000,
-      location: 'Dakar - Point E',
-      image: '🏠',
-      category: 'Immobilier',
+      title: "Villa 4 chambres",
+      price: 45000000,
+      location: "Almadies",
+      image: "🏠",
+      category: "Immobilier",
       featured: true,
-      verified: true,
-      views: 3241,
-      likes: 298,
-      timeAgo: '1h',
-      seller: { name: 'ImmoLux Sénégal', rating: 5.0, sales: 67 }
-    },
-    {
-      id: 4,
-      title: 'MacBook Pro M3 16" - Encore sous garantie',
-      price: 1850000,
-      originalPrice: 2200000,
-      location: 'Dakar - Mermoz',
-      image: '💻',
-      category: 'Électronique',
-      featured: false,
-      verified: true,
-      views: 892,
-      likes: 67,
-      timeAgo: '6h',
-      seller: { name: 'TechPro Dakar', rating: 4.7, sales: 156 }
-    }
-  ]
-
-  const testimonials = [
-    {
-      name: 'Aminata Diallo',
-      location: 'Dakar',
-      text: 'J\'ai vendu ma voiture en 2 jours ! Interface très simple et professionnelle.',
-      rating: 5,
-      avatar: '👩🏾'
-    },
-    {
-      name: 'Mamadou Sarr',
-      location: 'Thiès',
-      text: 'Meilleur marketplace du Sénégal. Paiement sécurisé avec Orange Money.',
-      rating: 5,
-      avatar: '👨🏾'
-    },
-    {
-      name: 'Fatou Ndiaye',
-      location: 'Saint-Louis',
-      text: 'Service client excellent. J\'ai trouvé exactement ce que je cherchais.',
-      rating: 5,
-      avatar: '👩🏾'
+      timeAgo: "1j"
     }
   ]
 
   const stats = [
-    { value: '15,420+', label: 'Annonces actives', icon: '📈' },
-    { value: '8,750+', label: 'Utilisateurs vérifiés', icon: '✅' },
-    { value: '3,280+', label: 'Ventes réussies', icon: '🎯' },
-    { value: '14', label: 'Régions couvertes', icon: '🗺️' },
-    { value: '4.9/5', label: 'Satisfaction client', icon: '⭐' },
-    { value: '24/7', label: 'Support disponible', icon: '🛟' }
+    { label: "Utilisateurs actifs", value: "15K+", icon: Users },
+    { label: "Annonces publiées", value: "8.5K", icon: ShoppingBag },
+    { label: "Satisfaction client", value: "95%", icon: Award },
+    { label: "Support 24/7", value: "24/7", icon: Clock },
   ]
 
+  const formatPrice = (price: number) => {
+    return new Intl.NumberFormat('fr-SN', {
+      style: 'currency',
+      currency: 'XOF',
+      minimumFractionDigits: 0,
+    }).format(price)
+  }
+
   return (
-    <div className="page">
-      {/* Header Ultra-Professionnel */}
-      <header className={`header ${isScrolled ? 'header-scrolled' : ''}`}>
-        <div className="container">
-          <div className="header-content">
-            {/* Logo Premium */}
-            <div className="logo-premium">
-              <div className="logo-icon-premium">
-                <div className="logo-inner">🇸🇳</div>
-              </div>
-              <div className="logo-text-premium">
-                <div className="brand-name">
-                  Sen<span className="brand-highlight">Market</span>
-                </div>
-                <div className="brand-tagline">Marketplace Premium</div>
-              </div>
-            </div>
-
-            {/* Navigation principale */}
-            <nav className="main-nav">
-              <a href="#" className="nav-link active">Accueil</a>
-              <a href="#" className="nav-link">Catégories</a>
-              <a href="#" className="nav-link">Comment ça marche</a>
-              <a href="#" className="nav-link">Support</a>
-            </nav>
-
-            {/* Barre de recherche premium */}
-            <div className="search-premium">
-              <div className="search-icon-premium">🔍</div>
-              <input
-                type="text"
-                placeholder="Rechercher parmi 15,420+ annonces..."
-                className="search-input-premium"
-              />
-              <button className="search-btn-premium">
-                Rechercher
-              </button>
-            </div>
-
-            {/* Actions utilisateur */}
-            <div className="user-actions">
-              <button className="action-btn">
-                <span className="action-icon">🔔</span>
-                <span className="notification-badge">3</span>
-              </button>
-              <button className="action-btn">
-                <span className="action-icon">💬</span>
-              </button>
-              <button className="action-btn">
-                <span className="action-icon">❤️</span>
-              </button>
-              <div className="divider"></div>
-              <button className="btn-login">Se connecter</button>
-              <button className="btn-primary-premium">
-                <span className="btn-icon">➕</span>
-                Publier gratuitement
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* Hero Section Premium */}
-      <section className="hero-premium">
-        <div className="hero-background"></div>
-        <div className="container">
-          <div className="hero-content">
-            <div className="hero-text">
-              <div className="hero-badge">
-                🎉 Plus de 15,420 annonces actives
-              </div>
-              <h1 className="hero-title">
-                Le marketplace
-                <span className="title-highlight"> #1 du Sénégal</span>
-                <br />
-                <span className="title-sub">Achetez, vendez en toute confiance</span>
-              </h1>
-              <p className="hero-description">
-                Rejoignez des milliers de Sénégalais qui font confiance à SenMarket.
-                Vente rapide, paiement sécurisé, livraison partout au Sénégal.
-              </p>
-              <div className="hero-features">
-                <div className="feature-item">
-                  ✅ <span>Vérification identité</span>
-                </div>
-                <div className="feature-item">
-                  💳 <span>Paiement Orange Money</span>
-                </div>
-                <div className="feature-item">
-                  🚚 <span>Livraison sécurisée</span>
-                </div>
-              </div>
-              <div className="hero-actions">
-                <button className="btn-hero-primary">
-                  <span className="btn-icon">🔍</span>
-                  Explorer maintenant
-                </button>
-                <button className="btn-hero-secondary">
-                  <span className="btn-icon">📱</span>
-                  Vendre maintenant
-                </button>
-              </div>
-            </div>
+    <>
+      <Header />
+      
+      {/* Hero Section */}
+      <section className="relative min-h-screen bg-gradient-to-br from-blue-50 via-white to-orange-50 flex items-center overflow-hidden">
+        {/* Formes décoratives */}
+        <div className="absolute top-20 left-10 w-32 h-32 bg-blue-200 rounded-full opacity-20 animate-float"></div>
+        <div className="absolute bottom-20 right-10 w-24 h-24 bg-orange-200 rounded-full opacity-20 animate-float" style={{animationDelay: '1s'}}></div>
+        
+        <div className="container-fluid relative z-10">
+          <div className="grid lg:grid-cols-2 gap-12 items-center">
             
-            <div className="hero-visual">
-              <div className="phone-mockup">
-                <div className="phone-screen">
-                  <div className="app-preview">
-                    <div className="preview-header">
-                      <div className="preview-logo">🇸🇳</div>
-                      <span>SenMarket</span>
-                    </div>
-                    <div className="preview-content">
-                      <div className="preview-card">
-                        <div className="card-image">🚗</div>
-                        <div className="card-info">
-                          <div className="card-title">Toyota Camry</div>
-                          <div className="card-price">12.5M FCFA</div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Catégories Premium */}
-      <section className="categories-premium">
-        <div className="container">
-          <div className="section-header">
-            <h2 className="section-title">Explorez nos catégories</h2>
-            <p className="section-subtitle">
-              Trouvez exactement ce que vous cherchez dans nos catégories populaires
-            </p>
-          </div>
-          
-          <div className="categories-grid">
-            {categories.map((category) => (
-              <button
-                key={category.id}
-                onClick={() => setActiveCategory(category.id)}
-                className={`category-card ${activeCategory === category.id ? 'active' : ''}`}
-              >
-                <div className="category-icon">{category.icon}</div>
-                <div className="category-info">
-                  <h3 className="category-name">{category.name}</h3>
-                  <p className="category-count">{category.count} annonces</p>
-                </div>
-                <div className="category-arrow">→</div>
-              </button>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Annonces Premium */}
-      <section className="listings-premium">
-        <div className="container">
-          <div className="section-header">
-            <h2 className="section-title">Annonces en vedette</h2>
-            <p className="section-subtitle">
-              Découvrez une sélection d'annonces vérifiées par nos experts
-            </p>
-          </div>
-
-          <div className="listings-grid-premium">
-            {featuredListings.map((listing) => (
-              <div key={listing.id} className="listing-card-premium">
-                {listing.featured && (
-                  <div className="featured-badge">
-                    ⭐ En vedette
-                  </div>
-                )}
+            {/* Contenu texte */}
+            <div className="space-y-8">
+              <div className="space-y-4">
+                <Badge className="bg-blue-100 text-blue-800 border-blue-200">
+                  🇸🇳 Marketplace #1 du Sénégal
+                </Badge>
                 
-                <div className="listing-image-premium">
-                  <div className="listing-image-placeholder">
-                    <span className="image-icon">{listing.image}</span>
+                <h1 className="text-hero text-gradient-ocean">
+                  Achetez et vendez 
+                  <br />
+                  <span className="text-gradient-sand">en toute sécurité</span>
+                </h1>
+                
+                <p className="text-xl text-gray-600 leading-relaxed max-w-xl">
+                  Découvrez le marketplace premium du Sénégal avec des paiements 
+                  Orange Money, Wave et Free Money intégrés. Design moderne, 
+                  expérience exceptionnelle.
+                </p>
+              </div>
+
+              {/* Boutons d'action */}
+              <div className="flex flex-col sm:flex-row gap-4">
+                <Button size="lg" className="btn-ocean text-lg px-8 py-4">
+                  <Zap className="mr-2 h-5 w-5" />
+                  Commencer à vendre
+                </Button>
+                
+                <Button size="lg" variant="outline" className="text-lg px-8 py-4 border-2 border-blue-200 hover:bg-blue-50">
+                  <ShoppingBag className="mr-2 h-5 w-5" />
+                  Explorer les produits
+                </Button>
+              </div>
+
+              {/* Indicateurs de confiance */}
+              <div className="flex items-center space-x-6 pt-4">
+                <div className="flex items-center space-x-1">
+                  <div className="flex">
+                    {[1,2,3,4,5].map((star) => (
+                      <Star key={star} className="h-5 w-5 fill-yellow-400 text-yellow-400" />
+                    ))}
                   </div>
-                  <div className="listing-overlay">
-                    <button className="overlay-btn">❤️</button>
-                    <button className="overlay-btn">📤</button>
-                  </div>
-                  {listing.originalPrice && (
-                    <div className="discount-badge">
-                      -{Math.round((1 - listing.price / listing.originalPrice) * 100)}%
-                    </div>
-                  )}
+                  <span className="text-sm text-gray-600 ml-2">4.9/5 (2,340 avis)</span>
                 </div>
+                
+                <div className="flex items-center space-x-2">
+                  <Shield className="h-5 w-5 text-green-500" />
+                  <span className="text-sm text-gray-600">Paiements sécurisés</span>
+                </div>
+              </div>
+            </div>
 
-                <div className="listing-content-premium">
-                  <div className="listing-header">
-                    <span className="listing-category">{listing.category}</span>
-                    {listing.verified && (
-                      <span className="verified-badge">✅ Vérifié</span>
-                    )}
-                  </div>
-                  
-                  <h3 className="listing-title-premium">{listing.title}</h3>
-                  
-                  <div className="listing-price-premium">
-                    <span className="current-price">
-                      {listing.price.toLocaleString('fr-SN')} FCFA
-                    </span>
-                    {listing.originalPrice && (
-                      <span className="original-price">
-                        {listing.originalPrice.toLocaleString('fr-SN')} FCFA
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="listing-meta">
-                    <span className="listing-location">📍 {listing.location}</span>
-                    <span className="listing-time">🕒 {listing.timeAgo}</span>
-                  </div>
-
-                  <div className="listing-stats">
-                    <span className="stat-item">
-                      👁️ {listing.views.toLocaleString()}
-                    </span>
-                    <span className="stat-item">
-                      ❤️ {listing.likes}
-                    </span>
-                  </div>
-
-                  <div className="seller-info">
-                    <div className="seller-details">
-                      <span className="seller-name">{listing.seller.name}</span>
-                      <div className="seller-rating">
-                        ⭐ {listing.seller.rating} ({listing.seller.sales} ventes)
-                      </div>
-                    </div>
-                    <button className="btn-contact">
-                      💬 Contacter
-                    </button>
+            {/* Image/Illustration */}
+            <div className="relative">
+              <div className="bg-gradient-to-br from-blue-100 to-orange-100 rounded-3xl p-8 shadow-2xl">
+                <div className="text-center space-y-6">
+                  <div className="text-8xl">🛍️</div>
+                  <div className="space-y-2">
+                    <h3 className="text-2xl font-bold text-gray-800">
+                      Plus de 15,000 utilisateurs nous font confiance
+                    </h3>
+                    <p className="text-gray-600">
+                      Rejoignez la communauté qui révolutionne le commerce au Sénégal
+                    </p>
                   </div>
                 </div>
               </div>
-            ))}
-          </div>
-
-          <div className="view-all-section">
-            <button className="btn-view-all">
-              Voir toutes les annonces
-              <span className="btn-arrow">→</span>
-            </button>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Statistiques Premium */}
-      <section className="stats-premium">
-        <div className="container">
-          <div className="stats-header">
-            <h2 className="stats-title">SenMarket en chiffres</h2>
-            <p className="stats-subtitle">
-              La plateforme de confiance de milliers de Sénégalais
+      {/* Section Catégories */}
+      <section className="section-padding bg-white">
+        <div className="container-fluid">
+          <div className="text-center mb-16">
+            <h2 className="text-heading text-gradient-ocean mb-4">
+              Explorez nos catégories
+            </h2>
+            <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+              Trouvez exactement ce que vous cherchez parmi nos 8 catégories principales
             </p>
           </div>
           
-          <div className="stats-grid">
-            {stats.map((stat, index) => (
-              <div key={index} className="stat-card">
-                <div className="stat-icon">{stat.icon}</div>
-                <div className="stat-value">{stat.value}</div>
-                <div className="stat-label">{stat.label}</div>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-6">
+            {categories.map((category) => (
+              <div key={category.name} className="group cursor-pointer">
+                <div className="relative bg-gray-50 group-hover:bg-blue-50 rounded-2xl p-6 text-center transition-all duration-300 transform group-hover:-translate-y-1">
+                  {category.trending && (
+                    <Badge className="absolute -top-2 -right-2 bg-red-500 text-white px-2 py-1 text-xs">
+                      <TrendingUp className="h-3 w-3 mr-1" />
+                      Tendance
+                    </Badge>
+                  )}
+                  
+                  <div className="text-4xl mb-3">{category.icon}</div>
+                  <h3 className="font-semibold text-gray-900 mb-1 text-sm">{category.name}</h3>
+                  <p className="text-xs text-gray-500">{category.count} annonces</p>
+                </div>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Témoignages Premium */}
-      <section className="testimonials-premium">
-        <div className="container">
-          <div className="section-header">
-            <h2 className="section-title">Ce que disent nos utilisateurs</h2>
-            <p className="section-subtitle">
-              Plus de 8,750 utilisateurs nous font confiance chaque jour
+      {/* Section Annonces Vedettes */}
+      <section className="section-padding bg-gray-50">
+        <div className="container-fluid">
+          <div className="text-center mb-16">
+            <h2 className="text-heading text-gradient-ocean mb-4">
+              Annonces vedettes
+            </h2>
+            <p className="text-lg text-gray-600">
+              Les meilleures offres sélectionnées pour vous
             </p>
           </div>
-
-          <div className="testimonials-slider">
-            <div className="testimonial-card active">
-              <div className="testimonial-content">
-                <div className="quote-icon">💬</div>
-                <p className="testimonial-text">
-                  "{testimonials[currentSlide].text}"
-                </p>
-                <div className="testimonial-author">
-                  <div className="author-avatar">
-                    {testimonials[currentSlide].avatar}
+          
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {featuredItems.map((item) => (
+              <Card key={item.id} className="group hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 bg-white border-0 shadow-lg">
+                <CardHeader className="p-0">
+                  <div className="relative bg-gradient-to-br from-blue-100 to-orange-100 rounded-t-lg h-48 flex items-center justify-center">
+                    <div className="text-6xl">{item.image}</div>
+                    
+                    {item.featured && (
+                      <Badge className="absolute top-4 left-4 bg-yellow-500 text-white">
+                        ⭐ Vedette
+                      </Badge>
+                    )}
+                    
+                    <Button 
+                      size="icon" 
+                      variant="ghost" 
+                      className="absolute top-4 right-4 bg-white/80 hover:bg-white"
+                    >
+                      <Heart className="h-4 w-4" />
+                    </Button>
                   </div>
-                  <div className="author-info">
-                    <div className="author-name">{testimonials[currentSlide].name}</div>
-                    <div className="author-location">📍 {testimonials[currentSlide].location}</div>
+                </CardHeader>
+                
+                <CardContent className="p-6">
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between">
+                      <CardTitle className="text-lg line-clamp-2">{item.title}</CardTitle>
+                      <Badge variant="secondary" className="text-xs">
+                        {item.category}
+                      </Badge>
+                    </div>
+                    
+                    <div className="text-2xl font-bold text-gradient-ocean">
+                      {formatPrice(item.price)}
+                    </div>
+                    
+                    <div className="flex items-center justify-between text-sm text-gray-500">
+                      <div className="flex items-center space-x-1">
+                        <MapPin className="h-4 w-4" />
+                        <span>{item.location}</span>
+                      </div>
+                      
+                      <div className="flex items-center space-x-1">
+                        <Clock className="h-4 w-4" />
+                        <span>{item.timeAgo}</span>
+                      </div>
+                    </div>
+                    
+                    <Button className="w-full btn-ocean">
+                      Voir les détails
+                    </Button>
                   </div>
-                  <div className="testimonial-rating">
-                    {'⭐'.repeat(testimonials[currentSlide].rating)}
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            <div className="testimonials-nav">
-              {testimonials.map((_, index) => (
-                <button
-                  key={index}
-                  className={`nav-dot ${index === currentSlide ? 'active' : ''}`}
-                  onClick={() => setCurrentSlide(index)}
-                />
-              ))}
-            </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          
+          <div className="text-center mt-12">
+            <Button size="lg" variant="outline" className="border-2 border-blue-200 hover:bg-blue-50">
+              Voir toutes les annonces
+            </Button>
           </div>
         </div>
       </section>
 
-      {/* CTA Premium */}
-      <section className="cta-premium">
-        <div className="container">
-          <div className="cta-content">
-            <div className="cta-text">
-              <h2 className="cta-title">
-                Prêt à rejoindre SenMarket ?
-              </h2>
-              <p className="cta-description">
-                Commencez à vendre ou acheter dès aujourd'hui. 
-                Inscription gratuite, première annonce offerte !
-              </p>
-              <div className="cta-features">
-                <div className="cta-feature">✅ Inscription en 2 minutes</div>
-                <div className="cta-feature">✅ Première annonce gratuite</div>
-                <div className="cta-feature">✅ Support client 24/7</div>
-              </div>
-            </div>
-            <div className="cta-actions">
-              <button className="btn-cta-primary">
-                <span className="btn-icon">🚀</span>
-                Créer mon compte
-              </button>
-              <button className="btn-cta-secondary">
-                <span className="btn-icon">📱</span>
-                Télécharger l'app
-              </button>
-            </div>
+      {/* Section Statistiques */}
+      <section className="section-padding bg-gradient-to-r from-blue-600 to-blue-800">
+        <div className="container-fluid">
+          <div className="grid md:grid-cols-4 gap-8 text-center text-white">
+            {stats.map((stat, index) => {
+              const IconComponent = stat.icon
+              return (
+                <div key={index} className="space-y-4">
+                  <IconComponent className="h-12 w-12 mx-auto text-blue-200" />
+                  <div className="text-4xl font-bold">{stat.value}</div>
+                  <div className="text-blue-200 font-medium">{stat.label}</div>
+                </div>
+              )
+            })}
           </div>
         </div>
       </section>
 
-      {/* Footer Premium */}
-      <footer className="footer-premium">
-        <div className="container">
-          <div className="footer-content">
-            <div className="footer-brand">
-              <div className="logo-premium">
-                <div className="logo-icon-premium">
-                  <div className="logo-inner">🇸🇳</div>
-                </div>
-                <div className="logo-text-premium">
-                  <div className="brand-name">
-                    Sen<span className="brand-highlight">Market</span>
-                  </div>
-                  <div className="brand-tagline">Marketplace Premium</div>
-                </div>
-              </div>
-              <p className="footer-description">
-                La plateforme de référence pour acheter et vendre au Sénégal.
-                Sécurisé, rapide et accessible à tous.
-              </p>
-              <div className="social-links">
-                <a href="#" className="social-link">📱</a>
-                <a href="#" className="social-link">📘</a>
-                <a href="#" className="social-link">📷</a>
-                <a href="#" className="social-link">🐦</a>
-              </div>
-            </div>
-
-            <div className="footer-links">
-              <div className="footer-column">
-                <h3 className="footer-title">Catégories</h3>
-                <ul className="footer-list">
-                  <li><a href="#" className="footer-link">Véhicules</a></li>
-                  <li><a href="#" className="footer-link">Immobilier</a></li>
-                  <li><a href="#" className="footer-link">Électronique</a></li>
-                  <li><a href="#" className="footer-link">Mode & Beauté</a></li>
-                </ul>
-              </div>
-              
-              <div className="footer-column">
-                <h3 className="footer-title">Support</h3>
-                <ul className="footer-list">
-                  <li><a href="#" className="footer-link">Centre d'aide</a></li>
-                  <li><a href="#" className="footer-link">Contact</a></li>
-                  <li><a href="#" className="footer-link">Signaler</a></li>
-                  <li><a href="#" className="footer-link">Sécurité</a></li>
-                </ul>
-              </div>
-              
-              <div className="footer-column">
-                <h3 className="footer-title">Entreprise</h3>
-                <ul className="footer-list">
-                  <li><a href="#" className="footer-link">À propos</a></li>
-                  <li><a href="#" className="footer-link">Carrières</a></li>
-                  <li><a href="#" className="footer-link">Presse</a></li>
-                  <li><a href="#" className="footer-link">Partenaires</a></li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          <div className="footer-bottom">
-            <div className="footer-bottom-content">
-              <p className="copyright">
-                © 2024 SenMarket. Tous droits réservés.
-              </p>
-              <div className="footer-bottom-links">
-                <a href="#" className="footer-bottom-link">Conditions d'utilisation</a>
-                <a href="#" className="footer-bottom-link">Politique de confidentialité</a>
-                <a href="#" className="footer-bottom-link">Cookies</a>
-              </div>
-              <p className="made-in">
-                Fait avec ❤️ au 🇸🇳 Sénégal
-              </p>
-            </div>
-          </div>
+      {/* Call-to-Action Final */}
+      <section className="section-padding bg-gradient-to-r from-orange-500 to-red-600">
+        <div className="container-fluid text-center text-white space-y-8">
+          <h2 className="text-heading">
+            Prêt à rejoindre SenMarket ?
+          </h2>
+          <p className="text-xl text-orange-100 max-w-2xl mx-auto">
+            Rejoignez des milliers d'utilisateurs satisfaits et commencez à acheter 
+            ou vendre dès aujourd'hui
+          </p>
+          <Button size="lg" className="btn-sand text-lg px-12 py-4">
+            Créer mon compte gratuitement
+          </Button>
         </div>
-      </footer>
-    </div>
+      </section>
+
+      <Footer />
+    </>
   )
 }
