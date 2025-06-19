@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { 
@@ -64,7 +63,6 @@ interface SearchResponse {
 }
 
 export function SearchSection() {
-  const router = useRouter()
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [selectedRegion, setSelectedRegion] = useState('all')
@@ -77,18 +75,6 @@ export function SearchSection() {
 
   // Configuration API
   const API_BASE = 'http://localhost:8080/api/v1'
-
-  // Mapping des icônes
-  const iconMapping: { [key: string]: any } = {
-    'fa-car': Car,
-    'fa-home': Home,
-    'fa-laptop': Smartphone,
-    'fa-tshirt': Briefcase,
-    'fa-briefcase': Briefcase,
-    'fa-tools': Wrench,
-    'fa-couch': Sofa,
-    'fa-paw': Heart,
-  }
 
   // Recherches tendances dynamiques
   const [trendingSearches, setTrendingSearches] = useState([
@@ -130,9 +116,10 @@ export function SearchSection() {
 
         if (categoriesRes.ok) {
           const categoriesData = await categoriesRes.json()
+          // ✅ FIX: Utiliser listing_count au lieu de listings_count
           const enrichedCategories = (categoriesData.data || []).map((cat: any) => ({
             ...cat,
-            listings_count: cat.listings_count || 0
+            listings_count: cat.listing_count || 0
           }))
           setCategories(enrichedCategories)
           
@@ -156,7 +143,7 @@ export function SearchSection() {
       } catch (error) {
         console.error('❌ Error loading search data:', error)
         // Données de fallback
-        setTotalListings(145)
+        setTotalListings(3)
       }
     }
 
@@ -175,19 +162,32 @@ export function SearchSection() {
     try {
       const params = new URLSearchParams()
       
+      // ✅ FIX: Utiliser l'endpoint principal /listings au lieu de /listings/search
       if (searchQuery.trim()) params.append('search', searchQuery.trim())
       if (selectedCategory !== 'all') params.append('category_id', selectedCategory)
       if (selectedRegion !== 'all') params.append('region', selectedRegion)
       params.append('limit', '6') // Limite pour l'aperçu
 
-      const response = await fetch(`${API_BASE}/listings/search?${params}`)
+      // ✅ CORRECTION: Utiliser /listings au lieu de /listings/search
+      const response = await fetch(`${API_BASE}/listings?${params}`)
       
       if (response.ok) {
         const data = await response.json()
-        setSearchResults(data.data)
+        console.log('🔍 Search response:', data)
+        
+        // ✅ FIX: Adapter la structure de réponse
+        const searchData = {
+          listings: data.data?.listings || [],
+          total: data.data?.total || 0,
+          page: data.data?.page || 1,
+          limit: 6
+        }
+        
+        setSearchResults(searchData)
         setShowResults(true)
-        console.log('🔍 Search results:', data.data)
+        console.log('🔍 Search results:', searchData)
       } else {
+        console.error('❌ Search failed:', response.status, response.statusText)
         setSearchResults({ listings: [], total: 0, page: 1, limit: 6 })
         setShowResults(true)
       }
@@ -236,10 +236,16 @@ export function SearchSection() {
   const viewAllResults = () => {
     const params = new URLSearchParams()
     if (searchQuery.trim()) params.append('search', searchQuery.trim())
-    if (selectedCategory !== 'all') params.append('category', selectedCategory)
+    if (selectedCategory !== 'all') {
+      // ✅ FIX: Convertir category_id en slug pour l'URL
+      const category = categories.find(cat => cat.id === selectedCategory)
+      if (category) {
+        params.append('category', category.slug)
+      }
+    }
     if (selectedRegion !== 'all') params.append('region', selectedRegion)
     
-    router.push(`/listings?${params}`)
+    window.location.href = `/listings?${params}`
   }
 
   return (
@@ -290,7 +296,7 @@ export function SearchSection() {
                   )}
                 </div>
 
-                {/* Sélecteur de catégorie avec vraies données */}
+                {/* ✅ Sélecteur de catégorie SANS icônes fa- */}
                 <div className="lg:col-span-3">
                   <select 
                     value={selectedCategory}
@@ -398,21 +404,36 @@ export function SearchSection() {
                     <div
                       key={listing.id}
                       className="bg-gray-50 rounded-xl p-4 hover:shadow-md transition-shadow cursor-pointer group"
-                      onClick={() => router.push(`/listings/${listing.id}`)}
+                      onClick={() => window.location.href = `/listings/${listing.id}`}
                     >
                       {/* Image */}
                       <div className="relative h-32 bg-gray-200 rounded-lg mb-3 overflow-hidden">
                         {listing.images && listing.images.length > 0 ? (
                           <img
-                            src={`http://localhost:8080${listing.images[0]}`}
+                            src={listing.images[0].startsWith('http') 
+                              ? listing.images[0] 
+                              : listing.images[0].startsWith('/') 
+                                ? `http://localhost:8080${listing.images[0]}`
+                                : `http://localhost:8080/uploads/${listing.images[0]}`
+                            }
                             alt={listing.title}
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            onError={(e) => {
+                              console.error('❌ Erreur image search:', e.currentTarget.src)
+                              e.currentTarget.style.display = 'none'
+                              const fallback = e.currentTarget.nextElementSibling as HTMLElement
+                              if (fallback) fallback.style.display = 'flex'
+                            }}
                           />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <Building className="h-8 w-8 text-gray-400" />
-                          </div>
-                        )}
+                        ) : null}
+                        
+                        {/* Fallback */}
+                        <div 
+                          className="w-full h-full flex items-center justify-center"
+                          style={{ display: (listing.images && listing.images.length > 0) ? 'none' : 'flex' }}
+                        >
+                          <Building className="h-8 w-8 text-gray-400" />
+                        </div>
                         
                         {/* Prix */}
                         <div className="absolute top-2 left-2 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-md">
@@ -445,6 +466,7 @@ export function SearchSection() {
                           <span>{formatDate(listing.created_at)}</span>
                         </div>
 
+                        {/* ✅ Badge catégorie SANS icône */}
                         {listing.category && (
                           <div className="mt-2">
                             <Badge variant="secondary" className="text-xs">

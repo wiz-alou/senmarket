@@ -3,14 +3,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Search, 
-  Filter, 
-  Grid, 
-  List, 
-  MapPin, 
-  Clock, 
-  Eye, 
+import {
+  Search,
+  Filter,
+  Grid,
+  List,
+  MapPin,
+  Clock,
+  Eye,
   Heart,
   Share2,
   ChevronDown,
@@ -87,7 +87,7 @@ const SENEGAL_REGIONS = [
 export default function ListingsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  
+
   // États
   const [listings, setListings] = useState<Listing[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -118,17 +118,17 @@ export default function ListingsPage() {
   // ✅ FONCTION HELPER POUR LES IMAGES (FIX PRINCIPAL)
   const getImageUrl = (imagePath: string) => {
     if (!imagePath) return null;
-    
+
     // Si l'URL est déjà complète
     if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
       return imagePath;
     }
-    
+
     // Si l'URL commence par /
     if (imagePath.startsWith('/')) {
       return `http://localhost:8080${imagePath}`;
     }
-    
+
     // Sinon construire l'URL
     return `http://localhost:8080/uploads/${imagePath}`;
   };
@@ -139,7 +139,7 @@ export default function ListingsPage() {
     listings.forEach((listing, index) => {
       console.log(`📝 Annonce ${index + 1}: ${listing.title}`);
       console.log(`  - Images brutes:`, listing.images);
-      
+
       if (listing.images && listing.images.length > 0) {
         listing.images.forEach((img, imgIndex) => {
           const finalUrl = getImageUrl(img);
@@ -166,7 +166,7 @@ export default function ListingsPage() {
   useEffect(() => {
     if (categories.length > 0) {
       const categoryParam = searchParams.get('category') || searchParams.get('category_id');
-      
+
       let categoryId = 'all';
       if (categoryParam) {
         // Si c'est un slug, convertir en ID
@@ -204,7 +204,7 @@ export default function ListingsPage() {
       console.log('📡 Chargement catégories...');
       const response = await fetch('http://localhost:8080/api/v1/categories');
       const data = await response.json();
-      
+
       console.log('✅ Catégories reçues:', data.data);
       setCategories(data.data || []);
     } catch (error) {
@@ -219,7 +219,7 @@ export default function ListingsPage() {
     try {
       // ✅ CONSTRUCTION URL AVEC CATEGORY_ID
       const params = new URLSearchParams();
-      
+
       if (filters.search) params.append('search', filters.search);
       if (filters.category_id && filters.category_id !== 'all') {
         params.append('category_id', filters.category_id);
@@ -266,11 +266,11 @@ export default function ListingsPage() {
   // ✅ MISE À JOUR URL AVEC SLUG
   const updateUrlParams = useCallback((newFilters: Partial<ListingFilters>) => {
     const params = new URLSearchParams();
-    
+
     const updatedFilters = { ...filters, ...newFilters };
-    
+
     if (updatedFilters.search) params.append('search', updatedFilters.search);
-    
+
     // ✅ CONVERTIR CATEGORY_ID → SLUG POUR URL
     if (updatedFilters.category_id && updatedFilters.category_id !== 'all') {
       const category = categories.find(cat => cat.id === updatedFilters.category_id);
@@ -279,7 +279,7 @@ export default function ListingsPage() {
         console.log(`🔄 URL: ID "${updatedFilters.category_id}" → slug "${category.slug}"`);
       }
     }
-    
+
     if (updatedFilters.region && updatedFilters.region !== 'all') params.append('region', updatedFilters.region);
     if (updatedFilters.min_price) params.append('min_price', updatedFilters.min_price);
     if (updatedFilters.max_price) params.append('max_price', updatedFilters.max_price);
@@ -341,11 +341,11 @@ export default function ListingsPage() {
     const date = new Date(dateString);
     const now = new Date();
     const diff = now.getTime() - date.getTime();
-    
+
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
     const hours = Math.floor(diff / (1000 * 60 * 60));
     const minutes = Math.floor(diff / (1000 * 60));
-    
+
     if (days > 0) return `il y a ${days}j`;
     if (hours > 0) return `il y a ${hours}h`;
     return `il y a ${minutes}min`;
@@ -357,13 +357,13 @@ export default function ListingsPage() {
   return (
     <>
       <Header />
-      
+
       <main className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
-        
+
         {/* En-tête avec filtres */}
         <section className="bg-white border-b border-slate-200 sticky top-16 z-40">
           <div className="container mx-auto px-6 py-6">
-            
+
             {/* Titre et breadcrumb */}
             <div className="mb-6">
               <div className="flex items-center gap-2 text-sm text-slate-600 mb-2">
@@ -375,11 +375,11 @@ export default function ListingsPage() {
                   {currentCategoryName ? `${currentCategoryName}` : 'Toutes les annonces'}
                 </span>
               </div>
-              
+
               <h1 className="text-3xl font-bold text-slate-900">
                 {currentCategoryName ? `Annonces ${currentCategoryName}` : 'Toutes les annonces'}
               </h1>
-              
+
               {pagination.total > 0 && (
                 <p className="text-slate-600 mt-1">
                   {pagination.total.toLocaleString()} annonce{pagination.total > 1 ? 's' : ''} trouvée{pagination.total > 1 ? 's' : ''}
@@ -389,7 +389,7 @@ export default function ListingsPage() {
 
             {/* Barre de recherche et filtres */}
             <div className="flex flex-col lg:flex-row gap-4">
-              
+
               {/* Recherche */}
               <div className="flex-1">
                 <div className="relative">
@@ -405,10 +405,10 @@ export default function ListingsPage() {
 
               {/* Filtres rapides */}
               <div className="flex gap-3">
-                
+
                 {/* Catégorie */}
-                <Select 
-                  value={filters.category_id} 
+                <Select
+                  value={filters.category_id}
                   onValueChange={(value) => handleFilterChange('category_id', value)}
                 >
                   <SelectTrigger className="w-48 h-12">
@@ -428,8 +428,8 @@ export default function ListingsPage() {
                 </Select>
 
                 {/* Région */}
-                <Select 
-                  value={filters.region} 
+                <Select
+                  value={filters.region}
                   onValueChange={(value) => handleFilterChange('region', value)}
                 >
                   <SelectTrigger className="w-40 h-12">
@@ -444,8 +444,8 @@ export default function ListingsPage() {
                 </Select>
 
                 {/* Tri */}
-                <Select 
-                  value={filters.sort} 
+                <Select
+                  value={filters.sort}
                   onValueChange={(value) => handleFilterChange('sort', value)}
                 >
                   <SelectTrigger className="w-40 h-12">
@@ -492,24 +492,6 @@ export default function ListingsPage() {
               </div>
             </div>
 
-            {/* ✅ DEBUG INFO */}
-            <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <strong>Debug Info:</strong> 
-                  Catégorie ID: <code>{filters.category_id === 'all' ? 'toutes' : filters.category_id}</code> | 
-                  Catégorie Nom: <code>{currentCategoryName || 'toutes'}</code> | 
-                  Total: <code>{pagination.total}</code>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => debugImageUrls(listings)}
-                >
-                  🔧 Debug Images
-                </Button>
-              </div>
-            </div>
 
             {/* Filtres avancés */}
             <AnimatePresence>
@@ -521,7 +503,7 @@ export default function ListingsPage() {
                   className="mt-6 p-6 bg-slate-50 rounded-lg border border-slate-200"
                 >
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    
+
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-2">
                         Prix minimum (FCFA)
@@ -564,7 +546,7 @@ export default function ListingsPage() {
 
         {/* Contenu principal */}
         <section className="container mx-auto px-6 py-8">
-          
+
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-blue-600 mr-3" />
@@ -591,14 +573,13 @@ export default function ListingsPage() {
           ) : (
             <>
               {/* ✅ GRILLE D'ANNONCES AVEC IMAGES CORRIGÉES */}
-              <div className={`grid gap-6 ${
-                viewMode === 'grid' 
-                  ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' 
+              <div className={`grid gap-6 ${viewMode === 'grid'
+                  ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
                   : 'grid-cols-1'
-              }`}>
+                }`}>
                 {listings.map((listing) => {
-                  const imageUrl = listing.images && listing.images.length > 0 
-                    ? getImageUrl(listing.images[0]) 
+                  const imageUrl = listing.images && listing.images.length > 0
+                    ? getImageUrl(listing.images[0])
                     : null;
 
                   return (
@@ -610,9 +591,9 @@ export default function ListingsPage() {
                       className="group"
                     >
                       <Card className="overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer border-0 shadow-lg">
-                        
+
                         {/* Image */}
-                        <div 
+                        <div
                           className="relative aspect-video bg-gradient-to-br from-blue-100 to-orange-100 overflow-hidden"
                           onClick={() => router.push(`/listings/${listing.id}`)}
                         >
@@ -629,9 +610,9 @@ export default function ListingsPage() {
                               }}
                             />
                           ) : null}
-                          
+
                           {/* Fallback */}
-                          <div 
+                          <div
                             className="absolute inset-0 flex items-center justify-center"
                             style={{ display: imageUrl ? 'none' : 'flex' }}
                           >
@@ -661,24 +642,23 @@ export default function ListingsPage() {
                                 toggleFavorite(listing.id);
                               }}
                             >
-                              <Heart 
-                                className={`h-4 w-4 ${
-                                  favorites.has(listing.id) 
-                                    ? 'fill-red-500 text-red-500' 
+                              <Heart
+                                className={`h-4 w-4 ${favorites.has(listing.id)
+                                    ? 'fill-red-500 text-red-500'
                                     : 'text-slate-600'
-                                }`} 
+                                  }`}
                               />
                             </Button>
-                            
+
                             <Button
                               size="sm"
                               variant="ghost"
                               className="h-8 w-8 p-0 bg-white/80 hover:bg-white"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                navigator.share?.({ 
-                                  title: listing.title, 
-                                  url: `${window.location.origin}/listings/${listing.id}` 
+                                navigator.share?.({
+                                  title: listing.title,
+                                  url: `${window.location.origin}/listings/${listing.id}`
                                 });
                               }}
                             >
@@ -696,19 +676,18 @@ export default function ListingsPage() {
                         {/* Contenu */}
                         <CardContent className="p-4">
                           <div className="space-y-3">
-                            
+
                             {/* Titre et catégorie */}
                             <div>
-                              <h3 
+                              <h3
                                 className="font-semibold text-slate-900 line-clamp-2 group-hover:text-blue-600 transition-colors cursor-pointer"
                                 onClick={() => router.push(`/listings/${listing.id}`)}
                               >
                                 {listing.title}
                               </h3>
-                              
+
                               {listing.category && (
                                 <Badge variant="secondary" className="text-xs mt-1">
-                                  <span className="mr-1">{listing.category.icon}</span>
                                   {listing.category.name}
                                 </Badge>
                               )}
@@ -725,7 +704,7 @@ export default function ListingsPage() {
                                 <MapPin className="h-4 w-4" />
                                 <span>{listing.region}</span>
                               </div>
-                              
+
                               <div className="flex items-center gap-1">
                                 <Clock className="h-4 w-4" />
                                 <span>{formatTimeAgo(listing.created_at)}</span>
@@ -743,11 +722,6 @@ export default function ListingsPage() {
                                 )}
                               </div>
                             )}
-
-                            {/* Debug info */}
-                            <div className="text-xs text-slate-400 font-mono truncate">
-                              {imageUrl ? imageUrl.split('/').pop() : 'Pas d\'image'}
-                            </div>
                           </div>
                         </CardContent>
                       </Card>
@@ -766,15 +740,15 @@ export default function ListingsPage() {
                   >
                     Précédent
                   </Button>
-                  
+
                   <div className="flex gap-1">
                     {Array.from({ length: Math.min(pagination.pages, 5) }, (_, i) => {
-                      const page = pagination.currentPage <= 3 
-                        ? i + 1 
+                      const page = pagination.currentPage <= 3
+                        ? i + 1
                         : pagination.currentPage - 2 + i;
-                      
+
                       if (page > pagination.pages) return null;
-                      
+
                       return (
                         <Button
                           key={page}
@@ -788,7 +762,7 @@ export default function ListingsPage() {
                       );
                     })}
                   </div>
-                  
+
                   <Button
                     variant="outline"
                     disabled={pagination.currentPage >= pagination.pages}
@@ -809,7 +783,7 @@ export default function ListingsPage() {
           )}
         </section>
       </main>
-      
+
       <Footer />
     </>
   );
