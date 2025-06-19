@@ -288,62 +288,7 @@ export function Footer() {
         </div>
 
         {/* App Download & Payment Methods */}
-        <div className="border-t border-slate-700 pt-8 mb-8">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            
-            {/* App Download */}
-            <div>
-              <h4 className="font-semibold text-white mb-4 flex items-center">
-                <Smartphone className="h-4 w-4 mr-2" />
-                Téléchargez l&apos;Application
-              </h4>
-              <p className="text-slate-400 text-sm mb-4">
-                Gérez vos annonces et achetez en déplacement avec notre app mobile.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-3">
-                <Link 
-                  href="#" 
-                  className="flex items-center bg-slate-800 hover:bg-slate-700 rounded-lg px-4 py-3 transition-colors"
-                >
-                  <Download className="h-6 w-6 mr-3" />
-                  <div>
-                    <div className="text-xs text-slate-400">Télécharger sur</div>
-                    <div className="text-white font-medium">Google Play</div>
-                  </div>
-                </Link>
-                <Link 
-                  href="#" 
-                  className="flex items-center bg-slate-800 hover:bg-slate-700 rounded-lg px-4 py-3 transition-colors"
-                >
-                  <Download className="h-6 w-6 mr-3" />
-                  <div>
-                    <div className="text-xs text-slate-400">Télécharger sur</div>
-                    <div className="text-white font-medium">App Store</div>
-                  </div>
-                </Link>
-              </div>
-            </div>
 
-            {/* Payment Methods */}
-            <div>
-              <h4 className="font-semibold text-white mb-4">Méthodes de Paiement Acceptées</h4>
-              <p className="text-slate-400 text-sm mb-4">
-                Payez en toute sécurité avec vos moyens de paiement préférés.
-              </p>
-              <div className="flex flex-wrap gap-3">
-                {paymentMethods.map((method, index) => (
-                  <div 
-                    key={index}
-                    className="flex items-center bg-slate-800 rounded-lg px-3 py-2"
-                  >
-                    <span className="text-lg mr-2">{method.logo}</span>
-                    <span className="text-sm text-slate-300">{method.name}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Bottom Bar */}

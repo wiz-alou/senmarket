@@ -14,9 +14,9 @@ export default function HomePage() {
       <Header />
       <main>
         <HeroSection />
-        <SearchSection />
+        {/* <SearchSection /> */}
         <CategoriesSection />
-        <FeaturedListings />
+        <FeaturedListings />  
         <StatsSection />
         <TestimonialsSection />
         <CTASection />
