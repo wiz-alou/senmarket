@@ -1,872 +1,1439 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { motion, AnimatePresence } from 'framer-motion'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
-import {
-    Upload,
-    ImageIcon,
-    X,
-    Eye,
-    MapPin,
-    CreditCard,
-    Check,
-    AlertCircle,
-    Loader2,
-    ArrowLeft,
-    ArrowRight,
-    Camera, handleImageUpload ,
-    FileText
-} from 'lucide-react'
+import React, { useState, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useRouter } from 'next/navigation';
+import { useForm } from 'react-hook-form';
+import { Header } from '@/components/layout/header';
+import { Footer } from '@/components/layout/footer';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { 
+  Upload,
+  X,
+  Eye,
+  Camera,
+  Check,
+  ChevronRight,
+  ChevronLeft,
+  AlertCircle,
+  CheckCircle,
+  Loader2,
+  CreditCard,
+  Smartphone,
+  MapPin,
+  Tag,
+  FileText,
+  DollarSign,
+  Zap,
+  Star,
+  Shield,
+  Clock,
+  ArrowRight,
+  Image as ImageIcon,
+  Plus,
+  Trash2,
+  Edit,
+  Save,
+  RefreshCw,
+  Phone,
+  ExternalLink,
+  Home,
+  Car,
+  Laptop,
+  Shirt,
+  Briefcase,
+  Wrench,
+  Sofa,
+  Heart,
+  Settings
+} from 'lucide-react';
 
-import { Header } from '@/components/layout/header'
-import { Footer } from '@/components/layout/footer'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { useAuthStore } from '@/stores/authStore'
-
-const SENEGAL_REGIONS = [
-    'Dakar', 'Thiès', 'Saint-Louis', 'Diourbel', 'Louga', 'Fatick',
-    'Kaolack', 'Kolda', 'Ziguinchor', 'Tambacounda', 'Kaffrine',
-    'Kédougou', 'Matam', 'Sédhiou', 'Saraya', 'Koungheul'
-]
-
-const MOCK_CATEGORIES = [
-    { id: '1', name: 'Véhicules', icon: 'fa-car' },
-    { id: '2', name: 'Immobilier', icon: 'fa-home' },
-    { id: '3', name: 'Électronique', icon: 'fa-laptop' },
-    { id: '4', name: 'Mode & Beauté', icon: 'fa-tshirt' },
-    { id: '5', name: 'Emploi', icon: 'fa-briefcase' },
-    { id: '6', name: 'Services', icon: 'fa-tools' },
-    { id: '7', name: 'Maison & Jardin', icon: 'fa-couch' },
-    { id: '8', name: 'Animaux', icon: 'fa-paw' }
-]
-
-const formatPrice = (price: number): string => {
-    return new Intl.NumberFormat('fr-SN', {
-        style: 'currency',
-        currency: 'XOF',
-        minimumFractionDigits: 0,
-    }).format(price)
+// Types
+interface Category {
+  id: string;
+  name: string;
+  slug: string;
+  icon: string;
+  description: string;
 }
 
-const listingSchema = z.object({
-    title: z.string()
-        .min(10, 'Le titre doit contenir au moins 10 caractères')
-        .max(200, 'Le titre ne peut pas dépasser 200 caractères'),
-    description: z.string()
-        .min(50, 'La description doit contenir au moins 50 caractères')
-        .max(2000, 'La description ne peut pas dépasser 2000 caractères'),
-    price: z.number()
-        .min(100, 'Le prix minimum est de 100 FCFA')
-        .max(100000000, 'Le prix maximum est de 100 000 000 FCFA'),
-    category_id: z.string().min(1, 'Veuillez sélectionner une catégorie'),
-    region: z.string().min(1, 'Veuillez sélectionner une région'),
-})
+interface ListingFormData {
+  title: string;
+  description: string;
+  price: string;
+  category_id: string;
+  region: string;
+}
 
-type ListingFormData = z.infer<typeof listingSchema>
+interface UploadedImage {
+  url: string;
+  filename: string;
+  size: number;
+  width: number;
+  height: number;
+}
 
+interface PaymentRequest {
+  payment_method: 'orange_money' | 'wave' | 'free_money';
+  phone: string;
+}
+
+interface PaymentResponse {
+  payment: {
+    id: string;
+    amount: number;
+    status: string;
+    transaction_id: string;
+  };
+  payment_url: string;
+}
+
+// Icônes des catégories
+const categoryIcons: { [key: string]: any } = {
+  'fa-car': Car,
+  'fa-home': Home,
+  'fa-laptop': Laptop,
+  'fa-tshirt': Shirt,
+  'fa-briefcase': Briefcase,
+  'fa-tools': Wrench,
+  'fa-couch': Sofa,
+  'fa-paw': Heart,
+};
+
+// Régions du Sénégal
+const regions = [
+  'Dakar', 'Thiès', 'Diourbel', 'Fatick', 'Kaolack', 'Kolda',
+  'Louga', 'Matam', 'Saint-Louis', 'Sédhiou', 'Tambacounda',
+  'Kaffrine', 'Kédougou', 'Ziguinchor', 'Gossas', 'Koungheul'
+];
+
+// Étapes du processus
 const steps = [
-    { id: 1, title: 'Informations', icon: FileText },
-    { id: 2, title: 'Photos', icon: Camera },
-    { id: 3, title: 'Aperçu', icon: Eye },
-    { id: 4, title: 'Paiement', icon: CreditCard }
-]
+  { id: 1, title: 'Informations', icon: FileText },
+  { id: 2, title: 'Images', icon: Camera },
+  { id: 3, title: 'Aperçu', icon: Eye },
+  { id: 4, title: 'Paiement', icon: CreditCard },
+  { id: 5, title: 'Confirmation', icon: CheckCircle },
+];
 
 export default function SellPage() {
-    const router = useRouter()
-    const { user, isAuthenticated } = useAuthStore()
+  const router = useRouter();
+  
+  // États du formulaire
+  const [currentStep, setCurrentStep] = useState(1);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [uploadedImages, setUploadedImages] = useState<string[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [createdListing, setCreatedListing] = useState<any>(null);
+  const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<'orange_money' | 'wave' | 'free_money'>('orange_money');
+  const [userPhone, setUserPhone] = useState<string>('');
 
-    // États
-    const [isClient, setIsClient] = useState(false)
-    const [currentStep, setCurrentStep] = useState(1)
-    const [uploadedImages, setUploadedImages] = useState<string[]>([])
-    const [dragActive, setDragActive] = useState(false)
-    const [error, setError] = useState<string | null>(null)
-    const [success, setSuccess] = useState<string | null>(null)
-    const [isLoading, setIsLoading] = useState(false)
-    const [isUploading, setIsUploading] = useState(false)
+  // Form hook
+  const { register, handleSubmit, watch, formState: { errors }, setValue } = useForm<ListingFormData>({
+    defaultValues: {
+      title: '',
+      description: '',
+      price: '',
+      category_id: '',
+      region: 'Dakar'
+    }
+  });
 
-    // Form
-    const form = useForm<ListingFormData>({
-        resolver: zodResolver(listingSchema),
-        defaultValues: {
-            title: '',
-            description: '',
-            price: 0,
-            category_id: '',
-            region: user?.region || '',
-        }
-    })
+  const watchedValues = watch();
 
-    const { register, handleSubmit, formState: { errors }, watch, setValue } = form
-    const watchedValues = watch()
-
-    // Fonctions utilitaires
-    const showError = useCallback((title: string, message: string) => {
-        setError(`${title}: ${message}`)
-        console.error('❌', title, message)
-        setTimeout(() => setError(null), 6000)
-    }, [])
-
-    const showSuccess = useCallback((title: string, message: string) => {
-        setSuccess(`${title}: ${message}`)
-        console.log('✅', title, message)
-        setTimeout(() => setSuccess(null), 4000)
-    }, [])
-
-    // Upload d'images
-
-    const handleImageUpload = useCallback(async (files: File[]) => {
-        console.log('🔥 Upload démarré avec', files.length, 'fichiers')
-
-        if (uploadedImages.length + files.length > 5) {
-            showError('Limite dépassée', 'Maximum 5 images')
-            return
-        }
-
-        if (files.length === 0) return
-
-        setIsUploading(true)
-
-        try {
-            const token = localStorage.getItem('senmarket_token')
-            if (!token) {
-                showError('Erreur auth', 'Reconnectez-vous')
-                return
-            }
-
-            // Validation fichiers
-            const validFiles = files.filter(file => {
-                const isValidType = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'].includes(file.type)
-                const isValidSize = file.size <= 5 * 1024 * 1024
-
-                if (!isValidType) {
-                    showError('Format invalide', `${file.name} - Formats: JPG, PNG, WebP`)
-                    return false
-                }
-                if (!isValidSize) {
-                    showError('Fichier trop lourd', `${file.name} - Max: 5MB`)
-                    return false
-                }
-                return true
-            })
-
-            if (validFiles.length === 0) return
-
-            // FormData
-            const formData = new FormData()
-            validFiles.forEach(file => {
-                formData.append('images', file)
-            })
-
-            console.log('📡 Envoi API...')
-
-            // Appel API
-            const response = await fetch('http://localhost:8080/api/v1/images/upload-multiple', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                },
-                body: formData,
-            })
-
-            const data = await response.json()
-            console.log('📡 Réponse complète:', response.status, data)
-
-            if (!response.ok) {
-                let errorMessage = 'Erreur upload'
-                if (response.status === 401) errorMessage = 'Session expirée'
-                else if (response.status === 413) errorMessage = 'Fichiers trop lourds'
-                else if (data.error) errorMessage = data.error
-                throw new Error(errorMessage)
-            }
-
-            // ✅ CORRECTION: Extraire correctement les URLs
-            const uploadedImageObjects = data.data || []
-            console.log('📋 Objets images reçus:', uploadedImageObjects)
-
-            if (!Array.isArray(uploadedImageObjects) || uploadedImageObjects.length === 0) {
-                throw new Error('Aucune image reçue du serveur')
-            }
-
-            // ✅ Extraction des URLs avec gestion de différents formats
-            const uploadedUrls = uploadedImageObjects.map(img => {
-                console.log('🔍 Analyse objet image:', img)
-
-                // Si l'URL complète est fournie
-                if (img.URL && img.URL.startsWith('http')) {
-                    console.log('📎 URL complète trouvée:', img.URL)
-                    return img.URL
-                }
-
-                // Si c'est juste le chemin, construire l'URL
-                if (img.Path) {
-                    const fullUrl = `http://localhost:8080/uploads/${img.Path}`
-                    console.log('📎 Path converti:', img.Path, '→', fullUrl)
-                    return fullUrl
-                }
-
-                // Autres formats possibles
-                if (img.url) {
-                    console.log('📎 url (lowercase) trouvée:', img.url)
-                    return img.url.startsWith('http') ? img.url : `http://localhost:8080${img.url}`
-                }
-
-                // Fallback avec l'URL relative
-                if (img.URL) {
-                    const fullUrl = img.URL.startsWith('/')
-                        ? `http://localhost:8080${img.URL}`
-                        : `http://localhost:8080/uploads/${img.URL}`
-                    console.log('📎 URL relative convertie:', img.URL, '→', fullUrl)
-                    return fullUrl
-                }
-
-                console.error('❌ Impossible d\'extraire l\'URL de:', img)
-                return null
-            }).filter(url => url !== null)
-
-            console.log('✅ URLs finales extraites:', uploadedUrls)
-
-            if (uploadedUrls.length === 0) {
-                throw new Error('Impossible d\'extraire les URLs des images')
-            }
-
-            setUploadedImages(prev => {
-                const newImages = [...prev, ...uploadedUrls]
-                console.log('💾 State mis à jour, total images:', newImages.length)
-                return newImages
-            })
-
-            showSuccess('Images uploadées', `${uploadedUrls.length} image(s) ajoutée(s)`)
-
-        } catch (error) {
-            console.error('❌ Erreur:', error)
-            showError('Erreur upload', error instanceof Error ? error.message : 'Échec upload')
-        } finally {
-            setIsUploading(false)
-        }
-    }, [uploadedImages.length, showError, showSuccess])
-    // Drag & Drop
-    const handleDrop = useCallback((e: React.DragEvent) => {
-        e.preventDefault()
-        setDragActive(false)
-        const files = Array.from(e.dataTransfer.files)
-        if (files.length > 0) handleImageUpload(files)
-    }, [handleImageUpload])
-
-    const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-        const files = Array.from(e.target.files || [])
-        if (files.length > 0) handleImageUpload(files)
-        e.target.value = ''
-    }, [handleImageUpload])
-
-    const removeImage = useCallback((index: number) => {
-        setUploadedImages(prev => prev.filter((_, i) => i !== index))
-    }, [])
-
-    // Navigation
-    const handleNext = useCallback(() => {
-        if (currentStep < steps.length) setCurrentStep(prev => prev + 1)
-    }, [currentStep])
-
-    const handlePrevious = useCallback(() => {
-        if (currentStep > 1) setCurrentStep(prev => prev - 1)
-    }, [currentStep])
-
-    // Soumission
-    const handleFormSubmit = useCallback(async (data: ListingFormData) => {
-        if (uploadedImages.length === 0) {
-            showError('Images requises', 'Ajoutez au moins une image')
-            return
-        }
-
-        setIsLoading(true)
-        try {
-            console.log('📝 Création annonce:', data)
-            showSuccess('Annonce créée', 'Succès!')
-            setCurrentStep(4)
-        } catch (error) {
-            showError('Erreur création', 'Échec création')
-        } finally {
-            setIsLoading(false)
-        }
-    }, [uploadedImages, showError, showSuccess])
-
-    // Effects
-    useEffect(() => {
-        setIsClient(true)
-    }, [])
-
-    useEffect(() => {
-        if (isClient && !isAuthenticated) {
-            router.push('/auth/login?redirect=/sell')
-        }
-    }, [isClient, isAuthenticated, router])
-
-    useEffect(() => {
-        if (user?.region && isClient) {
-            setValue('region', user.region)
-        }
-    }, [user, setValue, isClient])
-
-    const selectedCategory = MOCK_CATEGORIES.find(c => c.id === watchedValues.category_id)
-
-    // Loading
-    if (!isClient) {
-        return (
-            <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
-                <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
-            </div>
-        )
+  // Chargement initial
+  useEffect(() => {
+    // Vérifier l'authentification
+    const token = localStorage.getItem('senmarket_token');
+    const userData = localStorage.getItem('senmarket_user');
+    
+    if (!token || !userData) {
+      router.push('/auth/login');
+      return;
     }
 
-    // Redirection
-    if (!isAuthenticated || !user) {
-        return (
-            <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
-                <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
-            </div>
-        )
+    const user = JSON.parse(userData);
+    setUserPhone(user.phone || '');
+    setValue('region', user.region || 'Dakar');
+
+    // Charger les catégories
+    fetchCategories();
+  }, [router, setValue]);
+
+  // Fonctions utilitaires
+  const showError = useCallback((title: string, message: string) => {
+    setError(`${title}: ${message}`);
+    setTimeout(() => setError(null), 6000);
+  }, []);
+
+  const showSuccess = useCallback((title: string, message: string) => {
+    setSuccess(`${title}: ${message}`);
+    setTimeout(() => setSuccess(null), 4000);
+  }, []);
+
+  // Charger les catégories
+  const fetchCategories = async () => {
+    try {
+      const response = await fetch('http://localhost:8080/api/v1/categories');
+      if (response.ok) {
+        const data = await response.json();
+        setCategories(data.data || []);
+      }
+    } catch (error) {
+      console.error('Erreur chargement catégories:', error);
+    }
+  };
+
+  // ✅ FIX PRINCIPAL - Upload d'images avec gestion correcte des URLs
+  const handleImageUpload = useCallback(async (files: File[]) => {
+    console.log('🔥 Upload démarré avec', files.length, 'fichiers');
+
+    if (uploadedImages.length + files.length > 5) {
+      showError('Limite dépassée', 'Maximum 5 images');
+      return;
     }
 
-    return (
-        <>
-            <Header />
+    if (files.length === 0) return;
 
-            <main className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 pt-20">
-                <div className="container mx-auto px-4 py-12">
+    setIsUploading(true);
 
-                    {/* Header */}
-                    <motion.div
-                        className="text-center mb-12"
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                    >
-                        <h1 className="text-4xl lg:text-5xl font-bold text-slate-900 mb-4">
-                            Publier une
-                            <span className="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent"> Annonce</span>
-                        </h1>
-                        <p className="text-xl text-slate-600 max-w-2xl mx-auto">
-                            Vendez rapidement vos produits à des milliers d'acheteurs sénégalais
-                        </p>
-                    </motion.div>
+    try {
+      const token = localStorage.getItem('senmarket_token');
+      if (!token) {
+        showError('Erreur auth', 'Reconnectez-vous');
+        return;
+      }
 
-                    {/* Messages */}
-                    {error && (
-                        <motion.div className="max-w-4xl mx-auto mb-8" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                            <Alert className="border-red-200 bg-red-50">
-                                <AlertCircle className="h-4 w-4 text-red-600" />
-                                <AlertDescription className="text-red-700">{error}</AlertDescription>
-                            </Alert>
-                        </motion.div>
-                    )}
+      // Validation fichiers
+      const validFiles = files.filter(file => {
+        const isValidType = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'].includes(file.type);
+        const isValidSize = file.size <= 5 * 1024 * 1024;
 
-                    {success && (
-                        <motion.div className="max-w-4xl mx-auto mb-8" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                            <Alert className="border-green-200 bg-green-50">
-                                <Check className="h-4 w-4 text-green-600" />
-                                <AlertDescription className="text-green-700">{success}</AlertDescription>
-                            </Alert>
-                        </motion.div>
-                    )}
+        if (!isValidType) {
+          showError('Format invalide', `${file.name} - Formats: JPG, PNG, WebP`);
+          return false;
+        }
+        if (!isValidSize) {
+          showError('Fichier trop lourd', `${file.name} - Max: 5MB`);
+          return false;
+        }
+        return true;
+      });
 
-                    {/* Progress Steps */}
-                    <motion.div className="mb-12" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                        <div className="flex justify-center">
-                            <div className="flex items-center space-x-4 bg-white rounded-2xl p-6 shadow-lg">
-                                {steps.map((step, index) => (
-                                    <div key={step.id} className="flex items-center">
-                                        <div className={`flex items-center justify-center w-12 h-12 rounded-full transition-all duration-300 ${currentStep >= step.id ? 'bg-blue-600 text-white shadow-lg' : 'bg-slate-100 text-slate-400'
-                                            }`}>
-                                            <step.icon className="h-5 w-5" />
-                                        </div>
-                                        <div className="ml-3">
-                                            <p className={`text-sm font-medium ${currentStep >= step.id ? 'text-blue-600' : 'text-slate-400'}`}>
-                                                {step.title}
-                                            </p>
-                                        </div>
-                                        {index < steps.length - 1 && (
-                                            <div className={`w-8 h-0.5 mx-4 ${currentStep > step.id ? 'bg-blue-600' : 'bg-slate-200'}`} />
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    </motion.div>
+      if (validFiles.length === 0) return;
 
-                    <form onSubmit={handleSubmit(handleFormSubmit)}>
-                        <div className="max-w-4xl mx-auto">
+      // FormData
+      const formData = new FormData();
+      validFiles.forEach(file => {
+        formData.append('images', file);
+      });
 
-                            <AnimatePresence mode="wait">
-                                {/* Étape 1: Informations */}
-                                {currentStep === 1 && (
-                                    <motion.div
-                                        key="step1"
-                                        initial={{ opacity: 0, x: 20 }}
-                                        animate={{ opacity: 1, x: 0 }}
-                                        exit={{ opacity: 0, x: -20 }}
-                                        className="grid grid-cols-1 lg:grid-cols-3 gap-8"
-                                    >
-                                        <div className="lg:col-span-2">
-                                            <Card className="shadow-xl border-0">
-                                                <CardHeader>
-                                                    <CardTitle className="flex items-center text-2xl">
-                                                        <FileText className="h-6 w-6 mr-3 text-blue-600" />
-                                                        Informations de base
-                                                    </CardTitle>
-                                                </CardHeader>
-                                                <CardContent className="space-y-6">
+      console.log('📡 Envoi vers API...');
 
-                                                    {/* Titre */}
-                                                    <div>
-                                                        <Label className="text-base font-semibold">Titre de l'annonce *</Label>
-                                                        <Input
-                                                            {...register('title')}
-                                                            placeholder="Ex: iPhone 13 Pro Max 256GB Noir - État neuf"
-                                                            className="mt-2 h-12"
-                                                        />
-                                                        {errors.title && <p className="text-red-500 text-sm mt-1">{errors.title.message}</p>}
-                                                        <p className="text-slate-500 text-sm mt-1">{watchedValues.title?.length || 0}/200 caractères</p>
-                                                    </div>
+      // Appel API
+      const response = await fetch('http://localhost:8080/api/v1/images/upload-multiple', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        body: formData,
+      });
 
-                                                    {/* Catégorie et Région */}
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                        <div>
-                                                            <Label className="text-base font-semibold">Catégorie *</Label>
-                                                            <Select onValueChange={(value) => setValue('category_id', value)}>
-                                                                <SelectTrigger className="mt-2 h-12">
-                                                                    <SelectValue placeholder="Choisir une catégorie" />
-                                                                </SelectTrigger>
-                                                                <SelectContent>
-                                                                    {MOCK_CATEGORIES.map(category => (
-                                                                        <SelectItem key={category.id} value={category.id}>
-                                                                            <span>{category.name}</span>
-                                                                        </SelectItem>
-                                                                    ))}
-                                                                </SelectContent>
-                                                            </Select>
-                                                            {errors.category_id && <p className="text-red-500 text-sm mt-1">{errors.category_id.message}</p>}
-                                                        </div>
+      console.log('📡 Statut réponse:', response.status);
 
-                                                        <div>
-                                                            <Label className="text-base font-semibold">Région *</Label>
-                                                            <Select value={watchedValues.region} onValueChange={(value) => setValue('region', value)}>
-                                                                <SelectTrigger className="mt-2 h-12">
-                                                                    <SelectValue placeholder="Choisir une région" />
-                                                                </SelectTrigger>
-                                                                <SelectContent>
-                                                                    {SENEGAL_REGIONS.map(region => (
-                                                                        <SelectItem key={region} value={region}>
-                                                                            <div className="flex items-center">
-                                                                                <MapPin className="h-4 w-4 mr-2" />
-                                                                                {region}
-                                                                            </div>
-                                                                        </SelectItem>
-                                                                    ))}
-                                                                </SelectContent>
-                                                            </Select>
-                                                            {errors.region && <p className="text-red-500 text-sm mt-1">{errors.region.message}</p>}
-                                                        </div>
-                                                    </div>
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Erreur HTTP ${response.status}`);
+      }
 
-                                                    {/* Prix */}
-                                                    <div>
-                                                        <Label className="text-base font-semibold">Prix *</Label>
-                                                        <div className="relative mt-2">
-                                                            <Input
-                                                                {...register('price', { valueAsNumber: true })}
-                                                                type="number"
-                                                                placeholder="0"
-                                                                className="h-12 pr-16"
-                                                            />
-                                                            <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 font-medium">FCFA</div>
-                                                        </div>
-                                                        {errors.price && <p className="text-red-500 text-sm mt-1">{errors.price.message}</p>}
-                                                        {watchedValues.price > 0 && <p className="text-blue-600 text-sm mt-1 font-medium">{formatPrice(watchedValues.price)}</p>}
-                                                    </div>
+      const data = await response.json();
+      console.log('✅ Réponse API complète:', data);
 
-                                                    {/* Description */}
-                                                    <div>
-                                                        <Label className="text-base font-semibold">Description détaillée *</Label>
-                                                        <Textarea
-                                                            {...register('description')}
-                                                            placeholder="Décrivez votre produit en détail : état, spécifications, raison de la vente..."
-                                                            className="mt-2 min-h-[120px] resize-none"
-                                                        />
-                                                        {errors.description && <p className="text-red-500 text-sm mt-1">{errors.description.message}</p>}
-                                                        <p className="text-slate-500 text-sm mt-1">{watchedValues.description?.length || 0}/2000 caractères</p>
-                                                    </div>
+      // ✅ EXTRACTION CORRECTE DES URLS
+      let uploadedUrls: string[] = [];
 
-                                                </CardContent>
-                                            </Card>
-                                        </div>
+      if (data.data && Array.isArray(data.data)) {
+        // Cas réponse multiple
+        uploadedUrls = data.data.map((img: any) => {
+          console.log('🔍 Traitement image:', img);
+          
+          // Format string direct
+          if (typeof img === 'string') {
+            const url = img.startsWith('http') ? img : `http://localhost:8080${img}`;
+            console.log('📎 String URL:', img, '→', url);
+            return url;
+          }
+          
+          // Format objet avec propriété 'url'
+          if (img.url) {
+            const url = img.url.startsWith('http') ? img.url : `http://localhost:8080${img.url}`;
+            console.log('📎 Object.url:', img.url, '→', url);
+            return url;
+          }
+          
+          // Format objet avec propriété 'URL' (majuscule)
+          if (img.URL) {
+            const url = img.URL.startsWith('http') ? img.URL : `http://localhost:8080${img.URL}`;
+            console.log('📎 Object.URL:', img.URL, '→', url);
+            return url;
+          }
+          
+          // Format avec filename
+          if (img.filename) {
+            const url = `http://localhost:8080/uploads/${img.filename}`;
+            console.log('📎 Filename:', img.filename, '→', url);
+            return url;
+          }
+          
+          console.warn('❌ Format image non reconnu:', img);
+          return null;
+        }).filter((url: string | null) => url !== null);
+        
+      } else if (data.data && (data.data.url || data.data.URL)) {
+        // Cas réponse single
+        const url = data.data.url || data.data.URL;
+        const fullUrl = url.startsWith('http') ? url : `http://localhost:8080${url}`;
+        uploadedUrls = [fullUrl];
+        
+      } else if (data.url) {
+        // Format direct dans data
+        const url = data.url.startsWith('http') ? data.url : `http://localhost:8080${data.url}`;
+        uploadedUrls = [url];
+      }
 
-                                        {/* Preview */}
-                                        <div className="lg:col-span-1">
-                                            <Card className="shadow-xl border-0 sticky top-6">
-                                                <CardHeader>
-                                                    <CardTitle className="text-lg">Aperçu rapide</CardTitle>
-                                                </CardHeader>
-                                                <CardContent>
-                                                    {watchedValues.title ? (
-                                                        <div className="space-y-4">
-                                                            <h3 className="font-semibold text-slate-900 line-clamp-2">{watchedValues.title}</h3>
-                                                            {watchedValues.price > 0 && <div className="text-2xl font-bold text-blue-600">{formatPrice(watchedValues.price)}</div>}
-                                                            {selectedCategory && <Badge variant="secondary">{selectedCategory.name}</Badge>}
-                                                            {watchedValues.region && (
-                                                                <div className="flex items-center text-slate-600">
-                                                                    <MapPin className="h-4 w-4 mr-1" />
-                                                                    {watchedValues.region}
-                                                                </div>
-                                                            )}
-                                                            {watchedValues.description && <p className="text-sm text-slate-600 line-clamp-3">{watchedValues.description}</p>}
-                                                        </div>
-                                                    ) : (
-                                                        <div className="text-center py-8">
-                                                            <Eye className="h-12 w-12 text-slate-300 mx-auto mb-3" />
-                                                            <p className="text-slate-500">Remplissez le formulaire pour voir l'aperçu</p>
-                                                        </div>
-                                                    )}
-                                                </CardContent>
-                                            </Card>
-                                        </div>
-                                    </motion.div>
-                                )}
+      console.log('✅ URLs finales extraites:', uploadedUrls);
 
-                                {/* Étape 2: Photos */}
-                                {currentStep === 2 && (
-                                    <motion.div
-                                        key="step2"
-                                        initial={{ opacity: 0, x: 20 }}
-                                        animate={{ opacity: 1, x: 0 }}
-                                        exit={{ opacity: 0, x: -20 }}
-                                    >
-                                        <Card className="shadow-xl border-0">
-                                            <CardHeader>
-                                                <CardTitle className="flex items-center text-2xl">
-                                                    <Camera className="h-6 w-6 mr-3 text-blue-600" />
-                                                    Photos de votre produit
-                                                </CardTitle>
-                                                <p className="text-slate-600">Ajoutez jusqu'à 5 photos pour attirer plus d'acheteurs</p>
-                                            </CardHeader>
-                                            <CardContent>
+      if (uploadedUrls.length === 0) {
+        throw new Error('Impossible d\'extraire les URLs des images de la réponse API');
+      }
 
-                                                {/* Zone upload */}
-                                                <div
-                                                    className={`border-2 border-dashed rounded-xl p-12 text-center transition-all duration-300 cursor-pointer ${dragActive ? 'border-blue-500 bg-blue-50' : 'border-slate-300 hover:border-blue-400 hover:bg-slate-50'
-                                                        } ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}
-                                                    onDragOver={(e) => { e.preventDefault(); setDragActive(true) }}
-                                                    onDragLeave={(e) => { e.preventDefault(); setDragActive(false) }}
-                                                    onDrop={handleDrop}
-                                                    onClick={() => document.getElementById('image-upload')?.click()}
-                                                >
-                                                    {isUploading ? (
-                                                        <>
-                                                            <Loader2 className="h-16 w-16 text-blue-600 mx-auto mb-4 animate-spin" />
-                                                            <h3 className="text-xl font-semibold text-blue-900 mb-2">Upload en cours...</h3>
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <Upload className="h-16 w-16 text-slate-400 mx-auto mb-4" />
-                                                            <h3 className="text-xl font-semibold text-slate-900 mb-2">Glissez vos images ici</h3>
-                                                            <p className="text-slate-600 mb-6">ou cliquez pour parcourir vos fichiers</p>
-                                                            <input type="file" multiple accept="image/*" onChange={handleFileInput} className="hidden" id="image-upload" />
-                                                            <Button type="button" className="pointer-events-none">
-                                                                <ImageIcon className="h-5 w-5 mr-2" />
-                                                                Choisir des images
-                                                            </Button>
-                                                            <div className="mt-4 text-sm text-slate-500">
-                                                                <p>Formats: JPG, PNG, WebP • Max: 5MB • Limite: 5 images</p>
-                                                            </div>
-                                                        </>
-                                                    )}
-                                                </div>
+      // ✅ MISE À JOUR STATE AVEC URLS VALIDES
+      setUploadedImages(prev => {
+        const newImages = [...prev, ...uploadedUrls];
+        console.log('💾 State mis à jour:');
+        console.log('  - Avant:', prev);
+        console.log('  - Ajout:', uploadedUrls);
+        console.log('  - Après:', newImages);
+        return newImages;
+      });
 
-                                                {/* Images uploadées */}
-                                                {uploadedImages.length > 0 && (
-                                                    <div className="mt-8">
-                                                        <h4 className="font-semibold text-slate-900 mb-4">
-                                                            Images ajoutées ({uploadedImages.length}/5)
-                                                        </h4>
+      showSuccess('Images uploadées', `${uploadedUrls.length} image(s) ajoutée(s) avec succès`);
 
-                                                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                                                            {uploadedImages.map((imageUrl, index) => (
-                                                                <motion.div
-                                                                    key={index}
-                                                                    initial={{ opacity: 0, scale: 0.8 }}
-                                                                    animate={{ opacity: 1, scale: 1 }}
-                                                                    className="relative group"
-                                                                >
-                                                                    {/* ✅ Image avec gestion d'erreur améliorée */}
-                                                                    <div className="w-full h-32 bg-slate-200 rounded-lg overflow-hidden">
-                                                                        <img
-                                                                            src={imageUrl}
-                                                                            alt={`Image ${index + 1}`}
-                                                                            className="w-full h-full object-cover"
-                                                                            onLoad={() => {
-                                                                                console.log('✅ Image chargée avec succès:', imageUrl)
-                                                                            }}
-                                                                            onError={(e) => {
-                                                                                console.error('❌ Erreur chargement image:', imageUrl)
-                                                                                const target = e.target as HTMLImageElement
-                                                                                const parent = target.parentElement
-                                                                                if (parent) {
-                                                                                    parent.innerHTML = `
-                    <div class="w-full h-full flex flex-col items-center justify-center text-slate-500 text-xs">
-                      <div class="mb-1">❌</div>
-                      <div>Erreur</div>
-                      <div class="truncate max-w-full">${imageUrl.split('/').pop()}</div>
+    } catch (error) {
+      console.error('❌ Erreur upload complet:', error);
+      showError('Erreur upload', error instanceof Error ? error.message : 'Échec de l\'upload');
+    } finally {
+      setIsUploading(false);
+    }
+  }, [uploadedImages.length, showError, showSuccess]);
+
+  // Drag & Drop handlers
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragActive(false);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) handleImageUpload(files);
+  }, [handleImageUpload]);
+
+  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length > 0) handleImageUpload(files);
+    e.target.value = '';
+  }, [handleImageUpload]);
+
+  const removeImage = useCallback((index: number) => {
+    setUploadedImages(prev => {
+      const newImages = prev.filter((_, i) => i !== index);
+      console.log('🗑️ Image supprimée:', index, 'Reste:', newImages.length);
+      return newImages;
+    });
+  }, []);
+
+  // Navigation
+  const handleNext = useCallback(() => {
+    if (currentStep < steps.length) {
+      console.log('➡️ Passage à l\'étape', currentStep + 1);
+      if (currentStep === 2) {
+        console.log('📊 Images disponibles pour aperçu:', uploadedImages.length, uploadedImages);
+      }
+      setCurrentStep(prev => prev + 1);
+    }
+  }, [currentStep, uploadedImages]);
+
+  const handlePrevious = useCallback(() => {
+    if (currentStep > 1) setCurrentStep(prev => prev - 1);
+  }, [currentStep]);
+
+  // Création de l'annonce
+  const handleFormSubmit = useCallback(async (data: ListingFormData) => {
+    console.log('📝 Soumission formulaire:', data);
+    console.log('📷 Images à inclure:', uploadedImages);
+
+    if (uploadedImages.length === 0) {
+      showError('Images requises', 'Vous devez ajouter au moins une image');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const token = localStorage.getItem('senmarket_token');
+      
+      // ✅ FIX: Conversion correcte des données pour l'API
+      const listingData = {
+        title: data.title.trim(),
+        description: data.description.trim(),
+        price: parseFloat(data.price), // Conversion en nombre
+        currency: 'XOF', // Devise par défaut
+        category_id: data.category_id,
+        region: data.region,
+        images: uploadedImages, // Array d'URLs
+        status: 'draft' // Statut initial
+      };
+
+      console.log('📡 Données finales envoyées:', listingData);
+
+      // Validation côté client avant envoi
+      if (!listingData.title || listingData.title.length < 10) {
+        throw new Error('Le titre doit contenir au moins 10 caractères');
+      }
+      
+      if (!listingData.description || listingData.description.length < 20) {
+        throw new Error('La description doit contenir au moins 20 caractères');
+      }
+      
+      if (!listingData.price || listingData.price < 100) {
+        throw new Error('Le prix doit être d\'au moins 100 FCFA');
+      }
+      
+      if (!listingData.category_id) {
+        throw new Error('Veuillez sélectionner une catégorie');
+      }
+      
+      if (!listingData.region) {
+        throw new Error('Veuillez sélectionner une région');
+      }
+
+      if (!listingData.images || listingData.images.length === 0) {
+        throw new Error('Au moins une image est requise');
+      }
+
+      const response = await fetch('http://localhost:8080/api/v1/listings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(listingData),
+      });
+
+      console.log('📡 Statut réponse:', response.status);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('❌ Erreur API détaillée:', errorData);
+        
+        // Messages d'erreur plus détaillés
+        if (response.status === 400) {
+          const errorMessage = errorData.details || errorData.error || 'Données invalides';
+          throw new Error(`Validation échouée: ${errorMessage}`);
+        } else if (response.status === 401) {
+          throw new Error('Session expirée. Veuillez vous reconnecter.');
+        } else if (response.status === 403) {
+          throw new Error('Accès refusé. Vérifiez vos permissions.');
+        } else {
+          throw new Error(errorData.error || `Erreur serveur (${response.status})`);
+        }
+      }
+
+      const result = await response.json();
+      console.log('✅ Annonce créée avec succès:', result);
+      
+      setCreatedListing(result.data);
+      setCurrentStep(4); // Passer au paiement
+      showSuccess('Annonce créée', 'Passez maintenant au paiement pour publier');
+
+    } catch (error) {
+      console.error('❌ Erreur création complète:', error);
+      
+      // Gestion d'erreur plus précise
+      if (error instanceof Error) {
+        if (error.message.includes('fetch')) {
+          showError('Erreur réseau', 'Vérifiez votre connexion internet');
+        } else {
+          showError('Erreur création', error.message);
+        }
+      } else {
+        showError('Erreur création', 'Une erreur inattendue s\'est produite');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [uploadedImages, showError, showSuccess]);
+
+  // Paiement
+  const handlePayment = useCallback(async () => {
+    if (!createdListing) {
+      showError('Erreur', 'Aucune annonce à payer');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const token = localStorage.getItem('senmarket_token');
+      
+      const paymentData: PaymentRequest = {
+        payment_method: paymentMethod,
+        phone: userPhone
+      };
+
+      const response = await fetch(`http://localhost:8080/api/v1/listings/${createdListing.id}/pay`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(paymentData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Erreur initiation paiement');
+      }
+
+      const result = await response.json();
+      console.log('✅ Paiement initié:', result);
+      
+      setPaymentUrl(result.payment_url);
+      setCurrentStep(5);
+      showSuccess('Paiement initié', 'Suivez les instructions pour finaliser');
+
+    } catch (error) {
+      console.error('❌ Erreur paiement:', error);
+      showError('Erreur paiement', error instanceof Error ? error.message : 'Échec paiement');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [createdListing, paymentMethod, userPhone, showError, showSuccess]);
+
+  // Debug helper
+  const debugImages = useCallback(() => {
+    console.log('🔍 === DEBUG IMAGES STATE ===');
+    console.log('- Nombre total:', uploadedImages.length);
+    console.log('- Array complet:', uploadedImages);
+    console.log('- Type du premier:', typeof uploadedImages[0]);
+    
+    uploadedImages.forEach((url, index) => {
+      console.log(`- Image ${index + 1}: ${url}`);
+      
+      // Test de l'URL
+      fetch(url, { method: 'HEAD' })
+        .then(response => {
+          console.log(`  ✅ Image ${index + 1} accessible: ${response.ok} (${response.status})`);
+        })
+        .catch(error => {
+          console.error(`  ❌ Image ${index + 1} inaccessible:`, error.message);
+        });
+    });
+    console.log('=========================');
+  }, [uploadedImages]);
+
+  return (
+    <>
+      <Header />
+      
+      <main className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 py-8">
+        <div className="container mx-auto px-6">
+          
+          {/* En-tête */}
+          <motion.div 
+            className="text-center mb-12"
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <h1 className="text-4xl md:text-5xl font-bold text-slate-900 mb-4">
+              Publier une annonce
+            </h1>
+            <p className="text-xl text-slate-600 max-w-2xl mx-auto">
+              Vendez facilement et rapidement sur la marketplace #1 du Sénégal
+            </p>
+          </motion.div>
+
+          {/* Alertes */}
+          {error && (
+            <motion.div className="max-w-4xl mx-auto mb-8" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+              <Alert className="border-red-200 bg-red-50">
+                <AlertCircle className="h-4 w-4 text-red-600" />
+                <AlertDescription className="text-red-700">{error}</AlertDescription>
+              </Alert>
+            </motion.div>
+          )}
+
+          {success && (
+            <motion.div className="max-w-4xl mx-auto mb-8" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+              <Alert className="border-green-200 bg-green-50">
+                <Check className="h-4 w-4 text-green-600" />
+                <AlertDescription className="text-green-700">{success}</AlertDescription>
+              </Alert>
+            </motion.div>
+          )}
+
+          {/* Progress Steps */}
+          <motion.div className="mb-12" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <div className="flex justify-center">
+              <div className="flex items-center space-x-4 bg-white rounded-2xl p-6 shadow-lg">
+                {steps.map((step, index) => (
+                  <div key={step.id} className="flex items-center">
+                    <div className={`flex items-center justify-center w-12 h-12 rounded-full transition-all duration-300 ${
+                      currentStep >= step.id 
+                        ? 'bg-blue-600 text-white shadow-lg' 
+                        : 'bg-slate-100 text-slate-400'
+                    }`}>
+                      <step.icon className="h-5 w-5" />
                     </div>
-                  `
-                                                                                }
-                                                                            }}
-                                                                        />
-                                                                    </div>
+                    <div className="ml-3">
+                      <p className={`text-sm font-medium ${
+                        currentStep >= step.id ? 'text-blue-600' : 'text-slate-400'
+                      }`}>
+                        {step.title}
+                      </p>
+                    </div>
+                    {index < steps.length - 1 && (
+                      <div className={`w-8 h-0.5 mx-4 ${
+                        currentStep > step.id ? 'bg-blue-600' : 'bg-slate-200'
+                      }`} />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </motion.div>
 
-                                                                    {index === 0 && (
-                                                                        <Badge className="absolute top-2 left-2 bg-blue-600 text-white">
-                                                                            Principale
-                                                                        </Badge>
-                                                                    )}
+          {/* Formulaire */}
+          <form onSubmit={handleSubmit(handleFormSubmit)} className="max-w-4xl mx-auto">
+            
+            <AnimatePresence mode="wait">
 
-                                                                    <Button
-                                                                        type="button"
-                                                                        variant="destructive"
-                                                                        size="sm"
-                                                                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 p-0"
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation()
-                                                                            console.log('🗑️ Suppression image:', imageUrl)
-                                                                            removeImage(index)
-                                                                        }}
-                                                                    >
-                                                                        <X className="h-3 w-3" />
-                                                                    </Button>
-                                                                </motion.div>
-                                                            ))}
-                                                        </div>
+              {/* Étape 1: Informations */}
+              {currentStep === 1 && (
+                <motion.div
+                  key="step1"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                >
+                  <Card className="shadow-xl border-0">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-3 text-2xl">
+                        <FileText className="h-8 w-8 text-blue-600" />
+                        Informations de l'annonce
+                      </CardTitle>
+                      <p className="text-slate-600">Décrivez votre article en détail</p>
+                    </CardHeader>
 
-                                                        {/* DEBUG - URLs des images */}
-                                                        {process.env.NODE_ENV === 'development' && (
-                                                            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded text-xs">
-                                                                <strong>🔧 Debug Images:</strong>
-                                                                <div className="mt-2 space-y-1">
-                                                                    {uploadedImages.map((url, index) => (
-                                                                        <div key={index} className="flex items-center gap-2">
-                                                                            <span className="font-mono text-xs bg-white px-2 py-1 rounded">{index + 1}:</span>
-                                                                            <span className="text-xs truncate">{url}</span>
-                                                                            <a
-                                                                                href={url}
-                                                                                target="_blank"
-                                                                                rel="noopener noreferrer"
-                                                                                className="text-blue-600 hover:text-blue-800 text-xs"
-                                                                            >
-                                                                                🔗 Test
-                                                                            </a>
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                )}
+                    <CardContent className="space-y-6">
+                      
+                      {/* Titre */}
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                          Titre de l'annonce *
+                        </label>
+                        <Input
+                          {...register('title', { 
+                            required: 'Le titre est requis',
+                            minLength: { value: 10, message: 'Minimum 10 caractères' },
+                            maxLength: { value: 100, message: 'Maximum 100 caractères' }
+                          })}
+                          placeholder="Ex: iPhone 13 Pro 128GB en excellent état"
+                          className="text-lg"
+                        />
+                        {errors.title && (
+                          <p className="text-red-600 text-sm mt-1">{errors.title.message}</p>
+                        )}
+                      </div>
 
-                                            </CardContent>
-                                        </Card>
-                                    </motion.div>
-                                )}
+                      {/* Description */}
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                          Description *
+                        </label>
+                        <Textarea
+                          {...register('description', { 
+                            required: 'La description est requise',
+                            minLength: { value: 20, message: 'Minimum 20 caractères' }
+                          })}
+                          placeholder="Décrivez votre article : état, année, caractéristiques..."
+                          rows={4}
+                          className="resize-none"
+                        />
+                        {errors.description && (
+                          <p className="text-red-600 text-sm mt-1">{errors.description.message}</p>
+                        )}
+                      </div>
 
-                                {/* Étape 3: Aperçu */}
-                                {currentStep === 3 && (
-                                    <motion.div key="step3" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-                                        <Card className="shadow-xl border-0">
-                                            <CardHeader>
-                                                <CardTitle className="flex items-center text-2xl">
-                                                    <Eye className="h-6 w-6 mr-3 text-blue-600" />
-                                                    Aperçu de votre annonce
-                                                </CardTitle>
-                                            </CardHeader>
-                                            <CardContent>
-                                                <div className="bg-white border rounded-xl p-6 shadow-lg">
-                                                    {uploadedImages.length > 0 && (
-                                                        <div className="mb-6">
-                                                            <img src={`http://localhost:8080${uploadedImages[0]}`} alt="Principal" className="w-full h-64 object-cover rounded-lg" />
-                                                            {uploadedImages.length > 1 && (
-                                                                <div className="flex gap-2 mt-3">
-                                                                    {uploadedImages.slice(1, 4).map((imageUrl, index) => (
-                                                                        <img key={index} src={`http://localhost:8080${imageUrl}`} alt={`${index + 2}`} className="w-20 h-20 object-cover rounded-md" />
-                                                                    ))}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    )}
-                                                    <div className="space-y-4">
-                                                        <div className="flex justify-between">
-                                                            <div>
-                                                                <h2 className="text-2xl font-bold text-slate-900 mb-2">{watchedValues.title}</h2>
-                                                                <div className="flex items-center gap-4 mb-4">
-                                                                    {selectedCategory && <Badge variant="secondary">{selectedCategory.name}</Badge>}
-                                                                    <div className="flex items-center text-slate-600">
-                                                                        <MapPin className="h-4 w-4 mr-1" />
-                                                                        {watchedValues.region}
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                            <div className="text-3xl font-bold text-blue-600">{formatPrice(watchedValues.price)}</div>
-                                                        </div>
-                                                        <div className="border-t pt-4">
-                                                            <h3 className="font-semibold text-slate-900 mb-3">Description</h3>
-                                                            <p className="text-slate-700 whitespace-pre-wrap">{watchedValues.description}</p>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
-                                    </motion.div>
-                                )}
+                      {/* Prix et Catégorie */}
+                      <div className="grid md:grid-cols-2 gap-6">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-2">
+                            Prix (FCFA) *
+                          </label>
+                          <Input
+                            type="number"
+                            {...register('price', { 
+                              required: 'Le prix est requis',
+                              min: { value: 100, message: 'Prix minimum 100 FCFA' }
+                            })}
+                            placeholder="Ex: 450000"
+                            className="text-lg"
+                          />
+                          {errors.price && (
+                            <p className="text-red-600 text-sm mt-1">{errors.price.message}</p>
+                          )}
+                        </div>
 
-                                {/* Étape 4: Paiement */}
-                                {currentStep === 4 && (
-                                    <motion.div key="step4" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-                                        <Card className="shadow-xl border-0">
-                                            <CardHeader>
-                                                <CardTitle className="flex items-center text-2xl">
-                                                    <CreditCard className="h-6 w-6 mr-3 text-blue-600" />
-                                                    Finaliser la publication
-                                                </CardTitle>
-                                                <p className="text-slate-600">Payez 200 FCFA pour publier votre annonce</p>
-                                            </CardHeader>
-                                            <CardContent>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-2">
+                            Catégorie *
+                          </label>
+                          <select
+                            {...register('category_id', { required: 'La catégorie est requise' })}
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg"
+                          >
+                            <option value="">Choisir une catégorie</option>
+                            {categories.map((category) => {
+                              const IconComponent = categoryIcons[category.icon] || Tag;
+                              return (
+                                <option key={category.id} value={category.id}>
+                                  {category.name}
+                                </option>
+                              );
+                            })}
+                          </select>
+                          {errors.category_id && (
+                            <p className="text-red-600 text-sm mt-1">{errors.category_id.message}</p>
+                          )}
+                        </div>
+                      </div>
 
-                                                <div className="bg-blue-50 rounded-xl p-6 mb-8">
-                                                    <div className="flex items-center justify-between mb-4">
-                                                        <span className="text-slate-900 font-medium">Frais de publication</span>
-                                                        <span className="text-2xl font-bold text-blue-600">200 FCFA</span>
-                                                    </div>
-                                                    <div className="text-sm text-slate-600 space-y-1">
-                                                        <div className="flex items-center">
-                                                            <Check className="h-4 w-4 text-green-600 mr-2" />
-                                                            Annonce visible pendant 30 jours
-                                                        </div>
-                                                        <div className="flex items-center">
-                                                            <Check className="h-4 w-4 text-green-600 mr-2" />
-                                                            Statistiques de performance
-                                                        </div>
-                                                        <div className="flex items-center">
-                                                            <Check className="h-4 w-4 text-green-600 mr-2" />
-                                                            Gestion des contacts
-                                                        </div>
-                                                    </div>
-                                                </div>
+                      {/* Région */}
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                          Région *
+                        </label>
+                        <select
+                          {...register('region', { required: 'La région est requise' })}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg"
+                        >
+                          {regions.map((region) => (
+                            <option key={region} value={region}>
+                              {region}
+                            </option>
+                          ))}
+                        </select>
+                        {errors.region && (
+                          <p className="text-red-600 text-sm mt-1">{errors.region.message}</p>
+                        )}
+                      </div>
 
-                                                <div className="space-y-4">
-                                                    <h4 className="font-semibold text-slate-900">Choisissez votre méthode de paiement</h4>
-                                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                                        <Button variant="outline" className="p-6 h-auto flex-col space-y-2 hover:border-orange-500">
-                                                            <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-                                                                <span className="text-orange-600 font-bold">OM</span>
-                                                            </div>
-                                                            <span className="font-semibold">Orange Money</span>
-                                                        </Button>
-                                                        <Button variant="outline" className="p-6 h-auto flex-col space-y-2 hover:border-blue-500">
-                                                            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                                                                <span className="text-blue-600 font-bold">W</span>
-                                                            </div>
-                                                            <span className="font-semibold">Wave</span>
-                                                        </Button>
-                                                        <Button variant="outline" className="p-6 h-auto flex-col space-y-2 hover:border-green-500">
-                                                            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                                                                <span className="text-green-600 font-bold">FM</span>
-                                                            </div>
-                                                            <span className="font-semibold">Free Money</span>
-                                                        </Button>
-                                                    </div>
-                                                </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              )}
 
-                                            </CardContent>
-                                        </Card>
-                                    </motion.div>
-                                )}
+              {/* Étape 2: Images */}
+              {currentStep === 2 && (
+                <motion.div
+                  key="step2"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                >
+                  <Card className="shadow-xl border-0">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-3 text-2xl">
+                        <Camera className="h-8 w-8 text-blue-600" />
+                        Photos de votre article
+                      </CardTitle>
+                      <p className="text-slate-600">Ajoutez jusqu'à 5 photos de qualité</p>
+                    </CardHeader>
 
-                            </AnimatePresence>
+                    <CardContent className="space-y-6">
+                      
+                      {/* Zone d'upload */}
+                      <div
+                        className={`relative border-2 border-dashed rounded-xl p-12 text-center transition-all duration-300 cursor-pointer ${
+                          dragActive 
+                            ? 'border-blue-500 bg-blue-50' 
+                            : 'border-slate-300 hover:border-blue-400 hover:bg-slate-50'
+                        } ${uploadedImages.length >= 5 ? 'opacity-50 pointer-events-none' : ''}`}
+                        onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
+                        onDragLeave={(e) => { e.preventDefault(); setDragActive(false); }}
+                        onDrop={handleDrop}
+                        onClick={() => document.getElementById('image-upload')?.click()}
+                      >
+                        {isUploading ? (
+                          <>
+                            <Loader2 className="h-16 w-16 text-blue-600 mx-auto mb-4 animate-spin" />
+                            <h3 className="text-xl font-semibold text-blue-900 mb-2">Upload en cours...</h3>
+                            <p className="text-blue-600">Veuillez patienter</p>
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="h-16 w-16 text-slate-400 mx-auto mb-4" />
+                            <h3 className="text-xl font-semibold text-slate-900 mb-2">
+                              Glissez vos images ici
+                            </h3>
+                            <p className="text-slate-600 mb-6">
+                              ou cliquez pour parcourir vos fichiers
+                            </p>
+                            <input
+                              type="file"
+                              multiple
+                              accept="image/*"
+                              onChange={handleFileInput}
+                              className="hidden"
+                              id="image-upload"
+                            />
+                            <Button type="button" className="pointer-events-none">
+                              <ImageIcon className="h-5 w-5 mr-2" />
+                              Choisir des images
+                            </Button>
+                            <div className="mt-4 text-sm text-slate-500">
+                              <p>Formats: JPG, PNG, WebP • Max: 5MB par image • Limite: 5 images</p>
+                            </div>
+                          </>
+                        )}
+                      </div>
 
-                            {/* Navigation */}
-                            <motion.div className="flex justify-between items-center mt-8" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    onClick={handlePrevious}
-                                    disabled={currentStep === 1}
-                                    className="flex items-center"
-                                >
-                                    <ArrowLeft className="h-4 w-4 mr-2" />
-                                    Précédent
-                                </Button>
+                      {/* Images uploadées */}
+                      {uploadedImages.length > 0 && (
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <h4 className="font-semibold text-slate-900">
+                              Images ajoutées ({uploadedImages.length}/5)
+                            </h4>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={debugImages}
+                            >
+                              🔧 Debug Images
+                            </Button>
+                          </div>
 
-                                <div className="text-center">
-                                    <p className="text-sm text-slate-600">Étape {currentStep} sur {steps.length}</p>
+                          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                            {uploadedImages.map((imageUrl, index) => {
+                              console.log(`🖼️ Rendu image ${index + 1}:`, imageUrl);
+                              
+                              return (
+                                <div key={index} className="relative group">
+                                  <div className="aspect-square rounded-lg overflow-hidden bg-slate-100 border-2 border-slate-200">
+                                    <img
+                                      src={imageUrl}
+                                      alt={`Image ${index + 1}`}
+                                      className="w-full h-full object-cover transition-all duration-300 group-hover:scale-105"
+                                      onLoad={() => console.log(`✅ Image ${index + 1} chargée avec succès`)}
+                                      onError={(e) => {
+                                        console.error(`❌ Erreur chargement image ${index + 1}:`, imageUrl);
+                                        console.error('Event error:', e);
+                                      }}
+                                    />
+                                    
+                                    {/* Badge numéro */}
+                                    <div className="absolute top-2 left-2 bg-black/70 text-white text-xs rounded-full px-2 py-1">
+                                      {index + 1}
+                                    </div>
+                                    
+                                    {/* Badge principal pour la première image */}
+                                    {index === 0 && (
+                                      <div className="absolute top-2 right-2 bg-blue-600 text-white text-xs rounded px-2 py-1">
+                                        Principal
+                                      </div>
+                                    )}
+
+                                    {/* Bouton supprimer */}
+                                    <button
+                                      type="button"
+                                      onClick={() => removeImage(index)}
+                                      className="absolute bottom-2 right-2 bg-red-500 hover:bg-red-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </button>
+                                  </div>
+                                  
+                                  {/* URL debug (visible en dev) */}
+                                  <div className="mt-1 text-xs text-slate-500 font-mono truncate" title={imageUrl}>
+                                    {imageUrl.split('/').pop()}
+                                  </div>
                                 </div>
-                                {currentStep < 3 ? (
-                                    <Button
-                                        type="button"
-                                        onClick={handleNext}
-                                        disabled={
-                                            (currentStep === 1 && (!watchedValues.title || !watchedValues.description || !watchedValues.price || !watchedValues.category_id || !watchedValues.region)) ||
-                                            (currentStep === 2 && uploadedImages.length === 0) // ✅ Cette condition peut bloquer
-                                        }
-                                        className="flex items-center"
-                                    >
-                                        Suivant
-                                        <ArrowRight className="h-4 w-4 ml-2" />
-                                    </Button>
-                                ) : currentStep === 3 ? (
-                                    <Button
-                                        type="submit"
-                                        className="flex items-center bg-blue-600 hover:bg-blue-700"
-                                        disabled={isLoading || uploadedImages.length === 0} // ✅ Vérification ici aussi
-                                    >
-                                        {isLoading ? (
-                                            <>
-                                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                                Création...
-                                            </>
-                                        ) : (
-                                            <>
-                                                Créer l'annonce
-                                                <ArrowRight className="h-4 w-4 ml-2" />
-                                            </>
-                                        )}
-                                    </Button>
-                                ) : (
-                                    <Button
-                                        type="button"
-                                        className="flex items-center bg-green-600 hover:bg-green-700"
-                                        onClick={() => router.push('/dashboard')}
-                                    >
-                                        Aller au Dashboard
-                                        <ArrowRight className="h-4 w-4 ml-2" />
-                                    </Button>
-                                )}
+                              );
+                            })}
+                          </div>
 
-                            </motion.div>
+                          {/* Info d'aide */}
+                          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                            <div className="flex items-start gap-3">
+                              <Camera className="h-5 w-5 text-blue-600 mt-0.5" />
+                              <div>
+                                <p className="text-blue-800 font-medium text-sm">Conseils pour de meilleures photos</p>
+                                <ul className="text-blue-700 text-sm mt-1 space-y-1">
+                                  <li>• Prenez des photos sous un bon éclairage</li>
+                                  <li>• Montrez l'article sous différents angles</li>
+                                  <li>• La première image sera votre photo principale</li>
+                                </ul>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              )}
+
+              {/* ✅ Étape 3: Aperçu COMPLÈTEMENT RÉÉCRITE */}
+              {currentStep === 3 && (
+                <motion.div
+                  key="step3"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                >
+                  <Card className="shadow-xl border-0">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-3 text-2xl">
+                        <Eye className="h-8 w-8 text-blue-600" />
+                        Aperçu de votre annonce
+                      </CardTitle>
+                      <p className="text-slate-600">Vérifiez tous les détails avant de continuer</p>
+                    </CardHeader>
+
+                    <CardContent className="space-y-8">
+                      
+                      {/* ✅ SECTION IMAGES AMÉLIORÉE */}
+                      <div>
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className="text-lg font-semibold text-slate-900">
+                            Photos ({uploadedImages.length})
+                          </h3>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={debugImages}
+                          >
+                            🔧 Debug
+                          </Button>
+                        </div>
+                        
+                        {uploadedImages.length > 0 ? (
+                          <div className="space-y-4">
+                            {/* Galerie principale */}
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                              {uploadedImages.map((imageUrl, index) => {
+                                console.log(`🖼️ Aperçu image ${index + 1}:`, imageUrl);
+                                
+                                return (
+                                  <div key={index} className="relative group">
+                                    <div className="aspect-square rounded-lg overflow-hidden bg-slate-100 border-2 border-slate-200 shadow-sm">
+                                      <img
+                                        src={imageUrl}
+                                        alt={`Aperçu ${index + 1}`}
+                                        className="w-full h-full object-cover transition-all duration-300 group-hover:scale-105"
+                                        onLoad={() => {
+                                          console.log(`✅ Aperçu image ${index + 1} chargée avec succès`);
+                                        }}
+                                        onError={(e) => {
+                                          console.error(`❌ Erreur aperçu image ${index + 1}:`, imageUrl);
+                                          console.error('Error event:', e);
+                                          // Fallback: afficher une div avec l'erreur
+                                          e.currentTarget.style.display = 'none';
+                                        }}
+                                      />
+                                      
+                                      {/* Badge numéro */}
+                                      <div className="absolute top-2 left-2 bg-black/70 text-white text-xs rounded-full px-2 py-1 font-medium">
+                                        {index + 1}
+                                      </div>
+                                      
+                                      {/* Badge principal */}
+                                      {index === 0 && (
+                                        <div className="absolute top-2 right-2 bg-green-600 text-white text-xs rounded px-2 py-1 font-medium">
+                                          ⭐ Principal
+                                        </div>
+                                      )}
+
+                                      {/* Overlay hover */}
+                                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-all duration-300 flex items-center justify-center">
+                                        <Eye className="h-6 w-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                                      </div>
+                                    </div>
+                                    
+                                    {/* URL pour debug */}
+                                    <div className="mt-1 text-xs text-slate-400 font-mono truncate" title={imageUrl}>
+                                      {imageUrl.substring(imageUrl.lastIndexOf('/') + 1)}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            
+                            {/* Actions sur les images */}
+                            <div className="flex gap-2 flex-wrap">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setCurrentStep(2)}
+                                className="flex items-center gap-2"
+                              >
+                                <Edit className="h-4 w-4" />
+                                Modifier les photos
+                              </Button>
+                              
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  uploadedImages.forEach((url, i) => {
+                                    window.open(url, `_blank_image_${i}`);
+                                  });
+                                }}
+                                className="flex items-center gap-2"
+                              >
+                                <ExternalLink className="h-4 w-4" />
+                                Ouvrir toutes
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-center py-12 bg-red-50 rounded-lg border-2 border-red-200">
+                            <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+                            <h4 className="text-lg font-semibold text-red-800 mb-2">Aucune image trouvée</h4>
+                            <p className="text-red-600 mb-4">Vous devez ajouter au moins une photo pour continuer</p>
+                            <Button
+                              type="button"
+                              onClick={() => setCurrentStep(2)}
+                              className="bg-red-600 hover:bg-red-700 text-white"
+                            >
+                              <Camera className="h-4 w-4 mr-2" />
+                              Ajouter des photos
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Informations de l'annonce */}
+                      <div className="grid md:grid-cols-2 gap-8">
+                        <div className="space-y-6">
+                          <div>
+                            <label className="text-sm font-medium text-slate-500 uppercase tracking-wide">Titre</label>
+                            <h2 className="text-2xl font-bold text-slate-900 mt-1">{watchedValues.title}</h2>
+                          </div>
+                          
+                          <div>
+                            <label className="text-sm font-medium text-slate-500 uppercase tracking-wide">Prix</label>
+                            <p className="text-3xl font-bold text-blue-600 mt-1">
+                              {watchedValues.price ? parseInt(watchedValues.price).toLocaleString() : '0'} FCFA
+                            </p>
+                          </div>
+                          
+                          <div>
+                            <label className="text-sm font-medium text-slate-500 uppercase tracking-wide">Localisation</label>
+                            <p className="text-lg text-slate-900 flex items-center gap-2 mt-1">
+                              <MapPin className="h-5 w-5 text-slate-500" />
+                              {watchedValues.region}
+                            </p>
+                          </div>
+
+                          <div>
+                            <label className="text-sm font-medium text-slate-500 uppercase tracking-wide">Catégorie</label>
+                            <p className="text-lg text-slate-900 flex items-center gap-2 mt-1">
+                              <Tag className="h-5 w-5 text-slate-500" />
+                              {categories.find(c => c.id === watchedValues.category_id)?.name || 'Non sélectionnée'}
+                            </p>
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <label className="text-sm font-medium text-slate-500 uppercase tracking-wide">Description</label>
+                          <div className="mt-1 bg-slate-50 rounded-lg p-4 border">
+                            <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">
+                              {watchedValues.description}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Avertissement si pas d'images */}
+                      {uploadedImages.length === 0 && (
+                        <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+                          <div className="flex items-center gap-3">
+                            <AlertCircle className="h-6 w-6 text-red-500 flex-shrink-0" />
+                            <div>
+                              <h4 className="text-red-800 font-semibold">Photos manquantes</h4>
+                              <p className="text-red-700 text-sm mt-1">
+                                Votre annonce doit avoir au moins une photo pour être publiée. 
+                                Retournez à l'étape précédente pour ajouter des images.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Info publication */}
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+                        <div className="flex items-start gap-3">
+                          <Shield className="h-6 w-6 text-blue-600 flex-shrink-0 mt-0.5" />
+                          <div>
+                            <h4 className="text-blue-800 font-semibold">Prêt pour la publication</h4>
+                            <p className="text-blue-700 text-sm mt-1">
+                              Après validation, votre annonce sera publiée moyennant 200 FCFA. 
+                              Elle restera active pendant 30 jours.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              )}
+
+              {/* Étape 4: Paiement */}
+              {currentStep === 4 && (
+                <motion.div
+                  key="step4"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                >
+                  <Card className="shadow-xl border-0">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-3 text-2xl">
+                        <CreditCard className="h-8 w-8 text-blue-600" />
+                        Paiement de publication
+                      </CardTitle>
+                      <p className="text-slate-600">Payez 200 FCFA pour publier votre annonce</p>
+                    </CardHeader>
+
+                    <CardContent className="space-y-6">
+                      
+                      {/* Résumé commande */}
+                      <div className="bg-slate-50 rounded-lg p-6 border">
+                        <h3 className="font-semibold text-slate-900 mb-4">Résumé de votre commande</h3>
+                        <div className="space-y-3">
+                          <div className="flex justify-between">
+                            <span className="text-slate-600">Publication d'annonce</span>
+                            <span className="font-medium">200 FCFA</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-600">Durée de publication</span>
+                            <span className="font-medium">30 jours</span>
+                          </div>
+                          <div className="border-t pt-3 flex justify-between text-lg font-bold">
+                            <span>Total</span>
+                            <span className="text-blue-600">200 FCFA</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Méthodes de paiement */}
+                      <div>
+                        <h3 className="font-semibold text-slate-900 mb-4">Choisir votre méthode de paiement</h3>
+                        <div className="grid gap-4">
+                          
+                          {/* Orange Money */}
+                          <label className={`flex items-center gap-4 p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                            paymentMethod === 'orange_money' 
+                              ? 'border-orange-500 bg-orange-50' 
+                              : 'border-slate-200 hover:border-orange-300'
+                          }`}>
+                            <input
+                              type="radio"
+                              name="payment_method"
+                              value="orange_money"
+                              checked={paymentMethod === 'orange_money'}
+                              onChange={(e) => setPaymentMethod(e.target.value as any)}
+                              className="text-orange-600"
+                            />
+                            <div className="w-12 h-12 bg-orange-600 rounded-lg flex items-center justify-center">
+                              <Smartphone className="h-6 w-6 text-white" />
+                            </div>
+                            <div className="flex-1">
+                              <h4 className="font-semibold text-slate-900">Orange Money</h4>
+                              <p className="text-sm text-slate-600">Paiement via votre compte Orange Money</p>
+                            </div>
+                            <Badge className="bg-orange-100 text-orange-800">Recommandé</Badge>
+                          </label>
+
+                          {/* Wave */}
+                          <label className={`flex items-center gap-4 p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                            paymentMethod === 'wave' 
+                              ? 'border-blue-500 bg-blue-50' 
+                              : 'border-slate-200 hover:border-blue-300'
+                          }`}>
+                            <input
+                              type="radio"
+                              name="payment_method"
+                              value="wave"
+                              checked={paymentMethod === 'wave'}
+                              onChange={(e) => setPaymentMethod(e.target.value as any)}
+                              className="text-blue-600"
+                            />
+                            <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center">
+                              <Zap className="h-6 w-6 text-white" />
+                            </div>
+                            <div className="flex-1">
+                              <h4 className="font-semibold text-slate-900">Wave</h4>
+                              <p className="text-sm text-slate-600">Paiement via votre portefeuille Wave</p>
+                            </div>
+                          </label>
+
+                          {/* Free Money */}
+                          <label className={`flex items-center gap-4 p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                            paymentMethod === 'free_money' 
+                              ? 'border-purple-500 bg-purple-50' 
+                              : 'border-slate-200 hover:border-purple-300'
+                          }`}>
+                            <input
+                              type="radio"
+                              name="payment_method"
+                              value="free_money"
+                              checked={paymentMethod === 'free_money'}
+                              onChange={(e) => setPaymentMethod(e.target.value as any)}
+                              className="text-purple-600"
+                            />
+                            <div className="w-12 h-12 bg-purple-600 rounded-lg flex items-center justify-center">
+                              <DollarSign className="h-6 w-6 text-white" />
+                            </div>
+                            <div className="flex-1">
+                              <h4 className="font-semibold text-slate-900">Free Money</h4>
+                              <p className="text-sm text-slate-600">Paiement via Free Money</p>
+                            </div>
+                          </label>
 
                         </div>
-                    </form>
+                      </div>
 
-                </div>
-            </main>
+                      {/* Numéro de téléphone */}
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                          Numéro de téléphone
+                        </label>
+                        <Input
+                          type="tel"
+                          value={userPhone}
+                          onChange={(e) => setUserPhone(e.target.value)}
+                          placeholder="+221 XX XXX XX XX"
+                          className="text-lg"
+                        />
+                        <p className="text-sm text-slate-500 mt-1">
+                          Le numéro associé à votre compte {paymentMethod === 'orange_money' ? 'Orange Money' : paymentMethod === 'wave' ? 'Wave' : 'Free Money'}
+                        </p>
+                      </div>
 
-            <Footer />
-        </>
-    )
+                      {/* Info sécurité */}
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                        <div className="flex items-start gap-3">
+                          <Shield className="h-5 w-5 text-green-600 mt-0.5" />
+                          <div>
+                            <p className="text-green-800 font-medium text-sm">Paiement sécurisé</p>
+                            <p className="text-green-700 text-sm mt-1">
+                              Vos informations de paiement sont protégées. Vous recevrez un SMS de confirmation.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              )}
+
+              {/* Étape 5: Confirmation */}
+              {currentStep === 5 && (
+                <motion.div
+                  key="step5"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                >
+                  <Card className="shadow-xl border-0 bg-gradient-to-br from-green-50 to-blue-50">
+                    <CardHeader className="text-center">
+                      <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <CheckCircle className="h-10 w-10 text-green-600" />
+                      </div>
+                      <CardTitle className="text-3xl text-green-800">Paiement initié avec succès !</CardTitle>
+                      <p className="text-green-600 text-lg">Votre annonce sera publiée dès réception du paiement</p>
+                    </CardHeader>
+
+                    <CardContent className="text-center space-y-6">
+                      
+                      {/* Instructions */}
+                      <div className="bg-white rounded-lg p-6 border shadow-sm">
+                        <h3 className="font-semibold text-slate-900 mb-4">Étapes suivantes</h3>
+                        <div className="space-y-3 text-left">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-medium text-sm">1</div>
+                            <p className="text-slate-700">Suivez les instructions de paiement {paymentMethod === 'orange_money' ? 'Orange Money' : paymentMethod === 'wave' ? 'Wave' : 'Free Money'}</p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-medium text-sm">2</div>
+                            <p className="text-slate-700">Confirmez le paiement de 200 FCFA</p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-medium text-sm">3</div>
+                            <p className="text-slate-700">Votre annonce sera automatiquement publiée</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Lien de paiement */}
+                      {paymentUrl && (
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+                          <div className="flex items-center gap-3 mb-4">
+                            <ExternalLink className="h-5 w-5 text-yellow-600" />
+                            <h4 className="font-semibold text-yellow-800">Lien de paiement généré</h4>
+                          </div>
+                          <p className="text-yellow-700 text-sm mb-4">
+                            Un lien de paiement s'ouvrira automatiquement. 
+                            Si elle ne s'affiche pas, cliquez sur le bouton ci-dessous.
+                          </p>
+                          <Button
+                            type="button"
+                            onClick={() => window.open(paymentUrl, '_blank')}
+                            className="bg-yellow-600 hover:bg-yellow-700 text-white"
+                          >
+                            <ExternalLink className="h-4 w-4 mr-2" />
+                            Ouvrir le paiement
+                          </Button>
+                        </div>
+                      )}
+
+                      {/* Actions alternatives */}
+                      <div className="flex gap-4 pt-4">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => router.push('/dashboard')}
+                          className="flex-1"
+                        >
+                          <Settings className="h-4 w-4 mr-2" />
+                          Aller au Dashboard
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => router.push('/listings')}
+                          className="flex-1"
+                        >
+                          <Eye className="h-4 w-4 mr-2" />
+                          Voir les annonces
+                        </Button>
+                      </div>
+
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              )}
+
+            </AnimatePresence>
+
+            {/* Navigation entre étapes */}
+            {currentStep < 5 && (
+              <motion.div 
+                className="flex justify-between items-center mt-8 pt-6 border-t border-slate-200"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+              >
+                
+                {/* Bouton Précédent */}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handlePrevious}
+                  disabled={currentStep === 1}
+                  className="flex items-center gap-2"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Précédent
+                </Button>
+
+                {/* Bouton Suivant/Soumettre */}
+                {currentStep < 3 ? (
+                  <Button
+                    type="button"
+                    onClick={handleNext}
+                    disabled={
+                      (currentStep === 1 && (!watchedValues.title || !watchedValues.description || !watchedValues.price || !watchedValues.category_id || !watchedValues.region)) ||
+                      (currentStep === 2 && uploadedImages.length === 0) // ✅ Vérification stricte
+                    }
+                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    Suivant
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                ) : currentStep === 3 ? (
+                  <Button
+                    type="submit"
+                    disabled={isLoading || uploadedImages.length === 0} // ✅ Blocage si pas d'images
+                    className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white"
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Création en cours...
+                      </>
+                    ) : (
+                      <>
+                        Créer l'annonce
+                        <Check className="h-4 w-4" />
+                      </>
+                    )}
+                  </Button>
+                ) : currentStep === 4 ? (
+                  <Button
+                    type="button"
+                    onClick={handlePayment}
+                    disabled={isLoading || !userPhone}
+                    className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white"
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Traitement...
+                      </>
+                    ) : (
+                      <>
+                        Procéder au paiement
+                        <CreditCard className="h-4 w-4" />
+                      </>
+                    )}
+                  </Button>
+                ) : null}
+
+              </motion.div>
+            )}
+
+          </form>
+
+        </div>
+      </main>
+
+      <Footer />
+    </>
+  );
 }

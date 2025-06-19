@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useRouter } from 'next/navigation';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import { Button } from '@/components/ui/button';
@@ -27,7 +28,9 @@ import {
   Users,
   ArrowUpDown,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  Camera,
+  Package
 } from 'lucide-react';
 
 // Types basés sur votre API
@@ -82,6 +85,8 @@ interface ListingFilters {
 }
 
 export default function ListingsPage() {
+  const router = useRouter();
+  
   // États
   const [listings, setListings] = useState<Listing[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -108,6 +113,42 @@ export default function ListingsPage() {
     pages: 0,
     currentPage: 1
   });
+
+  // ✅ FONCTION HELPER POUR LES IMAGES (FIX PRINCIPAL)
+  const getImageUrl = (imagePath: string) => {
+    if (!imagePath) return null;
+    
+    // Si l'URL est déjà complète
+    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+      return imagePath;
+    }
+    
+    // Si l'URL commence par /
+    if (imagePath.startsWith('/')) {
+      return `http://localhost:8080${imagePath}`;
+    }
+    
+    // Sinon construire l'URL
+    return `http://localhost:8080/uploads/${imagePath}`;
+  };
+
+  // ✅ FONCTION DEBUG POUR LES IMAGES
+  const debugImageUrls = (listings: Listing[]) => {
+    console.log('🔍 DEBUG IMAGES LISTINGS:');
+    listings.forEach((listing, index) => {
+      console.log(`📝 Annonce ${index + 1}: ${listing.title}`);
+      console.log(`  - Images brutes:`, listing.images);
+      
+      if (listing.images && listing.images.length > 0) {
+        listing.images.forEach((img, imgIndex) => {
+          const finalUrl = getImageUrl(img);
+          console.log(`  - Image ${imgIndex + 1}:`, img, '→', finalUrl);
+        });
+      } else {
+        console.log('  - Aucune image');
+      }
+    });
+  };
 
   // Régions du Sénégal (basées sur votre API)
   const regions = [
@@ -151,20 +192,44 @@ export default function ListingsPage() {
         if (value) params.append(key, value.toString());
       });
 
-      const response = await fetch(`http://localhost:8080/api/v1/listings?${params}`);
+      const url = `http://localhost:8080/api/v1/listings?${params}`;
+      console.log('🔄 Fetching listings from:', url);
+      
+      const response = await fetch(url);
+      
+      console.log('📡 Response status:', response.status);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
       const data = await response.json();
+      console.log('📊 Raw API response:', data);
 
       if (data.data) {
-        setListings(data.data.listings || []);
+        const fetchedListings = data.data.listings || [];
+        console.log('📝 Listings found:', fetchedListings.length);
+        console.log('📋 First listing:', fetchedListings[0]);
+        
+        setListings(fetchedListings);
         setPagination({
           total: data.data.total || 0,
           pages: data.data.pages || 0,
           currentPage: data.data.page || 1
         });
+        
+        console.log('📊 Pagination:', {
+          total: data.data.total,
+          pages: data.data.pages,
+          currentPage: data.data.page
+        });
+      } else {
+        console.warn('⚠️ No data field in response:', data);
+        setListings([]);
       }
     } catch (error) {
+      console.error('❌ Error fetching listings:', error);
       setError('Erreur lors du chargement des annonces');
-      console.error('Erreur chargement annonces:', error);
     } finally {
       setLoading(false);
     }
@@ -226,141 +291,190 @@ export default function ListingsPage() {
     return `${days}j`;
   };
 
-  // Composant Card d'annonce
-  const ListingCard = ({ listing }: { listing: Listing }) => (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      className={`group cursor-pointer ${viewMode === 'list' ? 'w-full' : ''}`}
-    >
-      <Card className="overflow-hidden hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 border-0 shadow-lg">
-        <div className={`${viewMode === 'list' ? 'flex' : ''}`}>
-          
-          {/* Image */}
-          <div className={`relative bg-gradient-to-br from-blue-100 to-orange-100 ${
-            viewMode === 'list' ? 'w-64 h-48 flex-shrink-0' : 'h-48'
-          } flex items-center justify-center`}>
-            
-            {listing.images && listing.images.length > 0 ? (
-              <img
-                src={`http://localhost:8080${listing.images[0]}`}
-                alt={listing.title}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <div className="text-6xl">{listing.category.icon || '📦'}</div>
-            )}
-            
-            {/* Badges */}
-            <div className="absolute top-3 left-3 flex flex-col gap-2">
-              {listing.is_featured && (
-                <Badge className="bg-yellow-500 text-white">
-                  ⭐ Vedette
-                </Badge>
-              )}
-              <Badge variant="secondary" className="text-xs">
-                {listing.category.name}
-              </Badge>
-            </div>
-            
-            {/* Actions */}
-            <div className="absolute top-3 right-3 flex flex-col gap-2">
-              <Button
-                size="icon"
-                variant="ghost"
-                className="bg-white/80 hover:bg-white"
-                onClick={(e) => {
-                  e.preventDefault();
-                  toggleFavorite(listing.id);
-                }}
-              >
-                <Heart className={`h-4 w-4 ${
-                  favorites.has(listing.id) ? 'fill-red-500 text-red-500' : ''
-                }`} />
-              </Button>
-              
-              <Button
-                size="icon"
-                variant="ghost"
-                className="bg-white/80 hover:bg-white"
-              >
-                <Share2 className="h-4 w-4" />
-              </Button>
-            </div>
-            
-            {/* Views */}
-            <div className="absolute bottom-3 left-3 bg-black/50 text-white px-2 py-1 rounded text-xs flex items-center">
-              <Eye className="h-3 w-3 mr-1" />
-              {listing.views_count}
-            </div>
-          </div>
+  // ✅ COMPOSANT CARD D'ANNONCE AVEC IMAGES FIXES
+  const ListingCard = ({ listing }: { listing: Listing }) => {
+    const imageUrl = listing.images && listing.images.length > 0 
+      ? getImageUrl(listing.images[0]) 
+      : null;
 
-          {/* Contenu */}
-          <CardContent className={`p-4 ${viewMode === 'list' ? 'flex-1' : ''}`}>
-            <div className="space-y-3">
+    console.log(`🖼️ Rendu card ${listing.title}:`, imageUrl);
+
+    return (
+      <motion.div
+        layout
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -20 }}
+        className={`group cursor-pointer ${viewMode === 'list' ? 'w-full' : ''}`}
+        onClick={() => router.push(`/listings/${listing.id}`)}
+      >
+        <Card className="overflow-hidden hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 border-0 shadow-lg">
+          <div className={`${viewMode === 'list' ? 'flex' : ''}`}>
+            
+            {/* ✅ IMAGE AVEC GESTION D'ERREUR AMÉLIORÉE */}
+            <div className={`relative bg-gradient-to-br from-blue-100 to-orange-100 ${
+              viewMode === 'list' ? 'w-64 h-48 flex-shrink-0' : 'h-48'
+            } flex items-center justify-center`}>
               
-              {/* Titre et prix */}
-              <div className={`${viewMode === 'list' ? 'flex items-start justify-between' : ''}`}>
-                <h3 className={`font-semibold line-clamp-2 group-hover:text-blue-600 transition-colors ${
-                  viewMode === 'list' ? 'text-lg flex-1 mr-4' : 'text-base'
-                }`}>
-                  {listing.title}
-                </h3>
-                
-                <div className={`${viewMode === 'list' ? 'text-right' : 'mt-2'}`}>
-                  <div className="text-2xl font-bold text-blue-600">
-                    {formatPrice(listing.price)}
-                  </div>
-                </div>
+              {imageUrl ? (
+                <img
+                  src={imageUrl}
+                  alt={listing.title}
+                  className="w-full h-full object-cover"
+                  onLoad={() => console.log(`✅ Image card chargée:`, imageUrl)}
+                  onError={(e) => {
+                    console.error(`❌ Erreur image card:`, imageUrl);
+                    e.currentTarget.style.display = 'none';
+                    const fallback = e.currentTarget.nextElementSibling as HTMLElement;
+                    if (fallback) fallback.style.display = 'flex';
+                  }}
+                />
+              ) : null}
+              
+              {/* Fallback avec icône */}
+              <div 
+                className="absolute inset-0 w-full h-full flex items-center justify-center text-6xl"
+                style={{ display: imageUrl ? 'none' : 'flex' }}
+              >
+                {listing.category.icon || <Package className="h-16 w-16 text-slate-400" />}
               </div>
               
-              {/* Description (seulement en mode liste) */}
-              {viewMode === 'list' && (
-                <p className="text-slate-600 line-clamp-2 text-sm">
-                  {listing.description}
-                </p>
-              )}
-              
-              {/* Vendeur */}
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
-                  <Users className="h-3 w-3 text-blue-600" />
-                </div>
-                <span className="text-sm text-slate-600">
-                  {listing.user.first_name} {listing.user.last_name}
-                </span>
-                {listing.user.is_verified && (
-                  <div className="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
-                    <span className="text-white text-xs">✓</span>
-                  </div>
+              {/* Badges */}
+              <div className="absolute top-3 left-3 flex flex-col gap-2">
+                {listing.is_featured && (
+                  <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold bg-yellow-500 text-white">
+                    ⭐ Vedette
+                  </span>
                 )}
+                <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold bg-secondary text-secondary-foreground">
+                  {listing.category.name}
+                </span>
               </div>
               
-              {/* Métadonnées */}
-              <div className="flex items-center justify-between text-sm text-slate-500">
-                <div className="flex items-center gap-1">
-                  <MapPin className="h-4 w-4" />
-                  <span>{listing.region}</span>
+              {/* Actions */}
+              <div className="absolute top-3 right-3 flex flex-col gap-2">
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="bg-white/80 hover:bg-white"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleFavorite(listing.id);
+                  }}
+                >
+                  <Heart className={`h-4 w-4 ${
+                    favorites.has(listing.id) ? 'fill-red-500 text-red-500' : ''
+                  }`} />
+                </Button>
+                
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="bg-white/80 hover:bg-white"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigator.share?.({
+                      title: listing.title,
+                      text: listing.description,
+                      url: window.location.origin + `/listings/${listing.id}`
+                    });
+                  }}
+                >
+                  <Share2 className="h-4 w-4" />
+                </Button>
+              </div>
+              
+              {/* Compteur vues */}
+              <div className="absolute bottom-3 left-3 bg-black/50 text-white px-2 py-1 rounded text-xs flex items-center">
+                <Eye className="h-3 w-3 mr-1" />
+                {listing.views_count || 0}
+              </div>
+
+              {/* Badge nombre d'images */}
+              {listing.images && listing.images.length > 1 && (
+                <div className="absolute bottom-3 right-3 bg-black/50 text-white px-2 py-1 rounded text-xs flex items-center">
+                  <Camera className="h-3 w-3 mr-1" />
+                  {listing.images.length}
+                </div>
+              )}
+            </div>
+
+            {/* Contenu */}
+            <CardContent className={`p-4 ${viewMode === 'list' ? 'flex-1' : ''}`}>
+              <div className="space-y-3">
+                
+                {/* Titre et prix */}
+                <div className={`${viewMode === 'list' ? 'flex items-start justify-between' : ''}`}>
+                  <h3 className={`font-semibold line-clamp-2 group-hover:text-blue-600 transition-colors ${
+                    viewMode === 'list' ? 'text-lg flex-1 mr-4' : 'text-base'
+                  }`}>
+                    {listing.title}
+                  </h3>
+                  
+                  <div className={`${viewMode === 'list' ? 'text-right' : 'mt-2'}`}>
+                    <div className="text-2xl font-bold text-blue-600">
+                      {formatPrice(listing.price)}
+                    </div>
+                  </div>
                 </div>
                 
-                <div className="flex items-center gap-1">
-                  <Clock className="h-4 w-4" />
-                  <span>{formatTimeAgo(listing.created_at)}</span>
+                {/* Description (seulement en mode liste) */}
+                {viewMode === 'list' && (
+                  <p className="text-slate-600 line-clamp-2 text-sm">
+                    {listing.description}
+                  </p>
+                )}
+                
+                {/* Vendeur */}
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
+                    <Users className="h-3 w-3 text-blue-600" />
+                  </div>
+                  <span className="text-sm text-slate-600">
+                    {listing.user.first_name} {listing.user.last_name}
+                  </span>
+                  {listing.user.is_verified && (
+                    <div className="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
+                      <span className="text-white text-xs">✓</span>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Métadonnées */}
+                <div className="flex items-center justify-between text-sm text-slate-500">
+                  <div className="flex items-center gap-1">
+                    <MapPin className="h-4 w-4" />
+                    <span>{listing.region}</span>
+                  </div>
+                  
+                  <div className="flex items-center gap-1">
+                    <Clock className="h-4 w-4" />
+                    <span>{formatTimeAgo(listing.created_at)}</span>
+                  </div>
+                </div>
+                
+                {/* Bouton action */}
+                <Button 
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    router.push(`/listings/${listing.id}`);
+                  }}
+                >
+                  Voir les détails
+                </Button>
+
+                {/* Debug URL */}
+                <div className="text-xs text-slate-400 font-mono truncate">
+                  {imageUrl ? imageUrl.split('/').pop() : 'Pas d\'image'}
                 </div>
               </div>
-              
-              {/* Bouton action */}
-              <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white">
-                Voir les détails
-              </Button>
-            </div>
-          </CardContent>
-        </div>
-      </Card>
-    </motion.div>
-  );
+            </CardContent>
+          </div>
+        </Card>
+      </motion.div>
+    );
+  };
 
   return (
     <>
@@ -431,6 +545,72 @@ export default function ListingsPage() {
 
               {/* Contrôles d'affichage */}
               <div className="flex items-center gap-3">
+                
+                {/* Debug API */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    console.log('🧪 === DEBUG API ENDPOINTS ===');
+                    
+                    // Test endpoint listings public
+                    try {
+                      const response = await fetch('http://localhost:8080/api/v1/listings');
+                      const data = await response.json();
+                      console.log('📊 Public listings:', data);
+                    } catch (error) {
+                      console.error('❌ Public listings error:', error);
+                    }
+                    
+                    // Test avec token (toutes les annonces)
+                    const token = localStorage.getItem('senmarket_token');
+                    if (token) {
+                      try {
+                        const response = await fetch('http://localhost:8080/api/v1/listings/my', {
+                          headers: { 'Authorization': `Bearer ${token}` }
+                        });
+                        const data = await response.json();
+                        console.log('📋 My listings:', data);
+                      } catch (error) {
+                        console.error('❌ My listings error:', error);
+                      }
+                    }
+                    
+                    // Test health check
+                    try {
+                      const response = await fetch('http://localhost:8080/health');
+                      const data = await response.json();
+                      console.log('🏥 Health check:', data);
+                    } catch (error) {
+                      console.error('❌ Health check error:', error);
+                    }
+                    
+                    console.log('🧪 === END DEBUG ===');
+                  }}
+                >
+                  🧪 Debug API
+                </Button>
+                
+                {/* Debug Images */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => debugImageUrls(listings)}
+                >
+                  🔧 Debug Images
+                </Button>
+                
+                {/* Bouton Reload */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    console.log('🔄 Force reload listings');
+                    fetchListings();
+                  }}
+                >
+                  🔄 Reload
+                </Button>
                 
                 {/* Tri */}
                 <div className="flex items-center gap-2">

@@ -28,7 +28,11 @@ import {
   Loader2,
   User,
   Shield,
-  Download
+  Download,
+  Camera,
+  Flag,
+  Search,
+  Filter
 } from 'lucide-react'
 
 import { Header } from '@/components/layout/header'
@@ -117,7 +121,7 @@ const SENEGAL_REGIONS = [
 
 export default function DashboardPage() {
   const router = useRouter()
-  const { user, logout, isAuthenticated } = useAuthStore() // ✅ Utiliser le store
+  const { user, logout, isAuthenticated } = useAuthStore()
   
   // États
   const [stats, setStats] = useState<DashboardStats | null>(null)
@@ -128,6 +132,44 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'overview' | 'listings' | 'messages' | 'payments' | 'settings'>('overview')
   const [isEditingProfile, setIsEditingProfile] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
+
+  // ✅ FONCTION HELPER POUR LES IMAGES
+  const getImageUrl = (imagePath: string) => {
+    if (!imagePath) return null
+    
+    // Si l'URL est déjà complète
+    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+      return imagePath
+    }
+    
+    // Si l'URL commence par /
+    if (imagePath.startsWith('/')) {
+      return `http://localhost:8080${imagePath}`
+    }
+    
+    // Sinon construire l'URL
+    return `http://localhost:8080/uploads/${imagePath}`
+  }
+
+  // ✅ FONCTION DEBUG POUR LES IMAGES
+  const debugImageUrls = (listings: Listing[]) => {
+    console.log('🔍 DEBUG IMAGES DASHBOARD:')
+    listings.forEach((listing, index) => {
+      console.log(`📝 Annonce ${index + 1}: ${listing.title}`)
+      console.log(`  - Images brutes:`, listing.images)
+      
+      if (listing.images && listing.images.length > 0) {
+        listing.images.forEach((img, imgIndex) => {
+          const finalUrl = getImageUrl(img)
+          console.log(`  - Image ${imgIndex + 1}:`, img, '→', finalUrl)
+        })
+      } else {
+        console.log('  - Aucune image')
+      }
+    })
+  }
 
   // ✅ Vérification auth propre
   useEffect(() => {
@@ -231,6 +273,14 @@ export default function DashboardPage() {
       </div>
     )
   }
+
+  // Filtrage des annonces
+  const filteredListings = listings.filter(listing => {
+    const matchesSearch = listing.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         listing.description.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesStatus = statusFilter === 'all' || listing.status === statusFilter
+    return matchesSearch && matchesStatus
+  })
 
   // Loading state
   if (loading) {
@@ -476,45 +526,88 @@ export default function DashboardPage() {
                   </CardContent>
                 </Card>
 
-                {/* Dernières annonces */}
+                {/* ✅ DERNIÈRES ANNONCES AVEC IMAGES FIXES */}
                 <Card className="shadow-lg border-0">
                   <CardHeader>
-                    <CardTitle className="flex items-center">
-                      <Package className="h-5 w-5 mr-2 text-blue-600" />
-                      Mes annonces récentes
+                    <CardTitle className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        <Package className="h-5 w-5 mr-2 text-blue-600" />
+                        Mes annonces récentes
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => debugImageUrls(listings)}
+                      >
+                        🔧 Debug
+                      </Button>
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
                     {listings.length > 0 ? (
                       <div className="space-y-4">
-                        {listings.slice(0, 3).map((listing, index) => (
-                          <div key={index} className="flex items-center gap-3 p-3 hover:bg-slate-50 rounded-lg transition-colors">
-                            {listing.images && listing.images.length > 0 ? (
-                              <img
-                                src={`http://localhost:8080${listing.images[0]}`}
-                                alt={listing.title}
-                                className="w-12 h-12 object-cover rounded-lg"
-                              />
-                            ) : (
-                              <div className="w-12 h-12 bg-slate-200 rounded-lg flex items-center justify-center">
-                                <Package className="h-6 w-6 text-slate-400" />
-                              </div>
-                            )}
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between mb-1">
-                                <p className="font-medium text-slate-900 truncate">{listing.title}</p>
-                                {getStatusBadge(listing.status)}
-                              </div>
-                              <div className="flex items-center justify-between">
-                                <p className="text-sm font-semibold text-blue-600">{formatPrice(listing.price)}</p>
-                                <div className="flex items-center text-xs text-slate-500">
-                                  <Eye className="h-3 w-3 mr-1" />
-                                  {listing.views_count || 0} vues
+                        {listings.slice(0, 3).map((listing, index) => {
+                          const imageUrl = listing.images && listing.images.length > 0 
+                            ? getImageUrl(listing.images[0]) 
+                            : null
+                          
+                          console.log(`🖼️ Rendu annonce ${index + 1}:`, listing.title)
+                          console.log(`  - Image brute:`, listing.images?.[0])
+                          console.log(`  - URL finale:`, imageUrl)
+                          
+                          return (
+                            <div key={listing.id} className="flex items-center gap-3 p-3 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer">
+                              
+                              {/* ✅ IMAGE AVEC GESTION D'ERREUR */}
+                              {imageUrl ? (
+                                <div className="relative w-12 h-12">
+                                  <img
+                                    src={imageUrl}
+                                    alt={listing.title}
+                                    className="w-full h-full object-cover rounded-lg"
+                                    onLoad={() => console.log(`✅ Image ${index + 1} chargée:`, imageUrl)}
+                                    onError={(e) => {
+                                      console.error(`❌ Erreur image ${index + 1}:`, imageUrl)
+                                      e.currentTarget.style.display = 'none'
+                                      const fallback = e.currentTarget.nextElementSibling as HTMLElement
+                                      if (fallback) fallback.style.display = 'flex'
+                                    }}
+                                  />
+                                  <div 
+                                    className="absolute inset-0 w-12 h-12 bg-slate-200 rounded-lg flex items-center justify-center"
+                                    style={{ display: 'none' }}
+                                  >
+                                    <Package className="h-6 w-6 text-slate-400" />
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="w-12 h-12 bg-slate-200 rounded-lg flex items-center justify-center">
+                                  <Package className="h-6 w-6 text-slate-400" />
+                                </div>
+                              )}
+                              
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between mb-1">
+                                  <p className="font-medium text-slate-900 truncate">{listing.title}</p>
+                                  {getStatusBadge(listing.status)}
+                                </div>
+                                <div className="flex items-center justify-between">
+                                  <p className="text-sm font-semibold text-blue-600">{formatPrice(listing.price)}</p>
+                                  <div className="flex items-center text-xs text-slate-500">
+                                    <Eye className="h-3 w-3 mr-1" />
+                                    {listing.views_count || 0} vues
+                                  </div>
+                                </div>
+                                
+                                {/* Debug info */}
+                                <div className="text-xs text-slate-400 font-mono truncate mt-1">
+                                  {imageUrl ? imageUrl.split('/').pop() : 'Pas d\'image'}
                                 </div>
                               </div>
                             </div>
-                          </div>
-                        ))}
+                          )
+                        })}
+                        
                         <Button variant="outline" className="w-full" onClick={() => setActiveTab('listings')}>
                           Voir toutes mes annonces
                         </Button>
@@ -534,53 +627,295 @@ export default function DashboardPage() {
               </div>
             </TabsContent>
 
-            {/* Informations de base pour les autres tabs */}
+            {/* ✅ ONGLET MES ANNONCES COMPLET */}
             <TabsContent value="listings" className="space-y-6">
               <Card className="shadow-lg border-0">
                 <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <Package className="h-5 w-5 mr-2 text-blue-600" />
-                    Mes annonces ({listings.length})
+                  <CardTitle className="flex items-center justify-between">
+                    <div className="flex items-center">
+                      <Package className="h-5 w-5 mr-2 text-blue-600" />
+                      Mes annonces ({filteredListings.length})
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => debugImageUrls(listings)}
+                      >
+                        🔧 Debug
+                      </Button>
+                      <Button onClick={() => router.push('/sell')}>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Nouvelle annonce
+                      </Button>
+                    </div>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-center py-12">
-                    <Package className="h-16 w-16 text-slate-300 mx-auto mb-4" />
-                    <h3 className="text-lg font-semibold text-slate-900 mb-2">Section en développement</h3>
-                    <p className="text-slate-600 mb-6">La gestion complète des annonces arrive bientôt !</p>
-                    <Button onClick={() => router.push('/sell')}>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Publier une nouvelle annonce
-                    </Button>
-                  </div>
+                  
+                  {/* Filtres */}
+                  {listings.length > 0 && (
+                    <div className="flex flex-col sm:flex-row gap-4 mb-6">
+                      <div className="flex-1">
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
+                          <Input
+                            placeholder="Rechercher dans mes annonces..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="pl-10"
+                          />
+                        </div>
+                      </div>
+                      <Select value={statusFilter} onValueChange={setStatusFilter}>
+                        <SelectTrigger className="w-full sm:w-48">
+                          <SelectValue placeholder="Statut" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Tous les statuts</SelectItem>
+                          <SelectItem value="active">Actif</SelectItem>
+                          <SelectItem value="draft">Brouillon</SelectItem>
+                          <SelectItem value="sold">Vendu</SelectItem>
+                          <SelectItem value="expired">Expiré</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {filteredListings.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {filteredListings.map((listing) => {
+                        const imageUrl = listing.images && listing.images.length > 0 
+                          ? getImageUrl(listing.images[0]) 
+                          : null
+                        
+                        return (
+                          <Card key={listing.id} className="hover:shadow-lg transition-shadow cursor-pointer">
+                            <div className="relative">
+                              
+                              {/* ✅ IMAGE AVEC FALLBACK */}
+                              <div className="aspect-video bg-slate-100 rounded-t-lg overflow-hidden">
+                                {imageUrl ? (
+                                  <img
+                                    src={imageUrl}
+                                    alt={listing.title}
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                      console.error('❌ Erreur image:', imageUrl)
+                                      e.currentTarget.style.display = 'none'
+                                      const fallback = e.currentTarget.nextElementSibling as HTMLElement
+                                      if (fallback) fallback.style.display = 'flex'
+                                    }}
+                                  />
+                                ) : null}
+                                
+                                {/* Fallback */}
+                                <div 
+                                  className="w-full h-full flex items-center justify-center"
+                                  style={{ display: imageUrl ? 'none' : 'flex' }}
+                                >
+                                  <Package className="h-12 w-12 text-slate-400" />
+                                </div>
+                              </div>
+                              
+                              {/* Badge statut */}
+                              <div className="absolute top-3 right-3">
+                                {getStatusBadge(listing.status)}
+                              </div>
+                              
+                              {/* Badge images count */}
+                              {listing.images && listing.images.length > 1 && (
+                                <div className="absolute top-3 left-3 bg-black/50 text-white px-2 py-1 rounded text-xs">
+                                  <Camera className="h-3 w-3 inline mr-1" />
+                                  {listing.images.length}
+                                </div>
+                              )}
+                            </div>
+                            
+                            <CardContent className="p-4">
+                              <div className="space-y-3">
+                                <div>
+                                  <h3 className="font-semibold text-slate-900 line-clamp-1">{listing.title}</h3>
+                                  <p className="text-sm text-slate-600 line-clamp-2 mt-1">{listing.description}</p>
+                                </div>
+                                
+                                <div className="flex items-center justify-between">
+                                  <p className="text-lg font-bold text-blue-600">{formatPrice(listing.price)}</p>
+                                  <div className="flex items-center text-sm text-slate-500">
+                                    <Eye className="h-4 w-4 mr-1" />
+                                    {listing.views_count || 0}
+                                  </div>
+                                </div>
+                                
+                                <div className="flex items-center justify-between text-sm text-slate-500">
+                                  <div className="flex items-center">
+                                    <MapPin className="h-4 w-4 mr-1" />
+                                    {listing.region}
+                                  </div>
+                                  <span>{formatDate(listing.created_at)}</span>
+                                </div>
+                                
+                                {/* Actions */}
+                                <div className="flex gap-2 pt-2 border-t border-slate-200">
+                                  <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    className="flex-1"
+                                    onClick={() => router.push(`/listings/${listing.id}`)}
+                                  >
+                                    <Eye className="h-4 w-4 mr-2" />
+                                    Voir
+                                  </Button>
+                                  <Button variant="outline" size="sm" className="flex-1">
+                                    <Edit3 className="h-4 w-4 mr-2" />
+                                    Modifier
+                                  </Button>
+                                  <Button variant="outline" size="sm">
+                                    <Share2 className="h-4 w-4" />
+                                  </Button>
+                                  <Button variant="destructive" size="sm">
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                                
+                                {/* Debug URL */}
+                                <div className="text-xs text-slate-400 font-mono truncate">
+                                  {imageUrl ? imageUrl.split('/').pop() : 'Pas d\'image'}
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-center py-12">
+                      <Package className="h-16 w-16 text-slate-300 mx-auto mb-4" />
+                      <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                        {listings.length === 0 ? 'Aucune annonce' : 'Aucun résultat'}
+                      </h3>
+                      <p className="text-slate-600 mb-6">
+                        {listings.length === 0 
+                          ? 'Commencez par créer votre première annonce' 
+                          : 'Essayez de modifier vos filtres de recherche'
+                        }
+                      </p>
+                      {listings.length === 0 && (
+                        <Button onClick={() => router.push('/sell')}>
+                          <Plus className="h-4 w-4 mr-2" />
+                          Publier une annonce
+                        </Button>
+                      )}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
 
+            {/* ✅ ONGLET MESSAGES AMÉLIORÉ */}
             <TabsContent value="messages" className="space-y-6">
               <Card className="shadow-lg border-0">
                 <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <MessageSquare className="h-5 w-5 mr-2 text-purple-600" />
-                    Messages reçus ({contacts.length})
+                  <CardTitle className="flex items-center justify-between">
+                    <div className="flex items-center">
+                      <MessageSquare className="h-5 w-5 mr-2 text-purple-600" />
+                      Messages reçus ({contacts.length})
+                    </div>
+                    {stats?.unread_contacts && stats.unread_contacts > 0 && (
+                      <Badge variant="destructive">
+                        {stats.unread_contacts} non lu{stats.unread_contacts > 1 ? 's' : ''}
+                      </Badge>
+                    )}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-center py-12">
-                    <MessageSquare className="h-16 w-16 text-slate-300 mx-auto mb-4" />
-                    <h3 className="text-lg font-semibold text-slate-900 mb-2">Messagerie en développement</h3>
-                    <p className="text-slate-600">Le système de messagerie complet arrive bientôt !</p>
-                  </div>
+                  {contacts.length > 0 ? (
+                    <div className="space-y-4">
+                      {contacts.map((contact, index) => (
+                        <Card key={contact.id} className={`hover:shadow-md transition-shadow ${!contact.is_read ? 'ring-2 ring-blue-200' : ''}`}>
+                          <CardContent className="p-6">
+                            <div className="flex items-start gap-4">
+                              <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
+                                <User className="h-6 w-6 text-purple-600" />
+                              </div>
+                              
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between mb-2">
+                                  <div>
+                                    <h4 className="font-semibold text-slate-900">{contact.name}</h4>
+                                    <p className="text-sm text-slate-600">
+                                      Annonce: {contact.listing?.title || 'Titre non disponible'}
+                                    </p>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="text-sm text-slate-500">{formatDate(contact.created_at)}</p>
+                                    {!contact.is_read && (
+                                      <Badge variant="destructive" className="mt-1">Nouveau</Badge>
+                                    )}
+                                  </div>
+                                </div>
+                                
+                                <div className="bg-slate-50 rounded-lg p-4 mb-4">
+                                  <p className="text-slate-700">{contact.message}</p>
+                                </div>
+                                
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-4 text-sm text-slate-600">
+                                    <div className="flex items-center">
+                                      <Phone className="h-4 w-4 mr-1" />
+                                      {contact.phone}
+                                    </div>
+                                    {contact.email && (
+                                      <div className="flex items-center">
+                                        <Mail className="h-4 w-4 mr-1" />
+                                        {contact.email}
+                                      </div>
+                                    )}
+                                  </div>
+                                  
+                                  <div className="flex gap-2">
+                                    <Button variant="outline" size="sm">
+                                      Répondre
+                                    </Button>
+                                    {!contact.is_read && (
+                                      <Button size="sm">
+                                        Marquer comme lu
+                                      </Button>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-12">
+                      <MessageSquare className="h-16 w-16 text-slate-300 mx-auto mb-4" />
+                      <h3 className="text-lg font-semibold text-slate-900 mb-2">Aucun message</h3>
+                      <p className="text-slate-600">Les messages des acheteurs intéressés apparaîtront ici</p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
 
+            {/* ✅ ONGLET PAIEMENTS AMÉLIORÉ */}
             <TabsContent value="payments" className="space-y-6">
               <Card className="shadow-lg border-0">
                 <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <CreditCard className="h-5 w-5 mr-2 text-orange-600" />
-                    Historique des paiements
+                  <CardTitle className="flex items-center justify-between">
+                    <div className="flex items-center">
+                      <CreditCard className="h-5 w-5 mr-2 text-orange-600" />
+                      Historique des paiements
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm text-slate-600">Revenus totaux</p>
+                      <p className="text-lg font-bold text-green-600">
+                        {formatPrice(stats?.total_revenue || 0)}
+                      </p>
+                    </div>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -598,6 +933,9 @@ export default function DashboardPage() {
                                   <h4 className="font-semibold text-slate-900">
                                     Publication d'annonce
                                   </h4>
+                                  <p className="text-sm text-slate-600">
+                                    {payment.listing?.title || 'Annonce supprimée'}
+                                  </p>
                                   <div className="flex items-center gap-3 mt-1">
                                     <span className="text-sm text-slate-600">
                                       {payment.payment_method?.replace('_', ' ').toUpperCase()}
@@ -640,6 +978,7 @@ export default function DashboardPage() {
               </Card>
             </TabsContent>
 
+            {/* ✅ ONGLET PARAMÈTRES COMPLET */}
             <TabsContent value="settings" className="space-y-6">
               <Card className="shadow-lg border-0">
                 <CardHeader>
