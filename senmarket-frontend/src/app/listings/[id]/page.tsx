@@ -34,7 +34,8 @@ import {
   ArrowLeft,
   ExternalLink,
   Flag,
-  Bookmark
+  Bookmark,
+  Package
 } from 'lucide-react';
 
 // Types basés sur votre API
@@ -103,6 +104,67 @@ export default function ListingDetailPage() {
   const [isSubmittingContact, setIsSubmittingContact] = useState(false);
   const [contactSuccess, setContactSuccess] = useState(false);
 
+  // ✅ FONCTION HELPER POUR LES IMAGES (FIX PRINCIPAL)
+  const getImageUrl = (imagePath: string) => {
+    if (!imagePath) return null;
+    
+    console.log('🖼️ Traitement image:', imagePath);
+    
+    // Si l'URL est déjà complète
+    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+      console.log('  → URL complète:', imagePath);
+      return imagePath;
+    }
+    
+    // Si l'URL commence par /uploads
+    if (imagePath.startsWith('/uploads/')) {
+      const url = `http://localhost:8080${imagePath}`;
+      console.log('  → /uploads ajouté:', url);
+      return url;
+    }
+    
+    // Si l'URL commence par /
+    if (imagePath.startsWith('/')) {
+      const url = `http://localhost:8080${imagePath}`;
+      console.log('  → / ajouté:', url);
+      return url;
+    }
+    
+    // Sinon construire l'URL avec /uploads/
+    const url = `http://localhost:8080/uploads/${imagePath}`;
+    console.log('  → /uploads/ construit:', url);
+    return url;
+  };
+
+  // ✅ FONCTION DEBUG POUR LES IMAGES
+  const debugImageUrls = (listing: Listing | null) => {
+    if (!listing) return;
+    
+    console.log('🔍 DEBUG IMAGES DÉTAIL:');
+    console.log(`📝 Annonce: ${listing.title}`);
+    console.log(`  - Images brutes:`, listing.images);
+    
+    if (listing.images && listing.images.length > 0) {
+      listing.images.forEach((img, imgIndex) => {
+        const finalUrl = getImageUrl(img);
+        console.log(`  - Image ${imgIndex + 1}:`, img, '→', finalUrl);
+        
+        // Test l'URL
+        if (finalUrl) {
+          fetch(finalUrl, { method: 'HEAD' })
+            .then(response => {
+              console.log(`    ✅ Image ${imgIndex + 1} accessible: ${response.ok} (${response.status})`);
+            })
+            .catch(error => {
+              console.error(`    ❌ Image ${imgIndex + 1} inaccessible:`, error.message);
+            });
+        }
+      });
+    } else {
+      console.log('  - Aucune image');
+    }
+  };
+
   // Chargement des données
   useEffect(() => {
     if (listingId) {
@@ -113,8 +175,8 @@ export default function ListingDetailPage() {
   useEffect(() => {
     if (listing) {
       fetchRelatedListings();
-      // Incrémenter le compteur de vues (appel sans attendre)
       incrementViews();
+      debugImageUrls(listing); // Debug après chargement
     }
   }, [listing]);
 
@@ -123,6 +185,7 @@ export default function ListingDetailPage() {
     setError(null);
     
     try {
+      console.log('📡 Chargement annonce:', listingId);
       const response = await fetch(`http://localhost:8080/api/v1/listings/${listingId}`);
       
       if (!response.ok) {
@@ -130,6 +193,8 @@ export default function ListingDetailPage() {
       }
       
       const data = await response.json();
+      console.log('✅ Données reçues:', data);
+      
       setListing(data.data);
       
       // Initialiser le message par défaut
@@ -139,6 +204,7 @@ export default function ListingDetailPage() {
       }));
       
     } catch (error) {
+      console.error('❌ Erreur chargement:', error);
       setError(error instanceof Error ? error.message : 'Erreur lors du chargement');
     } finally {
       setLoading(false);
@@ -164,9 +230,7 @@ export default function ListingDetailPage() {
 
   const incrementViews = async () => {
     try {
-      // En fait, votre backend n'a pas d'endpoint spécifique pour les vues
-      // Mais les vues sont probablement incrémentées automatiquement lors du GET
-      console.log('Vue enregistrée pour l\'annonce:', listingId);
+      console.log('👁️ Vue enregistrée pour l\'annonce:', listingId);
     } catch (error) {
       console.error('Erreur enregistrement vue:', error);
     }
@@ -336,6 +400,18 @@ export default function ListingDetailPage() {
           )}
         </AnimatePresence>
 
+        {/* Debug Button */}
+        <div className="fixed top-24 right-4 z-40">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => debugImageUrls(listing)}
+            className="bg-yellow-100 hover:bg-yellow-200 text-yellow-800"
+          >
+            🔧 Debug Images
+          </Button>
+        </div>
+
         {/* Breadcrumb */}
         <section className="bg-white border-b border-slate-200">
           <div className="container mx-auto px-6 py-4">
@@ -375,22 +451,52 @@ export default function ListingDetailPage() {
             {/* Colonne principale */}
             <div className="lg:col-span-2 space-y-6">
               
-              {/* Galerie photos */}
+              {/* ✅ GALERIE PHOTOS CORRIGÉE */}
               <Card className="overflow-hidden">
                 <div className="relative">
                   
                   {/* Image principale */}
                   <div className="relative h-96 bg-gradient-to-br from-blue-100 to-orange-100">
                     {listing.images && listing.images.length > 0 ? (
-                      <img
-                        src={`http://localhost:8080${listing.images[currentImageIndex]}`}
-                        alt={listing.title}
-                        className="w-full h-full object-cover cursor-pointer"
-                        onClick={() => setShowImageModal(true)}
-                      />
+                      <>
+                        {(() => {
+                          const imageUrl = getImageUrl(listing.images[currentImageIndex]);
+                          console.log('🎯 Affichage image principale:', imageUrl);
+                          
+                          return imageUrl ? (
+                            <img
+                              src={imageUrl}
+                              alt={listing.title}
+                              className="w-full h-full object-cover cursor-pointer"
+                              onClick={() => setShowImageModal(true)}
+                              onLoad={() => console.log('✅ Image principale chargée:', imageUrl)}
+                              onError={(e) => {
+                                console.error('❌ Erreur image principale:', imageUrl);
+                                e.currentTarget.style.display = 'none';
+                                const fallback = e.currentTarget.nextElementSibling as HTMLElement;
+                                if (fallback) fallback.style.display = 'flex';
+                              }}
+                            />
+                          ) : null;
+                        })()}
+                        
+                        {/* Fallback si image échoue */}
+                        <div 
+                          className="absolute inset-0 w-full h-full flex items-center justify-center bg-slate-200"
+                          style={{ display: 'none' }}
+                        >
+                          <div className="text-center">
+                            <Package className="h-16 w-16 text-slate-400 mx-auto mb-2" />
+                            <p className="text-slate-500 text-sm">Image non disponible</p>
+                          </div>
+                        </div>
+                      </>
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-8xl">
-                        {listing.category.icon || '📦'}
+                      <div className="w-full h-full flex items-center justify-center">
+                        <div className="text-center">
+                          <Package className="h-16 w-16 text-slate-400 mx-auto mb-2" />
+                          <p className="text-slate-500">Aucune image disponible</p>
+                        </div>
                       </div>
                     )}
                     
@@ -480,25 +586,46 @@ export default function ListingDetailPage() {
                     )}
                   </div>
                   
-                  {/* Miniatures */}
+                  {/* ✅ MINIATURES CORRIGÉES */}
                   {listing.images && listing.images.length > 1 && (
                     <div className="p-4 border-t border-slate-200">
                       <div className="flex gap-2 overflow-x-auto">
-                        {listing.images.map((image, index) => (
-                          <button
-                            key={index}
-                            onClick={() => setCurrentImageIndex(index)}
-                            className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${
-                              index === currentImageIndex ? 'border-blue-500' : 'border-slate-200'
-                            }`}
-                          >
-                            <img
-                              src={`http://localhost:8080${image}`}
-                              alt={`${listing.title} ${index + 1}`}
-                              className="w-full h-full object-cover"
-                            />
-                          </button>
-                        ))}
+                        {listing.images.map((image, index) => {
+                          const thumbUrl = getImageUrl(image);
+                          console.log(`🖼️ Miniature ${index + 1}:`, thumbUrl);
+                          
+                          return (
+                            <button
+                              key={index}
+                              onClick={() => setCurrentImageIndex(index)}
+                              className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${
+                                index === currentImageIndex ? 'border-blue-500' : 'border-slate-200'
+                              }`}
+                            >
+                              {thumbUrl ? (
+                                <img
+                                  src={thumbUrl}
+                                  alt={`${listing.title} ${index + 1}`}
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => {
+                                    console.error(`❌ Erreur miniature ${index + 1}:`, thumbUrl);
+                                    e.currentTarget.style.display = 'none';
+                                    const fallback = e.currentTarget.nextElementSibling as HTMLElement;
+                                    if (fallback) fallback.style.display = 'flex';
+                                  }}
+                                />
+                              ) : null}
+                              
+                              {/* Fallback miniature */}
+                              <div 
+                                className="w-full h-full bg-slate-200 flex items-center justify-center"
+                                style={{ display: thumbUrl ? 'none' : 'flex' }}
+                              >
+                                <Package className="h-6 w-6 text-slate-400" />
+                              </div>
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -601,7 +728,7 @@ export default function ListingDetailPage() {
                 </CardContent>
               </Card>
               
-              {/* Annonces similaires */}
+              {/* ✅ ANNONCES SIMILAIRES COMPLÈTES */}
               {relatedListings.length > 0 && (
                 <Card>
                   <CardHeader>
@@ -612,40 +739,86 @@ export default function ListingDetailPage() {
                   </CardHeader>
                   <CardContent>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {relatedListings.slice(0, 4).map((relatedListing) => (
-                        <Card 
-                          key={relatedListing.id} 
-                          className="cursor-pointer hover:shadow-lg transition-shadow"
-                          onClick={() => router.push(`/listings/${relatedListing.id}`)}
-                        >
-                          <div className="aspect-video bg-gradient-to-br from-blue-100 to-orange-100 relative">
-                            {relatedListing.images && relatedListing.images.length > 0 ? (
-                              <img
-                                src={`http://localhost:8080${relatedListing.images[0]}`}
-                                alt={relatedListing.title}
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-4xl">
-                                {relatedListing.category.icon || '📦'}
+                      {relatedListings.slice(0, 4).map((relatedListing) => {
+                        const imageUrl = relatedListing.images && relatedListing.images.length > 0 
+                          ? getImageUrl(relatedListing.images[0]) 
+                          : null;
+                        
+                        console.log(`🔗 Annonce similaire: ${relatedListing.title}`, imageUrl);
+                        
+                        return (
+                          <Card 
+                            key={relatedListing.id} 
+                            className="cursor-pointer hover:shadow-lg transition-shadow"
+                            onClick={() => router.push(`/listings/${relatedListing.id}`)}
+                          >
+                            <div className="aspect-video bg-gradient-to-br from-blue-100 to-orange-100 relative overflow-hidden">
+                              {imageUrl ? (
+                                <img
+                                  src={imageUrl}
+                                  alt={relatedListing.title}
+                                  className="w-full h-full object-cover"
+                                  onLoad={() => console.log(`✅ Similaire image chargée: ${relatedListing.title}`)}
+                                  onError={(e) => {
+                                    console.error(`❌ Erreur similaire: ${relatedListing.title}`, imageUrl);
+                                    e.currentTarget.style.display = 'none';
+                                    const fallback = e.currentTarget.nextElementSibling as HTMLElement;
+                                    if (fallback) fallback.style.display = 'flex';
+                                  }}
+                                />
+                              ) : null}
+                              
+                              {/* Fallback */}
+                              <div 
+                                className="absolute inset-0 w-full h-full flex items-center justify-center"
+                                style={{ display: imageUrl ? 'none' : 'flex' }}
+                              >
+                                <div className="text-center">
+                                  <Package className="h-12 w-12 text-slate-400 mx-auto mb-2" />
+                                  <p className="text-xs text-slate-500">Pas d'image</p>
+                                </div>
                               </div>
-                            )}
-                          </div>
-                          <CardContent className="p-4">
-                            <h3 className="font-semibold line-clamp-1 mb-2">
-                              {relatedListing.title}
-                            </h3>
-                            <p className="text-lg font-bold text-blue-600 mb-2">
-                              {formatPrice(relatedListing.price)}
-                            </p>
-                            <p className="text-sm text-slate-600 flex items-center gap-1">
-                              <MapPin className="h-3 w-3" />
-                              {relatedListing.region}
-                            </p>
-                          </CardContent>
-                        </Card>
-                      ))}
+                            </div>
+                            
+                            <CardContent className="p-4">
+                              <h3 className="font-semibold line-clamp-1 mb-2">
+                                {relatedListing.title}
+                              </h3>
+                              <p className="text-lg font-bold text-blue-600 mb-2">
+                                {formatPrice(relatedListing.price)}
+                              </p>
+                              <div className="flex items-center justify-between">
+                                <p className="text-sm text-slate-600 flex items-center gap-1">
+                                  <MapPin className="h-3 w-3" />
+                                  {relatedListing.region}
+                                </p>
+                                <div className="flex items-center text-xs text-slate-500">
+                                  <Eye className="h-3 w-3 mr-1" />
+                                  {relatedListing.views_count || 0}
+                                </div>
+                              </div>
+                              
+                              {/* Debug info pour les annonces similaires */}
+                              <div className="text-xs text-slate-400 font-mono truncate mt-1">
+                                {imageUrl ? imageUrl.split('/').pop() : 'Pas d\'image'}
+                              </div>
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
                     </div>
+                    
+                    {/* Bouton voir plus */}
+                    {relatedListings.length > 4 && (
+                      <div className="text-center mt-6">
+                        <Button 
+                          variant="outline"
+                          onClick={() => router.push(`/listings?category_id=${listing.category.id}`)}
+                        >
+                          Voir plus d'annonces similaires
+                        </Button>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               )}
@@ -775,7 +948,7 @@ export default function ListingDetailPage() {
           </div>
         </section>
 
-        {/* Modal galerie photos */}
+        {/* ✅ MODAL GALERIE PHOTOS CORRIGÉ */}
         <AnimatePresence>
           {showImageModal && listing.images && listing.images.length > 0 && (
             <motion.div
@@ -786,12 +959,31 @@ export default function ListingDetailPage() {
               onClick={() => setShowImageModal(false)}
             >
               <div className="relative max-w-4xl max-h-full p-4">
-                <img
-                  src={`http://localhost:8080${listing.images[currentImageIndex]}`}
-                  alt={listing.title}
-                  className="max-w-full max-h-full object-contain"
-                  onClick={(e) => e.stopPropagation()}
-                />
+                {(() => {
+                  const modalImageUrl = getImageUrl(listing.images[currentImageIndex]);
+                  console.log('🎯 Modal image:', modalImageUrl);
+                  
+                  return modalImageUrl ? (
+                    <img
+                      src={modalImageUrl}
+                      alt={listing.title}
+                      className="max-w-full max-h-full object-contain"
+                      onClick={(e) => e.stopPropagation()}
+                      onLoad={() => console.log('✅ Modal image chargée:', modalImageUrl)}
+                      onError={(e) => {
+                        console.error('❌ Erreur modal image:', modalImageUrl);
+                        // Garder l'image même si erreur pour permettre debug
+                      }}
+                    />
+                  ) : (
+                    <div className="max-w-full max-h-full flex items-center justify-center bg-slate-800 rounded-lg p-8">
+                      <div className="text-center text-white">
+                        <Package className="h-24 w-24 mx-auto mb-4 text-slate-400" />
+                        <p>Image non disponible</p>
+                      </div>
+                    </div>
+                  );
+                })()}
                 
                 {/* Contrôles */}
                 <Button

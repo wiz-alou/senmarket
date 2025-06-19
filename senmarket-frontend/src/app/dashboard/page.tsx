@@ -134,6 +134,7 @@ export default function DashboardPage() {
   const [isEditingProfile, setIsEditingProfile] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [publishingListing, setPublishingListing] = useState<string | null>(null)
 
   // ✅ FONCTION HELPER POUR LES IMAGES
   const getImageUrl = (imagePath: string) => {
@@ -230,6 +231,96 @@ export default function DashboardPage() {
     }
   }
 
+  // ✅ FONCTIONS D'ACTION POUR LES ANNONCES
+  const handlePublishListing = async (listingId: string) => {
+    if (publishingListing) return
+    
+    const confirmed = window.confirm(
+      'Publier cette annonce coûte 200 FCFA. Voulez-vous continuer ?'
+    )
+    if (!confirmed) return
+
+    setPublishingListing(listingId)
+    try {
+      const token = localStorage.getItem('senmarket_token')
+      const response = await fetch(`http://localhost:8080/api/v1/listings/${listingId}/publish`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        
+        // Rediriger vers la page de paiement ou afficher le modal Orange Money
+        if (result.payment_url) {
+          window.open(result.payment_url, '_blank')
+        }
+        
+        // Rafraîchir les données
+        await fetchDashboardData()
+        
+        alert('Annonce en cours de publication ! Complétez le paiement Orange Money.')
+      } else {
+        const error = await response.json()
+        alert(`Erreur: ${error.message || 'Impossible de publier l\'annonce'}`)
+      }
+    } catch (error) {
+      console.error('Erreur publication:', error)
+      alert('Erreur de connexion. Veuillez réessayer.')
+    } finally {
+      setPublishingListing(null)
+    }
+  }
+
+  const handleEditListing = (listingId: string) => {
+    router.push(`/sell?edit=${listingId}`)
+  }
+
+  const handleShareListing = (listingId: string) => {
+    const url = `${window.location.origin}/listings/${listingId}`
+    if (navigator.share) {
+      navigator.share({
+        title: 'Annonce SenMarket',
+        url: url
+      })
+    } else {
+      navigator.clipboard.writeText(url)
+      alert('Lien copié dans le presse-papiers !')
+    }
+  }
+
+  const handleDeleteListing = async (listingId: string) => {
+    const confirmed = window.confirm(
+      'Êtes-vous sûr de vouloir supprimer cette annonce ? Cette action est irréversible.'
+    )
+    if (!confirmed) return
+
+    try {
+      const token = localStorage.getItem('senmarket_token')
+      const response = await fetch(`http://localhost:8080/api/v1/listings/${listingId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      if (response.ok) {
+        // Rafraîchir les données
+        await fetchDashboardData()
+        alert('Annonce supprimée avec succès')
+      } else {
+        const error = await response.json()
+        alert(`Erreur: ${error.message || 'Impossible de supprimer l\'annonce'}`)
+      }
+    } catch (error) {
+      console.error('Erreur suppression:', error)
+      alert('Erreur de connexion. Veuillez réessayer.')
+    }
+  }
+
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('fr-SN', {
       style: 'currency',
@@ -281,6 +372,12 @@ export default function DashboardPage() {
     const matchesStatus = statusFilter === 'all' || listing.status === statusFilter
     return matchesSearch && matchesStatus
   })
+
+  // Statistiques par statut
+  const draftListings = listings.filter(l => l.status === 'draft')
+  const activeListings = listings.filter(l => l.status === 'active')
+  const soldListings = listings.filter(l => l.status === 'sold')
+  const expiredListings = listings.filter(l => l.status === 'expired')
 
   // Loading state
   if (loading) {
@@ -406,6 +503,11 @@ export default function DashboardPage() {
               <TabsTrigger value="listings" className="flex items-center gap-2">
                 <Package className="h-4 w-4" />
                 Mes annonces
+                {draftListings.length > 0 && (
+                  <Badge variant="secondary" className="ml-1 h-5 px-2 text-xs">
+                    {draftListings.length}
+                  </Badge>
+                )}
               </TabsTrigger>
               <TabsTrigger value="messages" className="flex items-center gap-2">
                 <MessageSquare className="h-4 w-4" />
@@ -482,6 +584,54 @@ export default function DashboardPage() {
                 ))}
               </motion.div>
 
+              {/* ✅ STATISTIQUES DÉTAILLÉES PAR STATUT */}
+              {listings.length > 0 && (
+                <Card className="shadow-lg border-0">
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <Package className="h-5 w-5 mr-2 text-blue-600" />
+                      Répartition de vos annonces
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="text-center p-4 bg-gray-50 rounded-lg">
+                        <div className="text-2xl font-bold text-gray-600">{draftListings.length}</div>
+                        <div className="text-sm text-slate-600">Brouillons</div>
+                        <div className="text-xs text-slate-500">Prêts à publier</div>
+                        {draftListings.length > 0 && (
+                          <Button 
+                            size="sm" 
+                            className="mt-2 bg-green-600 hover:bg-green-700"
+                            onClick={() => setActiveTab('listings')}
+                          >
+                            Publier maintenant
+                          </Button>
+                        )}
+                      </div>
+                      
+                      <div className="text-center p-4 bg-green-50 rounded-lg">
+                        <div className="text-2xl font-bold text-green-600">{activeListings.length}</div>
+                        <div className="text-sm text-slate-600">Actifs</div>
+                        <div className="text-xs text-slate-500">Visibles publiquement</div>
+                      </div>
+                      
+                      <div className="text-center p-4 bg-blue-50 rounded-lg">
+                        <div className="text-2xl font-bold text-blue-600">{soldListings.length}</div>
+                        <div className="text-sm text-slate-600">Vendus</div>
+                        <div className="text-xs text-slate-500">Transactions réussies</div>
+                      </div>
+                      
+                      <div className="text-center p-4 bg-red-50 rounded-lg">
+                        <div className="text-2xl font-bold text-red-600">{expiredListings.length}</div>
+                        <div className="text-sm text-slate-600">Expirés</div>
+                        <div className="text-xs text-slate-500">Après 30 jours</div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               {/* Activité récente */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 
@@ -526,7 +676,7 @@ export default function DashboardPage() {
                   </CardContent>
                 </Card>
 
-                {/* ✅ DERNIÈRES ANNONCES AVEC IMAGES FIXES */}
+                {/* ✅ DERNIÈRES ANNONCES AVEC ACTIONS DE PUBLICATION */}
                 <Card className="shadow-lg border-0">
                   <CardHeader>
                     <CardTitle className="flex items-center justify-between">
@@ -551,12 +701,8 @@ export default function DashboardPage() {
                             ? getImageUrl(listing.images[0]) 
                             : null
                           
-                          console.log(`🖼️ Rendu annonce ${index + 1}:`, listing.title)
-                          console.log(`  - Image brute:`, listing.images?.[0])
-                          console.log(`  - URL finale:`, imageUrl)
-                          
                           return (
-                            <div key={listing.id} className="flex items-center gap-3 p-3 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer">
+                            <div key={listing.id} className="flex items-center gap-3 p-3 hover:bg-slate-50 rounded-lg transition-colors">
                               
                               {/* ✅ IMAGE AVEC GESTION D'ERREUR */}
                               {imageUrl ? (
@@ -589,7 +735,23 @@ export default function DashboardPage() {
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center justify-between mb-1">
                                   <p className="font-medium text-slate-900 truncate">{listing.title}</p>
-                                  {getStatusBadge(listing.status)}
+                                  <div className="flex items-center gap-2">
+                                    {getStatusBadge(listing.status)}
+                                    {listing.status === 'draft' && (
+                                      <Button
+                                        size="sm"
+                                        className="bg-green-600 hover:bg-green-700 text-xs px-2 py-1 h-6"
+                                        onClick={() => handlePublishListing(listing.id)}
+                                        disabled={publishingListing === listing.id}
+                                      >
+                                        {publishingListing === listing.id ? (
+                                          <Loader2 className="h-3 w-3 animate-spin" />
+                                        ) : (
+                                          'Publier'
+                                        )}
+                                      </Button>
+                                    )}
+                                  </div>
                                 </div>
                                 <div className="flex items-center justify-between">
                                   <p className="text-sm font-semibold text-blue-600">{formatPrice(listing.price)}</p>
@@ -597,11 +759,6 @@ export default function DashboardPage() {
                                     <Eye className="h-3 w-3 mr-1" />
                                     {listing.views_count || 0} vues
                                   </div>
-                                </div>
-                                
-                                {/* Debug info */}
-                                <div className="text-xs text-slate-400 font-mono truncate mt-1">
-                                  {imageUrl ? imageUrl.split('/').pop() : 'Pas d\'image'}
                                 </div>
                               </div>
                             </div>
@@ -627,7 +784,7 @@ export default function DashboardPage() {
               </div>
             </TabsContent>
 
-            {/* ✅ ONGLET MES ANNONCES COMPLET */}
+            {/* ✅ ONGLET MES ANNONCES COMPLET AVEC PUBLICATION */}
             <TabsContent value="listings" className="space-y-6">
               <Card className="shadow-lg border-0">
                 <CardHeader>
@@ -635,6 +792,11 @@ export default function DashboardPage() {
                     <div className="flex items-center">
                       <Package className="h-5 w-5 mr-2 text-blue-600" />
                       Mes annonces ({filteredListings.length})
+                      {draftListings.length > 0 && (
+                        <Badge className="ml-2 bg-orange-100 text-orange-800">
+                          {draftListings.length} en attente de publication
+                        </Badge>
+                      )}
                     </div>
                     <div className="flex gap-2">
                       <Button
@@ -652,6 +814,17 @@ export default function DashboardPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
+                  
+                  {/* ✅ ALERTE POUR LES BROUILLONS */}
+                  {draftListings.length > 0 && (
+                    <Alert className="mb-6 border-orange-200 bg-orange-50">
+                      <AlertCircle className="h-4 w-4 text-orange-600" />
+                      <AlertDescription className="text-orange-800">
+                        <strong>{draftListings.length} annonce{draftListings.length > 1 ? 's' : ''} en brouillon</strong> - 
+                        Publiez-les pour qu'elles soient visibles par les acheteurs (200 FCFA par annonce).
+                      </AlertDescription>
+                    </Alert>
+                  )}
                   
                   {/* Filtres */}
                   {listings.length > 0 && (
@@ -673,10 +846,10 @@ export default function DashboardPage() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="all">Tous les statuts</SelectItem>
-                          <SelectItem value="active">Actif</SelectItem>
-                          <SelectItem value="draft">Brouillon</SelectItem>
-                          <SelectItem value="sold">Vendu</SelectItem>
-                          <SelectItem value="expired">Expiré</SelectItem>
+                          <SelectItem value="draft">Brouillon ({draftListings.length})</SelectItem>
+                          <SelectItem value="active">Actif ({activeListings.length})</SelectItem>
+                          <SelectItem value="sold">Vendu ({soldListings.length})</SelectItem>
+                          <SelectItem value="expired">Expiré ({expiredListings.length})</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -718,9 +891,18 @@ export default function DashboardPage() {
                                 </div>
                               </div>
                               
-                              {/* Badge statut */}
+                              {/* ✅ Badge statut avec indicateur spécial pour brouillon */}
                               <div className="absolute top-3 right-3">
-                                {getStatusBadge(listing.status)}
+                                {listing.status === 'draft' ? (
+                                  <div className="flex flex-col gap-1">
+                                    {getStatusBadge(listing.status)}
+                                    <div className="bg-green-600 text-white px-2 py-1 rounded text-xs text-center">
+                                      Prêt à publier
+                                    </div>
+                                  </div>
+                                ) : (
+                                  getStatusBadge(listing.status)
+                                )}
                               </div>
                               
                               {/* Badge images count */}
@@ -755,32 +937,66 @@ export default function DashboardPage() {
                                   <span>{formatDate(listing.created_at)}</span>
                                 </div>
                                 
-                                {/* Actions */}
+                                {/* ✅ ACTIONS SELON LE STATUT */}
                                 <div className="flex gap-2 pt-2 border-t border-slate-200">
+                                  {listing.status === 'draft' ? (
+                                    <Button 
+                                      size="sm" 
+                                      className="flex-1 bg-green-600 hover:bg-green-700"
+                                      onClick={() => handlePublishListing(listing.id)}
+                                      disabled={publishingListing === listing.id}
+                                    >
+                                      {publishingListing === listing.id ? (
+                                        <>
+                                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                          Publication...
+                                        </>
+                                      ) : (
+                                        <>
+                                          <CheckCircle className="h-4 w-4 mr-2" />
+                                          Publier (200 FCFA)
+                                        </>
+                                      )}
+                                    </Button>
+                                  ) : (
+                                    <Button 
+                                      variant="outline" 
+                                      size="sm" 
+                                      className="flex-1"
+                                      onClick={() => router.push(`/listings/${listing.id}`)}
+                                    >
+                                      <Eye className="h-4 w-4 mr-2" />
+                                      Voir
+                                    </Button>
+                                  )}
+                                  
                                   <Button 
                                     variant="outline" 
                                     size="sm" 
                                     className="flex-1"
-                                    onClick={() => router.push(`/listings/${listing.id}`)}
+                                    onClick={() => handleEditListing(listing.id)}
                                   >
-                                    <Eye className="h-4 w-4 mr-2" />
-                                    Voir
-                                  </Button>
-                                  <Button variant="outline" size="sm" className="flex-1">
                                     <Edit3 className="h-4 w-4 mr-2" />
                                     Modifier
                                   </Button>
-                                  <Button variant="outline" size="sm">
-                                    <Share2 className="h-4 w-4" />
-                                  </Button>
-                                  <Button variant="destructive" size="sm">
+                                  
+                                  {listing.status === 'active' && (
+                                    <Button 
+                                      variant="outline" 
+                                      size="sm"
+                                      onClick={() => handleShareListing(listing.id)}
+                                    >
+                                      <Share2 className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                  
+                                  <Button 
+                                    variant="destructive" 
+                                    size="sm"
+                                    onClick={() => handleDeleteListing(listing.id)}
+                                  >
                                     <Trash2 className="h-4 w-4" />
                                   </Button>
-                                </div>
-                                
-                                {/* Debug URL */}
-                                <div className="text-xs text-slate-400 font-mono truncate">
-                                  {imageUrl ? imageUrl.split('/').pop() : 'Pas d\'image'}
                                 </div>
                               </div>
                             </CardContent>

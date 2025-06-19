@@ -1,39 +1,35 @@
 'use client'
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useRouter } from 'next/navigation';
+import { 
+  Search, 
+  Filter, 
+  Grid, 
+  List, 
+  MapPin, 
+  Clock, 
+  Eye, 
+  Heart,
+  Share2,
+  ChevronDown,
+  X,
+  Loader2,
+  Package,
+  SlidersHorizontal,
+  ArrowUpDown
+} from 'lucide-react';
+
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { 
-  Search,
-  Filter,
-  Grid3X3,
-  List,
-  SlidersHorizontal,
-  MapPin,
-  Clock,
-  Heart,
-  Share2,
-  Star,
-  ChevronDown,
-  X,
-  Tag,
-  TrendingUp,
-  Eye,
-  Users,
-  ArrowUpDown,
-  Loader2,
-  AlertCircle,
-  Camera,
-  Package
-} from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-// Types basés sur votre API
+// Types
 interface Listing {
   id: string;
   title: string;
@@ -47,7 +43,7 @@ interface Listing {
   is_featured: boolean;
   created_at: string;
   updated_at: string;
-  user: {
+  user?: {
     id: string;
     first_name: string;
     last_name: string;
@@ -55,12 +51,11 @@ interface Listing {
     region: string;
     is_verified: boolean;
   };
-  category: {
+  category?: {
     id: string;
     name: string;
     slug: string;
     icon: string;
-    description: string;
   };
 }
 
@@ -70,7 +65,6 @@ interface Category {
   slug: string;
   icon: string;
   description: string;
-  sort_order: number;
 }
 
 interface ListingFilters {
@@ -84,8 +78,15 @@ interface ListingFilters {
   limit: number;
 }
 
+const SENEGAL_REGIONS = [
+  'Dakar', 'Thiès', 'Saint-Louis', 'Diourbel', 'Louga', 'Fatick',
+  'Kaolack', 'Kolda', 'Ziguinchor', 'Tambacounda', 'Kaffrine',
+  'Kédougou', 'Matam', 'Sédhiou', 'Saraya', 'Koungheul'
+];
+
 export default function ListingsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   
   // États
   const [listings, setListings] = useState<Listing[]>([]);
@@ -98,12 +99,12 @@ export default function ListingsPage() {
 
   // Filtres et pagination
   const [filters, setFilters] = useState<ListingFilters>({
-    search: '',
-    category_id: '',
-    region: '',
-    min_price: '',
-    max_price: '',
-    sort: 'date',
+    search: searchParams.get('search') || '',
+    category_id: 'all',
+    region: searchParams.get('region') || 'all',
+    min_price: searchParams.get('min_price') || '',
+    max_price: searchParams.get('max_price') || '',
+    sort: searchParams.get('sort') || 'date',
     page: 1,
     limit: 20
   });
@@ -150,98 +151,170 @@ export default function ListingsPage() {
     });
   };
 
-  // Régions du Sénégal (basées sur votre API)
-  const regions = [
-    "Dakar - Plateau", "Dakar - Almadies", "Dakar - Parcelles Assainies",
-    "Dakar - Ouakam", "Dakar - Point E", "Dakar - Pikine", "Dakar - Guédiawaye",
-    "Thiès", "Saint-Louis", "Kaolack", "Ziguinchor", "Diourbel",
-    "Louga", "Fatick", "Kolda", "Tambacounda"
-  ];
+  // ✅ CONVERSION SLUG → CATEGORY_ID
+  const getCategoryIdFromSlug = useCallback((slug: string) => {
+    const category = categories.find(cat => cat.slug === slug);
+    return category ? category.id : '';
+  }, [categories]);
 
-  // Options de tri
-  const sortOptions = [
-    { value: 'date', label: 'Plus récent' },
-    { value: 'price_asc', label: 'Prix croissant' },
-    { value: 'price_desc', label: 'Prix décroissant' },
-    { value: 'views', label: 'Plus populaire' }
-  ];
-
-  // Chargement des données
+  // Chargement initial
   useEffect(() => {
     fetchCategories();
-    fetchListings();
-  }, [filters]);
+  }, []);
+
+  // ✅ GESTION URL PARAMS AVEC SLUG → ID
+  useEffect(() => {
+    if (categories.length > 0) {
+      const categoryParam = searchParams.get('category') || searchParams.get('category_id');
+      
+      let categoryId = 'all';
+      if (categoryParam) {
+        // Si c'est un slug, convertir en ID
+        if (categoryParam.includes('-') || categoryParam.length < 30) {
+          const foundId = getCategoryIdFromSlug(categoryParam);
+          categoryId = foundId || 'all';
+          console.log(`🔄 Conversion slug "${categoryParam}" → ID "${categoryId}"`);
+        } else {
+          // C'est déjà un ID
+          categoryId = categoryParam;
+        }
+      }
+
+      setFilters(prev => ({
+        ...prev,
+        category_id: categoryId,
+        search: searchParams.get('search') || '',
+        region: searchParams.get('region') || 'all',
+        min_price: searchParams.get('min_price') || '',
+        max_price: searchParams.get('max_price') || '',
+        sort: searchParams.get('sort') || 'date'
+      }));
+    }
+  }, [searchParams, categories, getCategoryIdFromSlug]);
+
+  // Fetch des données
+  useEffect(() => {
+    if (categories.length > 0) {
+      fetchListings();
+    }
+  }, [filters, categories]);
 
   const fetchCategories = async () => {
     try {
+      console.log('📡 Chargement catégories...');
       const response = await fetch('http://localhost:8080/api/v1/categories');
       const data = await response.json();
+      
+      console.log('✅ Catégories reçues:', data.data);
       setCategories(data.data || []);
     } catch (error) {
-      console.error('Erreur chargement catégories:', error);
+      console.error('❌ Erreur chargement catégories:', error);
     }
   };
 
   const fetchListings = async () => {
     setLoading(true);
     setError(null);
-    
-    try {
-      const params = new URLSearchParams();
-      Object.entries(filters).forEach(([key, value]) => {
-        if (value) params.append(key, value.toString());
-      });
 
-      const url = `http://localhost:8080/api/v1/listings?${params}`;
-      console.log('🔄 Fetching listings from:', url);
+    try {
+      // ✅ CONSTRUCTION URL AVEC CATEGORY_ID
+      const params = new URLSearchParams();
       
-      const response = await fetch(url);
-      
-      console.log('📡 Response status:', response.status);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      if (filters.search) params.append('search', filters.search);
+      if (filters.category_id && filters.category_id !== 'all') {
+        params.append('category_id', filters.category_id);
+        console.log(`🎯 Filtrage par catégorie ID: ${filters.category_id}`);
       }
-      
+      if (filters.region && filters.region !== 'all') params.append('region', filters.region);
+      if (filters.min_price) params.append('min_price', filters.min_price);
+      if (filters.max_price) params.append('max_price', filters.max_price);
+      if (filters.sort) params.append('sort', filters.sort);
+      params.append('page', filters.page.toString());
+      params.append('limit', filters.limit.toString());
+
+      const url = `http://localhost:8080/api/v1/listings?${params.toString()}`;
+      console.log('📡 Requête URL:', url);
+
+      const response = await fetch(url);
       const data = await response.json();
-      console.log('📊 Raw API response:', data);
+
+      console.log('✅ Données reçues:', data);
 
       if (data.data) {
-        const fetchedListings = data.data.listings || [];
-        console.log('📝 Listings found:', fetchedListings.length);
-        console.log('📋 First listing:', fetchedListings[0]);
-        
-        setListings(fetchedListings);
+        setListings(data.data.listings || []);
         setPagination({
           total: data.data.total || 0,
           pages: data.data.pages || 0,
           currentPage: data.data.page || 1
         });
-        
-        console.log('📊 Pagination:', {
-          total: data.data.total,
-          pages: data.data.pages,
-          currentPage: data.data.page
-        });
+
+        // Debug images
+        debugImageUrls(data.data.listings || []);
       } else {
-        console.warn('⚠️ No data field in response:', data);
         setListings([]);
+        setPagination({ total: 0, pages: 0, currentPage: 1 });
       }
     } catch (error) {
-      console.error('❌ Error fetching listings:', error);
+      console.error('❌ Erreur chargement annonces:', error);
       setError('Erreur lors du chargement des annonces');
+      setListings([]);
     } finally {
       setLoading(false);
     }
   };
 
+  // ✅ MISE À JOUR URL AVEC SLUG
+  const updateUrlParams = useCallback((newFilters: Partial<ListingFilters>) => {
+    const params = new URLSearchParams();
+    
+    const updatedFilters = { ...filters, ...newFilters };
+    
+    if (updatedFilters.search) params.append('search', updatedFilters.search);
+    
+    // ✅ CONVERTIR CATEGORY_ID → SLUG POUR URL
+    if (updatedFilters.category_id && updatedFilters.category_id !== 'all') {
+      const category = categories.find(cat => cat.id === updatedFilters.category_id);
+      if (category) {
+        params.append('category', category.slug);
+        console.log(`🔄 URL: ID "${updatedFilters.category_id}" → slug "${category.slug}"`);
+      }
+    }
+    
+    if (updatedFilters.region && updatedFilters.region !== 'all') params.append('region', updatedFilters.region);
+    if (updatedFilters.min_price) params.append('min_price', updatedFilters.min_price);
+    if (updatedFilters.max_price) params.append('max_price', updatedFilters.max_price);
+    if (updatedFilters.sort && updatedFilters.sort !== 'date') params.append('sort', updatedFilters.sort);
+
+    const newUrl = params.toString() ? `/listings?${params.toString()}` : '/listings';
+    router.push(newUrl, { scroll: false });
+  }, [filters, categories, router]);
+
   // Gestionnaires d'événements
   const handleFilterChange = (key: keyof ListingFilters, value: string | number) => {
-    setFilters(prev => ({
-      ...prev,
-      [key]: value,
-      page: key !== 'page' ? 1 : value // Reset page sauf si on change la page
-    }));
+    const newFilters = { ...filters, [key]: value, page: 1 };
+    setFilters(newFilters);
+    updateUrlParams(newFilters);
+  };
+
+  const handlePageChange = (page: number) => {
+    const newFilters = { ...filters, page };
+    setFilters(newFilters);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const clearFilters = () => {
+    const clearedFilters: ListingFilters = {
+      search: '',
+      category_id: 'all',
+      region: 'all',
+      min_price: '',
+      max_price: '',
+      sort: 'date',
+      page: 1,
+      limit: 20
+    };
+    setFilters(clearedFilters);
+    router.push('/listings');
   };
 
   const toggleFavorite = (listingId: string) => {
@@ -253,19 +326,6 @@ export default function ListingsPage() {
         newFavorites.add(listingId);
       }
       return newFavorites;
-    });
-  };
-
-  const clearFilters = () => {
-    setFilters({
-      search: '',
-      category_id: '',
-      region: '',
-      min_price: '',
-      max_price: '',
-      sort: 'date',
-      page: 1,
-      limit: 20
     });
   };
 
@@ -282,316 +342,165 @@ export default function ListingsPage() {
     const now = new Date();
     const diff = now.getTime() - date.getTime();
     
-    const minutes = Math.floor(diff / (1000 * 60));
-    const hours = Math.floor(diff / (1000 * 60 * 60));
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor(diff / (1000 * 60));
     
-    if (minutes < 60) return `${minutes}min`;
-    if (hours < 24) return `${hours}h`;
-    return `${days}j`;
+    if (days > 0) return `il y a ${days}j`;
+    if (hours > 0) return `il y a ${hours}h`;
+    return `il y a ${minutes}min`;
   };
 
-  // ✅ COMPOSANT CARD D'ANNONCE AVEC IMAGES FIXES
-  const ListingCard = ({ listing }: { listing: Listing }) => {
-    const imageUrl = listing.images && listing.images.length > 0 
-      ? getImageUrl(listing.images[0]) 
-      : null;
-
-    console.log(`🖼️ Rendu card ${listing.title}:`, imageUrl);
-
-    return (
-      <motion.div
-        layout
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -20 }}
-        className={`group cursor-pointer ${viewMode === 'list' ? 'w-full' : ''}`}
-        onClick={() => router.push(`/listings/${listing.id}`)}
-      >
-        <Card className="overflow-hidden hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 border-0 shadow-lg">
-          <div className={`${viewMode === 'list' ? 'flex' : ''}`}>
-            
-            {/* ✅ IMAGE AVEC GESTION D'ERREUR AMÉLIORÉE */}
-            <div className={`relative bg-gradient-to-br from-blue-100 to-orange-100 ${
-              viewMode === 'list' ? 'w-64 h-48 flex-shrink-0' : 'h-48'
-            } flex items-center justify-center`}>
-              
-              {imageUrl ? (
-                <img
-                  src={imageUrl}
-                  alt={listing.title}
-                  className="w-full h-full object-cover"
-                  onLoad={() => console.log(`✅ Image card chargée:`, imageUrl)}
-                  onError={(e) => {
-                    console.error(`❌ Erreur image card:`, imageUrl);
-                    e.currentTarget.style.display = 'none';
-                    const fallback = e.currentTarget.nextElementSibling as HTMLElement;
-                    if (fallback) fallback.style.display = 'flex';
-                  }}
-                />
-              ) : null}
-              
-              {/* Fallback avec icône */}
-              <div 
-                className="absolute inset-0 w-full h-full flex items-center justify-center text-6xl"
-                style={{ display: imageUrl ? 'none' : 'flex' }}
-              >
-                {listing.category.icon || <Package className="h-16 w-16 text-slate-400" />}
-              </div>
-              
-              {/* Badges */}
-              <div className="absolute top-3 left-3 flex flex-col gap-2">
-                {listing.is_featured && (
-                  <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold bg-yellow-500 text-white">
-                    ⭐ Vedette
-                  </span>
-                )}
-                <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold bg-secondary text-secondary-foreground">
-                  {listing.category.name}
-                </span>
-              </div>
-              
-              {/* Actions */}
-              <div className="absolute top-3 right-3 flex flex-col gap-2">
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="bg-white/80 hover:bg-white"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleFavorite(listing.id);
-                  }}
-                >
-                  <Heart className={`h-4 w-4 ${
-                    favorites.has(listing.id) ? 'fill-red-500 text-red-500' : ''
-                  }`} />
-                </Button>
-                
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="bg-white/80 hover:bg-white"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    navigator.share?.({
-                      title: listing.title,
-                      text: listing.description,
-                      url: window.location.origin + `/listings/${listing.id}`
-                    });
-                  }}
-                >
-                  <Share2 className="h-4 w-4" />
-                </Button>
-              </div>
-              
-              {/* Compteur vues */}
-              <div className="absolute bottom-3 left-3 bg-black/50 text-white px-2 py-1 rounded text-xs flex items-center">
-                <Eye className="h-3 w-3 mr-1" />
-                {listing.views_count || 0}
-              </div>
-
-              {/* Badge nombre d'images */}
-              {listing.images && listing.images.length > 1 && (
-                <div className="absolute bottom-3 right-3 bg-black/50 text-white px-2 py-1 rounded text-xs flex items-center">
-                  <Camera className="h-3 w-3 mr-1" />
-                  {listing.images.length}
-                </div>
-              )}
-            </div>
-
-            {/* Contenu */}
-            <CardContent className={`p-4 ${viewMode === 'list' ? 'flex-1' : ''}`}>
-              <div className="space-y-3">
-                
-                {/* Titre et prix */}
-                <div className={`${viewMode === 'list' ? 'flex items-start justify-between' : ''}`}>
-                  <h3 className={`font-semibold line-clamp-2 group-hover:text-blue-600 transition-colors ${
-                    viewMode === 'list' ? 'text-lg flex-1 mr-4' : 'text-base'
-                  }`}>
-                    {listing.title}
-                  </h3>
-                  
-                  <div className={`${viewMode === 'list' ? 'text-right' : 'mt-2'}`}>
-                    <div className="text-2xl font-bold text-blue-600">
-                      {formatPrice(listing.price)}
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Description (seulement en mode liste) */}
-                {viewMode === 'list' && (
-                  <p className="text-slate-600 line-clamp-2 text-sm">
-                    {listing.description}
-                  </p>
-                )}
-                
-                {/* Vendeur */}
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
-                    <Users className="h-3 w-3 text-blue-600" />
-                  </div>
-                  <span className="text-sm text-slate-600">
-                    {listing.user.first_name} {listing.user.last_name}
-                  </span>
-                  {listing.user.is_verified && (
-                    <div className="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
-                      <span className="text-white text-xs">✓</span>
-                    </div>
-                  )}
-                </div>
-                
-                {/* Métadonnées */}
-                <div className="flex items-center justify-between text-sm text-slate-500">
-                  <div className="flex items-center gap-1">
-                    <MapPin className="h-4 w-4" />
-                    <span>{listing.region}</span>
-                  </div>
-                  
-                  <div className="flex items-center gap-1">
-                    <Clock className="h-4 w-4" />
-                    <span>{formatTimeAgo(listing.created_at)}</span>
-                  </div>
-                </div>
-                
-                {/* Bouton action */}
-                <Button 
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    router.push(`/listings/${listing.id}`);
-                  }}
-                >
-                  Voir les détails
-                </Button>
-
-                {/* Debug URL */}
-                <div className="text-xs text-slate-400 font-mono truncate">
-                  {imageUrl ? imageUrl.split('/').pop() : 'Pas d\'image'}
-                </div>
-              </div>
-            </CardContent>
-          </div>
-        </Card>
-      </motion.div>
-    );
-  };
+  // ✅ NOM CATÉGORIE ACTUELLE
+  const currentCategoryName = categories.find(cat => cat.id === filters.category_id)?.name;
 
   return (
     <>
       <Header />
       
-      <main className="min-h-screen bg-slate-50">
+      <main className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
         
-        {/* Hero Section */}
-        <section className="bg-gradient-to-r from-blue-600 to-blue-800 text-white py-16">
-          <div className="container mx-auto px-6">
-            <div className="text-center space-y-4">
-              <h1 className="text-4xl lg:text-5xl font-bold">
-                Découvrez nos Annonces
-              </h1>
-              <p className="text-xl text-blue-100 max-w-2xl mx-auto">
-                Plus de {pagination.total.toLocaleString()} annonces dans tout le Sénégal
-              </p>
+        {/* En-tête avec filtres */}
+        <section className="bg-white border-b border-slate-200 sticky top-16 z-40">
+          <div className="container mx-auto px-6 py-6">
+            
+            {/* Titre et breadcrumb */}
+            <div className="mb-6">
+              <div className="flex items-center gap-2 text-sm text-slate-600 mb-2">
+                <button onClick={() => router.push('/')} className="hover:text-blue-600">
+                  Accueil
+                </button>
+                <span>/</span>
+                <span className="text-slate-900 font-medium">
+                  {currentCategoryName ? `${currentCategoryName}` : 'Toutes les annonces'}
+                </span>
+              </div>
               
-              {/* Barre de recherche principale */}
-              <div className="max-w-2xl mx-auto mt-8">
+              <h1 className="text-3xl font-bold text-slate-900">
+                {currentCategoryName ? `Annonces ${currentCategoryName}` : 'Toutes les annonces'}
+              </h1>
+              
+              {pagination.total > 0 && (
+                <p className="text-slate-600 mt-1">
+                  {pagination.total.toLocaleString()} annonce{pagination.total > 1 ? 's' : ''} trouvée{pagination.total > 1 ? 's' : ''}
+                </p>
+              )}
+            </div>
+
+            {/* Barre de recherche et filtres */}
+            <div className="flex flex-col lg:flex-row gap-4">
+              
+              {/* Recherche */}
+              <div className="flex-1">
                 <div className="relative">
-                  <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-slate-400" />
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-slate-400" />
                   <Input
-                    type="text"
-                    placeholder="Rechercher des produits, services..."
+                    placeholder="Rechercher des annonces..."
                     value={filters.search}
                     onChange={(e) => handleFilterChange('search', e.target.value)}
-                    className="pl-12 py-3 text-lg bg-white border-0 focus:ring-2 focus:ring-blue-300"
+                    className="pl-10 h-12 text-lg"
                   />
                 </div>
               </div>
-            </div>
-          </div>
-        </section>
 
-        {/* Filtres et contrôles */}
-        <section className="bg-white border-b border-slate-200 sticky top-16 z-40">
-          <div className="container mx-auto px-6 py-4">
-            
-            {/* Barre de contrôles */}
-            <div className="flex items-center justify-between mb-4">
-              
-              {/* Résultats */}
-              <div className="flex items-center gap-4">
-                <h2 className="text-lg font-semibold text-slate-900">
-                  {loading ? (
-                    <div className="flex items-center gap-2">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Chargement...
-                    </div>
-                  ) : (
-                    `${pagination.total.toLocaleString()} annonce${pagination.total > 1 ? 's' : ''}`
-                  )}
-                </h2>
+              {/* Filtres rapides */}
+              <div className="flex gap-3">
                 
-                {Object.values(filters).some(v => v && v !== 'date' && v !== 1 && v !== 20) && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={clearFilters}
-                    className="text-slate-600"
-                  >
-                    <X className="h-4 w-4 mr-1" />
-                    Effacer filtres
-                  </Button>
-                )}
-              </div>
+                {/* Catégorie */}
+                <Select 
+                  value={filters.category_id} 
+                  onValueChange={(value) => handleFilterChange('category_id', value)}
+                >
+                  <SelectTrigger className="w-48 h-12">
+                    <SelectValue placeholder="Toutes catégories" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Toutes catégories</SelectItem>
+                    {categories.map(category => (
+                      <SelectItem key={category.id} value={category.id}>
+                        <div className="flex items-center gap-2">
+                          <span>{category.icon}</span>
+                          <span>{category.name}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
-              {/* Contrôles d'affichage */}
-              <div className="flex items-center gap-3">
-                
-                {/* Debug API */}
+                {/* Région */}
+                <Select 
+                  value={filters.region} 
+                  onValueChange={(value) => handleFilterChange('region', value)}
+                >
+                  <SelectTrigger className="w-40 h-12">
+                    <SelectValue placeholder="Toutes régions" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Toutes régions</SelectItem>
+                    {SENEGAL_REGIONS.map(region => (
+                      <SelectItem key={region} value={region}>{region}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {/* Tri */}
+                <Select 
+                  value={filters.sort} 
+                  onValueChange={(value) => handleFilterChange('sort', value)}
+                >
+                  <SelectTrigger className="w-40 h-12">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="date">Plus récent</SelectItem>
+                    <SelectItem value="price_asc">Prix croissant</SelectItem>
+                    <SelectItem value="price_desc">Prix décroissant</SelectItem>
+                    <SelectItem value="views">Plus vues</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {/* Bouton filtres avancés */}
                 <Button
                   variant="outline"
-                  size="sm"
-                  onClick={async () => {
-                    console.log('🧪 === DEBUG API ENDPOINTS ===');
-                    
-                    // Test endpoint listings public
-                    try {
-                      const response = await fetch('http://localhost:8080/api/v1/listings');
-                      const data = await response.json();
-                      console.log('📊 Public listings:', data);
-                    } catch (error) {
-                      console.error('❌ Public listings error:', error);
-                    }
-                    
-                    // Test avec token (toutes les annonces)
-                    const token = localStorage.getItem('senmarket_token');
-                    if (token) {
-                      try {
-                        const response = await fetch('http://localhost:8080/api/v1/listings/my', {
-                          headers: { 'Authorization': `Bearer ${token}` }
-                        });
-                        const data = await response.json();
-                        console.log('📋 My listings:', data);
-                      } catch (error) {
-                        console.error('❌ My listings error:', error);
-                      }
-                    }
-                    
-                    // Test health check
-                    try {
-                      const response = await fetch('http://localhost:8080/health');
-                      const data = await response.json();
-                      console.log('🏥 Health check:', data);
-                    } catch (error) {
-                      console.error('❌ Health check error:', error);
-                    }
-                    
-                    console.log('🧪 === END DEBUG ===');
-                  }}
+                  size="lg"
+                  onClick={() => setShowFilters(!showFilters)}
+                  className="h-12"
                 >
-                  🧪 Debug API
+                  <SlidersHorizontal className="h-5 w-5 mr-2" />
+                  Filtres
                 </Button>
-                
-                {/* Debug Images */}
+
+                {/* Toggle vue */}
+                <div className="flex border border-slate-300 rounded-lg overflow-hidden">
+                  <Button
+                    variant={viewMode === 'grid' ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setViewMode('grid')}
+                    className="h-12 px-4 rounded-none"
+                  >
+                    <Grid className="h-5 w-5" />
+                  </Button>
+                  <Button
+                    variant={viewMode === 'list' ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setViewMode('list')}
+                    className="h-12 px-4 rounded-none"
+                  >
+                    <List className="h-5 w-5" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* ✅ DEBUG INFO */}
+            <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <strong>Debug Info:</strong> 
+                  Catégorie ID: <code>{filters.category_id === 'all' ? 'toutes' : filters.category_id}</code> | 
+                  Catégorie Nom: <code>{currentCategoryName || 'toutes'}</code> | 
+                  Total: <code>{pagination.total}</code>
+                </div>
                 <Button
                   variant="outline"
                   size="sm"
@@ -599,120 +508,20 @@ export default function ListingsPage() {
                 >
                   🔧 Debug Images
                 </Button>
-                
-                {/* Bouton Reload */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    console.log('🔄 Force reload listings');
-                    fetchListings();
-                  }}
-                >
-                  🔄 Reload
-                </Button>
-                
-                {/* Tri */}
-                <div className="flex items-center gap-2">
-                  <ArrowUpDown className="h-4 w-4 text-slate-600" />
-                  <select
-                    value={filters.sort}
-                    onChange={(e) => handleFilterChange('sort', e.target.value)}
-                    className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    {sortOptions.map(option => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                
-                {/* Mode d'affichage */}
-                <div className="flex border border-slate-300 rounded-lg overflow-hidden">
-                  <Button
-                    variant={viewMode === 'grid' ? 'default' : 'ghost'}
-                    size="sm"
-                    onClick={() => setViewMode('grid')}
-                    className="rounded-none"
-                  >
-                    <Grid3X3 className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant={viewMode === 'list' ? 'default' : 'ghost'}
-                    size="sm"
-                    onClick={() => setViewMode('list')}
-                    className="rounded-none"
-                  >
-                    <List className="h-4 w-4" />
-                  </Button>
-                </div>
-                
-                {/* Bouton filtres */}
-                <Button
-                  variant="outline"
-                  onClick={() => setShowFilters(!showFilters)}
-                  className="flex items-center gap-2"
-                >
-                  <SlidersHorizontal className="h-4 w-4" />
-                  Filtres
-                  <ChevronDown className={`h-4 w-4 transition-transform ${
-                    showFilters ? 'rotate-180' : ''
-                  }`} />
-                </Button>
               </div>
             </div>
 
-            {/* Panneau de filtres */}
+            {/* Filtres avancés */}
             <AnimatePresence>
               {showFilters && (
                 <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  className="border-t border-slate-200 pt-4 overflow-hidden"
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="mt-6 p-6 bg-slate-50 rounded-lg border border-slate-200"
                 >
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     
-                    {/* Catégorie */}
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Catégorie
-                      </label>
-                      <select
-                        value={filters.category_id}
-                        onChange={(e) => handleFilterChange('category_id', e.target.value)}
-                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="">Toutes les catégories</option>
-                        {categories.map(category => (
-                          <option key={category.id} value={category.id}>
-                            {category.icon} {category.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    
-                    {/* Région */}
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Région
-                      </label>
-                      <select
-                        value={filters.region}
-                        onChange={(e) => handleFilterChange('region', e.target.value)}
-                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="">Toutes les régions</option>
-                        {regions.map(region => (
-                          <option key={region} value={region}>
-                            {region}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    
-                    {/* Prix minimum */}
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-2">
                         Prix minimum (FCFA)
@@ -722,22 +531,29 @@ export default function ListingsPage() {
                         placeholder="0"
                         value={filters.min_price}
                         onChange={(e) => handleFilterChange('min_price', e.target.value)}
-                        className="text-sm"
                       />
                     </div>
-                    
-                    {/* Prix maximum */}
+
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-2">
                         Prix maximum (FCFA)
                       </label>
                       <Input
                         type="number"
-                        placeholder="Aucune limite"
+                        placeholder="1000000"
                         value={filters.max_price}
                         onChange={(e) => handleFilterChange('max_price', e.target.value)}
-                        className="text-sm"
                       />
+                    </div>
+
+                    <div className="md:col-span-2 flex gap-3">
+                      <Button onClick={clearFilters} variant="outline" className="flex-1">
+                        <X className="h-4 w-4 mr-2" />
+                        Effacer les filtres
+                      </Button>
+                      <Button onClick={() => setShowFilters(false)} className="flex-1">
+                        Appliquer les filtres
+                      </Button>
                     </div>
                   </div>
                 </motion.div>
@@ -749,99 +565,247 @@ export default function ListingsPage() {
         {/* Contenu principal */}
         <section className="container mx-auto px-6 py-8">
           
-          {/* Erreur */}
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-              <div className="flex items-center gap-2 text-red-700">
-                <AlertCircle className="h-5 w-5" />
-                <span>{error}</span>
-              </div>
-            </div>
-          )}
-          
-          {/* Liste des annonces */}
           {loading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {[...Array(8)].map((_, i) => (
-                <Card key={i} className="overflow-hidden">
-                  <div className="h-48 bg-slate-200 animate-pulse"></div>
-                  <CardContent className="p-4 space-y-3">
-                    <div className="h-4 bg-slate-200 rounded animate-pulse"></div>
-                    <div className="h-6 bg-slate-200 rounded animate-pulse"></div>
-                    <div className="h-4 bg-slate-200 rounded animate-pulse w-2/3"></div>
-                  </CardContent>
-                </Card>
-              ))}
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-blue-600 mr-3" />
+              <span className="text-slate-600">Chargement des annonces...</span>
+            </div>
+          ) : error ? (
+            <div className="text-center py-12">
+              <Package className="h-16 w-16 text-slate-400 mx-auto mb-4" />
+              <h3 className="text-xl font-semibold text-slate-900 mb-2">Erreur de chargement</h3>
+              <p className="text-slate-600 mb-6">{error}</p>
+              <Button onClick={fetchListings}>Réessayer</Button>
             </div>
           ) : listings.length === 0 ? (
-            <div className="text-center py-16">
-              <div className="text-6xl mb-4">🔍</div>
-              <h3 className="text-2xl font-semibold text-slate-700 mb-2">
-                Aucune annonce trouvée
-              </h3>
+            <div className="text-center py-12">
+              <Package className="h-16 w-16 text-slate-400 mx-auto mb-4" />
+              <h3 className="text-xl font-semibold text-slate-900 mb-2">Aucune annonce trouvée</h3>
               <p className="text-slate-600 mb-6">
-                Essayez de modifier vos critères de recherche
+                Essayez de modifier vos critères de recherche ou explorez d'autres catégories.
               </p>
               <Button onClick={clearFilters} variant="outline">
-                Effacer tous les filtres
+                Effacer les filtres
               </Button>
             </div>
           ) : (
-            <motion.div
-              layout
-              className={`grid gap-6 ${
-                viewMode === 'grid'
-                  ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
+            <>
+              {/* ✅ GRILLE D'ANNONCES AVEC IMAGES CORRIGÉES */}
+              <div className={`grid gap-6 ${
+                viewMode === 'grid' 
+                  ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' 
                   : 'grid-cols-1'
-              }`}
-            >
-              <AnimatePresence>
-                {listings.map(listing => (
-                  <ListingCard key={listing.id} listing={listing} />
-                ))}
-              </AnimatePresence>
-            </motion.div>
-          )}
+              }`}>
+                {listings.map((listing) => {
+                  const imageUrl = listing.images && listing.images.length > 0 
+                    ? getImageUrl(listing.images[0]) 
+                    : null;
 
-          {/* Pagination */}
-          {!loading && listings.length > 0 && pagination.pages > 1 && (
-            <div className="flex items-center justify-center gap-2 mt-12">
-              
-              {/* Page précédente */}
-              <Button
-                variant="outline"
-                disabled={pagination.currentPage === 1}
-                onClick={() => handleFilterChange('page', pagination.currentPage - 1)}
-              >
-                Précédent
-              </Button>
-              
-              {/* Numéros de page */}
-              {[...Array(Math.min(5, pagination.pages))].map((_, i) => {
-                const pageNum = Math.max(1, pagination.currentPage - 2) + i;
-                if (pageNum > pagination.pages) return null;
-                
-                return (
+                  return (
+                    <motion.div
+                      key={listing.id}
+                      layout
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="group"
+                    >
+                      <Card className="overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer border-0 shadow-lg">
+                        
+                        {/* Image */}
+                        <div 
+                          className="relative aspect-video bg-gradient-to-br from-blue-100 to-orange-100 overflow-hidden"
+                          onClick={() => router.push(`/listings/${listing.id}`)}
+                        >
+                          {imageUrl ? (
+                            <img
+                              src={imageUrl}
+                              alt={listing.title}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                              onError={(e) => {
+                                console.error('❌ Erreur image listing:', imageUrl);
+                                e.currentTarget.style.display = 'none';
+                                const fallback = e.currentTarget.nextElementSibling as HTMLElement;
+                                if (fallback) fallback.style.display = 'flex';
+                              }}
+                            />
+                          ) : null}
+                          
+                          {/* Fallback */}
+                          <div 
+                            className="absolute inset-0 flex items-center justify-center"
+                            style={{ display: imageUrl ? 'none' : 'flex' }}
+                          >
+                            <div className="text-center">
+                              <Package className="h-12 w-12 text-slate-400 mx-auto mb-2" />
+                              <p className="text-xs text-slate-500">Pas d'image</p>
+                            </div>
+                          </div>
+
+                          {/* Badges */}
+                          <div className="absolute top-3 left-3">
+                            {listing.is_featured && (
+                              <Badge className="bg-yellow-500 text-white text-xs">
+                                ⭐ Vedette
+                              </Badge>
+                            )}
+                          </div>
+
+                          {/* Actions */}
+                          <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 w-8 p-0 bg-white/80 hover:bg-white"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleFavorite(listing.id);
+                              }}
+                            >
+                              <Heart 
+                                className={`h-4 w-4 ${
+                                  favorites.has(listing.id) 
+                                    ? 'fill-red-500 text-red-500' 
+                                    : 'text-slate-600'
+                                }`} 
+                              />
+                            </Button>
+                            
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 w-8 p-0 bg-white/80 hover:bg-white"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigator.share?.({ 
+                                  title: listing.title, 
+                                  url: `${window.location.origin}/listings/${listing.id}` 
+                                });
+                              }}
+                            >
+                              <Share2 className="h-4 w-4 text-slate-600" />
+                            </Button>
+                          </div>
+
+                          {/* Statistiques */}
+                          <div className="absolute bottom-3 right-3 bg-black/50 text-white px-2 py-1 rounded text-xs flex items-center gap-1">
+                            <Eye className="h-3 w-3" />
+                            <span>{listing.views_count || 0}</span>
+                          </div>
+                        </div>
+
+                        {/* Contenu */}
+                        <CardContent className="p-4">
+                          <div className="space-y-3">
+                            
+                            {/* Titre et catégorie */}
+                            <div>
+                              <h3 
+                                className="font-semibold text-slate-900 line-clamp-2 group-hover:text-blue-600 transition-colors cursor-pointer"
+                                onClick={() => router.push(`/listings/${listing.id}`)}
+                              >
+                                {listing.title}
+                              </h3>
+                              
+                              {listing.category && (
+                                <Badge variant="secondary" className="text-xs mt-1">
+                                  <span className="mr-1">{listing.category.icon}</span>
+                                  {listing.category.name}
+                                </Badge>
+                              )}
+                            </div>
+
+                            {/* Prix */}
+                            <div className="text-2xl font-bold text-blue-600">
+                              {formatPrice(listing.price)}
+                            </div>
+
+                            {/* Informations */}
+                            <div className="flex items-center justify-between text-sm text-slate-600">
+                              <div className="flex items-center gap-1">
+                                <MapPin className="h-4 w-4" />
+                                <span>{listing.region}</span>
+                              </div>
+                              
+                              <div className="flex items-center gap-1">
+                                <Clock className="h-4 w-4" />
+                                <span>{formatTimeAgo(listing.created_at)}</span>
+                              </div>
+                            </div>
+
+                            {/* Vendeur */}
+                            {listing.user && (
+                              <div className="text-xs text-slate-500 flex items-center gap-1">
+                                <span>Par {listing.user.first_name}</span>
+                                {listing.user.is_verified && (
+                                  <Badge variant="outline" className="text-xs">
+                                    ✓ Vérifié
+                                  </Badge>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Debug info */}
+                            <div className="text-xs text-slate-400 font-mono truncate">
+                              {imageUrl ? imageUrl.split('/').pop() : 'Pas d\'image'}
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  );
+                })}
+              </div>
+
+              {/* Pagination */}
+              {pagination.pages > 1 && (
+                <div className="flex items-center justify-center gap-2 mt-12">
                   <Button
-                    key={pageNum}
-                    variant={pageNum === pagination.currentPage ? 'default' : 'outline'}
-                    onClick={() => handleFilterChange('page', pageNum)}
-                    className="w-10 h-10"
+                    variant="outline"
+                    disabled={pagination.currentPage <= 1}
+                    onClick={() => handlePageChange(pagination.currentPage - 1)}
                   >
-                    {pageNum}
+                    Précédent
                   </Button>
-                );
-              })}
-              
-              {/* Page suivante */}
-              <Button
-                variant="outline"
-                disabled={pagination.currentPage === pagination.pages}
-                onClick={() => handleFilterChange('page', pagination.currentPage + 1)}
-              >
-                Suivant
-              </Button>
-            </div>
+                  
+                  <div className="flex gap-1">
+                    {Array.from({ length: Math.min(pagination.pages, 5) }, (_, i) => {
+                      const page = pagination.currentPage <= 3 
+                        ? i + 1 
+                        : pagination.currentPage - 2 + i;
+                      
+                      if (page > pagination.pages) return null;
+                      
+                      return (
+                        <Button
+                          key={page}
+                          variant={page === pagination.currentPage ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => handlePageChange(page)}
+                          className="w-10"
+                        >
+                          {page}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                  
+                  <Button
+                    variant="outline"
+                    disabled={pagination.currentPage >= pagination.pages}
+                    onClick={() => handlePageChange(pagination.currentPage + 1)}
+                  >
+                    Suivant
+                  </Button>
+                </div>
+              )}
+
+              {/* Statistiques en bas */}
+              <div className="text-center text-sm text-slate-600 mt-8">
+                Affichage de {((pagination.currentPage - 1) * filters.limit) + 1} à{' '}
+                {Math.min(pagination.currentPage * filters.limit, pagination.total)} sur{' '}
+                {pagination.total} annonce{pagination.total > 1 ? 's' : ''}
+              </div>
+            </>
           )}
         </section>
       </main>
