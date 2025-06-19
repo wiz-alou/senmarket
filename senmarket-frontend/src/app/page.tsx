@@ -17,8 +17,8 @@ export default function HomePage() {
         {/* <SearchSection /> */}
         <CategoriesSection />
         <FeaturedListings />  
-        <StatsSection />
-        <TestimonialsSection />
+        {/* <StatsSection /> */}
+        {/* <TestimonialsSection /> */}
         <CTASection />
       </main>
       <Footer />

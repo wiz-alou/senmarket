@@ -29,11 +29,11 @@ export function Footer() {
       title: "Marketplace",
       links: [
         { name: "Toutes les Annonces", href: "/listings" },
-        { name: "Véhicules", href: "/categories/vehicles" },
-        { name: "Immobilier", href: "/categories/real-estate" },
-        { name: "Électronique", href: "/categories/electronics" },
-        { name: "Mode & Beauté", href: "/categories/fashion" },
-        { name: "Services", href: "/categories/services" }
+        { name: "Véhicules", href: "/listings?category=vehicles" },
+        { name: "Immobilier", href: "/listings?category=real-estate" },
+        { name: "Électronique", href: "/listings?category=electronics" },
+        { name: "Mode & Beauté", href: "/listings?category=fashion" },
+        { name: "Services", href: "/listings?category=services" }
       ]
     },
     vendeurs: {
@@ -41,43 +41,43 @@ export function Footer() {
       links: [
         { name: "Publier une Annonce", href: "/sell" },
         { name: "Dashboard Vendeur", href: "/dashboard" },
-        { name: "Guide du Vendeur", href: "/seller-guide" },
-        { name: "Conseils & Astuces", href: "/tips" },
-        { name: "Formation Gratuite", href: "/training" },
-        { name: "Success Stories", href: "/success-stories" }
+        { name: "Guide du Vendeur", href: "/help/seller-guide" },
+        { name: "Conseils & Astuces", href: "/help/tips" },
+        { name: "Formation Gratuite", href: "/help/training" },
+        { name: "Success Stories", href: "/about/success-stories" }
       ]
     },
     entreprise: {
       title: "Solutions Entreprise",
       links: [
         { name: "SenMarket Business", href: "/business" },
-        { name: "API pour Développeurs", href: "/api" },
-        { name: "Intégrations ERP", href: "/integrations" },
-        { name: "Comptes Entreprise", href: "/enterprise" },
-        { name: "Partenariats", href: "/partnerships" },
-        { name: "Solutions sur Mesure", href: "/custom-solutions" }
+        { name: "API pour Développeurs", href: "/developers" },
+        { name: "Intégrations ERP", href: "/business/integrations" },
+        { name: "Comptes Entreprise", href: "/business/enterprise" },
+        { name: "Partenariats", href: "/business/partnerships" },
+        { name: "Solutions sur Mesure", href: "/business/custom" }
       ]
     },
     support: {
       title: "Support & Aide",
       links: [
         { name: "Centre d'Aide", href: "/help" },
-        { name: "FAQ", href: "/faq" },
-        { name: "Sécurité", href: "/security" },
-        { name: "Signaler un Problème", href: "/report" },
+        { name: "FAQ", href: "/help/faq" },
+        { name: "Sécurité", href: "/help/security" },
+        { name: "Signaler un Problème", href: "/help/report" },
         { name: "Contact Support", href: "/contact" },
-        { name: "Statut des Services", href: "/status", external: true }
+        { name: "Statut des Services", href: "https://status.senmarket.sn", external: true }
       ]
     },
     legal: {
       title: "Légal & Conformité",
       links: [
-        { name: "Conditions d'Utilisation", href: "/terms" },
-        { name: "Politique de Confidentialité", href: "/privacy" },
-        { name: "Conditions de Vente", href: "/sales-terms" },
-        { name: "Politique de Remboursement", href: "/refund-policy" },
-        { name: "Résolution des Litiges", href: "/dispute-resolution" },
-        { name: "Conformité GDPR", href: "/gdpr" }
+        { name: "Conditions d'Utilisation", href: "/legal/terms" },
+        { name: "Politique de Confidentialité", href: "/legal/privacy" },
+        { name: "Conditions de Vente", href: "/legal/sales-terms" },
+        { name: "Politique de Remboursement", href: "/legal/refund" },
+        { name: "Résolution des Litiges", href: "/legal/disputes" },
+        { name: "Conformité GDPR", href: "/legal/gdpr" }
       ]
     }
   };
@@ -179,6 +179,8 @@ export function Footer() {
                   href={social.href}
                   className={`w-10 h-10 bg-slate-800 rounded-lg flex items-center justify-center transition-colors ${social.color}`}
                   aria-label={social.name}
+                  target="_blank"
+                  rel="noopener noreferrer"
                 >
                   <social.icon className="h-4 w-4" />
                 </Link>
@@ -276,6 +278,7 @@ export function Footer() {
                     <Link
                       href={link.href}
                       className="text-slate-400 hover:text-blue-400 transition-colors text-sm flex items-center"
+                      {...(link.external && { target: "_blank", rel: "noopener noreferrer" })}
                     >
                       {link.name}
                       {link.external && <ExternalLink className="h-3 w-3 ml-1" />}
@@ -288,6 +291,7 @@ export function Footer() {
         </div>
 
         {/* App Download & Payment Methods */}
+
 
       </div>
 

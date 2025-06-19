@@ -1,4 +1,3 @@
-
 'use client'
 
 import Link from 'next/link'
@@ -278,7 +277,7 @@ export function CategoriesSection() {
   // Loading state amélioré
   if (loading && categories.length === 0) {
     return (
-      <section className="py-20 lg:py-24 bg-white">
+      <section id="categories-section" className="py-20 lg:py-24 bg-white">
         <div className="container mx-auto px-6">
           <div className="text-center mb-16">
             <div className="inline-flex items-center bg-blue-100 text-blue-700 px-4 py-2 rounded-full text-sm font-medium mb-4">
@@ -310,7 +309,7 @@ export function CategoriesSection() {
   // Error state
   if (error && categories.length === 0) {
     return (
-      <section className="py-20 lg:py-24 bg-white">
+      <section id="categories-section" className="py-20 lg:py-24 bg-white">
         <div className="container mx-auto px-6">
           <div className="text-center">
             <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
@@ -327,7 +326,7 @@ export function CategoriesSection() {
   }
 
   return (
-    <section className="py-20 lg:py-24 bg-white">
+    <section id="categories-section" className="py-20 lg:py-24 bg-white">
       <div className="container mx-auto px-6">
         
         {/* En-tête avec statut temps réel */}
@@ -503,4 +502,4 @@ export function CategoriesSection() {
       </div>
     </section>
   )
-}
+}   

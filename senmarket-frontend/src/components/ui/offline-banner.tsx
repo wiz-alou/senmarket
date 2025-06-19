@@ -23,7 +23,7 @@ export function OfflineBanner() {
         </motion.div>
       )}
       
-      {isOnline && (
+      {/* {isOnline && (
         <motion.div
           initial={{ opacity: 0, y: -50 }}
           animate={{ opacity: 1, y: 0 }}
@@ -35,7 +35,7 @@ export function OfflineBanner() {
             <span>Connexion rétablie</span>
           </div>
         </motion.div>
-      )}
+      )} */}
     </AnimatePresence>
   )
 }
