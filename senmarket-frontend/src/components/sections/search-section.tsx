@@ -76,6 +76,13 @@ export function SearchSection() {
   // Configuration API
   const API_BASE = 'http://localhost:8080/api/v1'
 
+  // ✅ RÉGIONS SIMPLIFIÉES POUR RECHERCHE INTELLIGENTE
+  const SENEGAL_REGIONS = [
+    'Dakar', 'Thiès', 'Saint-Louis', 'Diourbel', 'Louga', 'Fatick',
+    'Kaolack', 'Kolda', 'Ziguinchor', 'Tambacounda', 'Kaffrine',
+    'Kédougou', 'Matam', 'Sédhiou', 'Saraya', 'Koungheul'
+  ]
+
   // Recherches tendances dynamiques
   const [trendingSearches, setTrendingSearches] = useState([
     'iPhone', 'Appartement Dakar', 'Voiture Toyota', 'Emploi',
@@ -108,9 +115,8 @@ export function SearchSection() {
   useEffect(() => {
     const loadInitialData = async () => {
       try {
-        const [categoriesRes, regionsRes, listingsRes] = await Promise.all([
+        const [categoriesRes, listingsRes] = await Promise.all([
           fetch(`${API_BASE}/categories/stats`),
-          fetch(`${API_BASE}/regions`),
           fetch(`${API_BASE}/listings?limit=1`)
         ])
 
@@ -128,10 +134,8 @@ export function SearchSection() {
           setTotalListings(total)
         }
 
-        if (regionsRes.ok) {
-          const regionsData = await regionsRes.json()
-          setRegions(regionsData.data || [])
-        }
+        // ✅ UTILISER LES RÉGIONS FIXES AU LIEU DE L'API
+        setRegions(SENEGAL_REGIONS)
 
         if (listingsRes.ok) {
           const listingsData = await listingsRes.json()
@@ -144,6 +148,7 @@ export function SearchSection() {
         console.error('❌ Error loading search data:', error)
         // Données de fallback
         setTotalListings(3)
+        setRegions(SENEGAL_REGIONS)
       }
     }
 
@@ -162,13 +167,20 @@ export function SearchSection() {
     try {
       const params = new URLSearchParams()
       
-      // ✅ FIX: Utiliser l'endpoint principal /listings au lieu de /listings/search
+      // ✅ Recherche texte
       if (searchQuery.trim()) params.append('search', searchQuery.trim())
+      
+      // ✅ Catégorie
       if (selectedCategory !== 'all') params.append('category_id', selectedCategory)
-      if (selectedRegion !== 'all') params.append('region', selectedRegion)
+      
+      // ✅ RÉGION INTELLIGENTE : Envoie le mot-clé, le backend fait LIKE
+      if (selectedRegion !== 'all') {
+        params.append('region', selectedRegion)
+        console.log(`🌍 Recherche région: "${selectedRegion}" (recherche LIKE sur backend)`)
+      }
+      
       params.append('limit', '6') // Limite pour l'aperçu
 
-      // ✅ CORRECTION: Utiliser /listings au lieu de /listings/search
       const response = await fetch(`${API_BASE}/listings?${params}`)
       
       if (response.ok) {
@@ -232,7 +244,7 @@ export function SearchSection() {
     setShowResults(false)
   }
 
-  // Rediriger vers la page de résultats complète
+  // ✅ REDIRECTION INTELLIGENTE VERS LISTINGS
   const viewAllResults = () => {
     const params = new URLSearchParams()
     if (searchQuery.trim()) params.append('search', searchQuery.trim())
@@ -243,6 +255,7 @@ export function SearchSection() {
         params.append('category', category.slug)
       }
     }
+    // ✅ RÉGION : Envoyer le mot-clé directement
     if (selectedRegion !== 'all') params.append('region', selectedRegion)
     
     window.location.href = `/listings?${params}`
@@ -296,7 +309,7 @@ export function SearchSection() {
                   )}
                 </div>
 
-                {/* ✅ Sélecteur de catégorie SANS icônes fa- */}
+                {/* Sélecteur de catégorie */}
                 <div className="lg:col-span-3">
                   <select 
                     value={selectedCategory}
@@ -312,7 +325,7 @@ export function SearchSection() {
                   </select>
                 </div>
 
-                {/* Sélecteur de région avec vraies données */}
+                {/* ✅ Sélecteur de région INTELLIGENT */}
                 <div className="lg:col-span-2">
                   <select 
                     value={selectedRegion}
@@ -355,7 +368,7 @@ export function SearchSection() {
                   
                   <div className="flex items-center space-x-2 text-sm text-gray-500">
                     <MapPin className="h-4 w-4" />
-                    <span>Recherche dans tout le Sénégal</span>
+                    <span>🔍 Recherche intelligente : "Dakar" → trouve "Dakar - Plateau", etc.</span>
                   </div>
 
                   {showResults && (
@@ -400,83 +413,96 @@ export function SearchSection() {
 
               {searchResults.listings.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {searchResults.listings.map((listing) => (
-                    <div
-                      key={listing.id}
-                      className="bg-gray-50 rounded-xl p-4 hover:shadow-md transition-shadow cursor-pointer group"
-                      onClick={() => window.location.href = `/listings/${listing.id}`}
-                    >
-                      {/* Image */}
-                      <div className="relative h-32 bg-gray-200 rounded-lg mb-3 overflow-hidden">
-                        {listing.images && listing.images.length > 0 ? (
-                          <img
-                            src={listing.images[0].startsWith('http') 
-                              ? listing.images[0] 
-                              : listing.images[0].startsWith('/') 
-                                ? `http://localhost:8080${listing.images[0]}`
-                                : `http://localhost:8080/uploads/${listing.images[0]}`
-                            }
-                            alt={listing.title}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                            onError={(e) => {
-                              console.error('❌ Erreur image search:', e.currentTarget.src)
-                              e.currentTarget.style.display = 'none'
-                              const fallback = e.currentTarget.nextElementSibling as HTMLElement
-                              if (fallback) fallback.style.display = 'flex'
-                            }}
-                          />
-                        ) : null}
-                        
-                        {/* Fallback */}
-                        <div 
-                          className="w-full h-full flex items-center justify-center"
-                          style={{ display: (listing.images && listing.images.length > 0) ? 'none' : 'flex' }}
-                        >
-                          <Building className="h-8 w-8 text-gray-400" />
-                        </div>
-                        
-                        {/* Prix */}
-                        <div className="absolute top-2 left-2 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-md">
-                          <span className="text-sm font-bold text-gray-900">
-                            {formatPrice(listing.price)}
-                          </span>
+                  {searchResults.listings.map((listing) => {
+                    // ✅ FONCTION HELPER POUR LES IMAGES
+                    const getImageUrl = (imagePath: string) => {
+                      if (!imagePath) return null;
+                      if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+                        return imagePath;
+                      }
+                      if (imagePath.startsWith('/')) {
+                        return `http://localhost:8080${imagePath}`;
+                      }
+                      return `http://localhost:8080/uploads/${imagePath}`;
+                    };
+
+                    const imageUrl = listing.images && listing.images.length > 0
+                      ? getImageUrl(listing.images[0])
+                      : null;
+
+                    return (
+                      <div
+                        key={listing.id}
+                        className="bg-gray-50 rounded-xl p-4 hover:shadow-md transition-shadow cursor-pointer group"
+                        onClick={() => window.location.href = `/listings/${listing.id}`}
+                      >
+                        {/* Image */}
+                        <div className="relative h-32 bg-gray-200 rounded-lg mb-3 overflow-hidden">
+                          {imageUrl ? (
+                            <img
+                              src={imageUrl}
+                              alt={listing.title}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                              onError={(e) => {
+                                console.error('❌ Erreur image search:', imageUrl)
+                                e.currentTarget.style.display = 'none'
+                                const fallback = e.currentTarget.nextElementSibling as HTMLElement
+                                if (fallback) fallback.style.display = 'flex'
+                              }}
+                            />
+                          ) : null}
+                          
+                          {/* Fallback */}
+                          <div 
+                            className="w-full h-full flex items-center justify-center"
+                            style={{ display: imageUrl ? 'none' : 'flex' }}
+                          >
+                            <Building className="h-8 w-8 text-gray-400" />
+                          </div>
+                          
+                          {/* Prix */}
+                          <div className="absolute top-2 left-2 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-md">
+                            <span className="text-sm font-bold text-gray-900">
+                              {formatPrice(listing.price)}
+                            </span>
+                          </div>
+
+                          {/* Vues */}
+                          <div className="absolute top-2 right-2 bg-black/50 backdrop-blur-sm px-2 py-1 rounded-md flex items-center gap-1">
+                            <Eye className="h-3 w-3 text-white" />
+                            <span className="text-xs text-white">{listing.views_count}</span>
+                          </div>
                         </div>
 
-                        {/* Vues */}
-                        <div className="absolute top-2 right-2 bg-black/50 backdrop-blur-sm px-2 py-1 rounded-md flex items-center gap-1">
-                          <Eye className="h-3 w-3 text-white" />
-                          <span className="text-xs text-white">{listing.views_count}</span>
+                        {/* Contenu */}
+                        <div>
+                          <h4 className="font-semibold text-gray-900 mb-1 line-clamp-2 group-hover:text-blue-600 transition-colors">
+                            {listing.title}
+                          </h4>
+                          <p className="text-sm text-gray-600 mb-2 line-clamp-2">
+                            {listing.description}
+                          </p>
+                          
+                          <div className="flex items-center justify-between text-xs text-gray-500">
+                            <div className="flex items-center gap-1">
+                              <MapPin className="h-3 w-3" />
+                              <span>{listing.region}</span>
+                            </div>
+                            <span>{formatDate(listing.created_at)}</span>
+                          </div>
+
+                          {/* Badge catégorie */}
+                          {listing.category && (
+                            <div className="mt-2">
+                              <Badge variant="secondary" className="text-xs">
+                                {listing.category.name}
+                              </Badge>
+                            </div>
+                          )}
                         </div>
                       </div>
-
-                      {/* Contenu */}
-                      <div>
-                        <h4 className="font-semibold text-gray-900 mb-1 line-clamp-2 group-hover:text-blue-600 transition-colors">
-                          {listing.title}
-                        </h4>
-                        <p className="text-sm text-gray-600 mb-2 line-clamp-2">
-                          {listing.description}
-                        </p>
-                        
-                        <div className="flex items-center justify-between text-xs text-gray-500">
-                          <div className="flex items-center gap-1">
-                            <MapPin className="h-3 w-3" />
-                            <span>{listing.region}</span>
-                          </div>
-                          <span>{formatDate(listing.created_at)}</span>
-                        </div>
-
-                        {/* ✅ Badge catégorie SANS icône */}
-                        {listing.category && (
-                          <div className="mt-2">
-                            <Badge variant="secondary" className="text-xs">
-                              {listing.category.name}
-                            </Badge>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               ) : (
                 <div className="text-center py-12">
@@ -522,20 +548,20 @@ export function SearchSection() {
             <div className="mt-8 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl p-6 border border-blue-200">
               <div className="flex items-center justify-center gap-2 mb-3">
                 <Zap className="h-5 w-5 text-blue-600" />
-                <span className="font-semibold text-blue-900">Tips de Recherche</span>
+                <span className="font-semibold text-blue-900">Tips de Recherche Intelligente</span>
               </div>
               <div className="grid md:grid-cols-3 gap-4 text-sm text-blue-800">
                 <div className="text-center">
-                  <div className="font-medium mb-1">🎯 Soyez Précis</div>
-                  <div>Utilisez "iPhone 13" plutôt que "téléphone"</div>
+                  <div className="font-medium mb-1">🎯 Recherche par Mot-Clé</div>
+                  <div>Tapez "Dakar" pour trouver "Dakar - Plateau", "Dakar - Almadies", etc.</div>
                 </div>
                 <div className="text-center">
-                  <div className="font-medium mb-1">🏷️ Filtrez</div>
-                  <div>Combinez catégorie + région pour de meilleurs résultats</div>
+                  <div className="font-medium mb-1">🏷️ Filtres Intelligents</div>
+                  <div>Combinez recherche + catégorie + région pour de meilleurs résultats</div>
                 </div>
                 <div className="text-center">
-                  <div className="font-medium mb-1">⚡ Alertes</div>
-                  <div>Sauvegardez vos recherches pour être alerté</div>
+                  <div className="font-medium mb-1">⚡ Recherche Temps Réel</div>
+                  <div>Les résultats s'affichent automatiquement pendant que vous tapez</div>
                 </div>
               </div>
             </div>

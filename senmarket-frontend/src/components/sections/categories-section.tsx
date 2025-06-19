@@ -1,3 +1,4 @@
+
 'use client'
 
 import Link from 'next/link'
@@ -42,7 +43,6 @@ interface Category {
   listings_count: number
   is_trending: boolean
   growth_rate: string
-  avg_price?: number
   total_views?: number
   active_sellers?: number
 }
@@ -160,16 +160,7 @@ export function CategoriesSection() {
     return num.toString()
   }
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('fr-SN', {
-      style: 'currency',
-      currency: 'XOF',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(price)
-  }
-
-  // ✅ FONCTION CORRIGÉE - Utilise les vraies données
+  // ✅ FONCTION CORRIGÉE - Utilise les vraies données SANS prix moyen
   const fetchCategoriesWithStats = async (isRefresh = false) => {
     if (isRefresh) {
       setRefreshing(true)
@@ -218,8 +209,7 @@ export function CategoriesSection() {
             growth_rate: realListingsCount >= 5 ? '+18%' : 
                         realListingsCount >= 3 ? '+12%' : 
                         realListingsCount >= 1 ? '+8%' : '+0%',
-            // ✅ ESTIMATIONS RÉALISTES basées sur les vraies annonces
-            avg_price: 0, // Pas de prix moyen affiché
+            // ✅ PLUS DE PRIX MOYEN - Complètement supprimé
             total_views: realListingsCount * (15 + Math.floor(Math.random() * 10)), // 15-25 vues par annonce
             active_sellers: realListingsCount > 0 ? Math.max(1, Math.floor(realListingsCount * 0.8)) : 0 // 80% ratio
           }
@@ -238,25 +228,25 @@ export function CategoriesSection() {
       console.error('❌ Error fetching categories:', error)
       setError('Erreur lors du chargement des catégories')
       
-      // ✅ DONNÉES DE FALLBACK COHÉRENTES AVEC LA RÉALITÉ
+      // ✅ DONNÉES DE FALLBACK COHÉRENTES AVEC LA RÉALITÉ - SANS PRIX MOYEN
       setCategories([
         {
           id: '1', slug: 'electronics', name: 'Électronique', icon: 'fa-laptop',
           description: 'Smartphones, ordinateurs, TV', sort_order: 1,
           listings_count: 2, is_trending: true, growth_rate: '+8%',
-          avg_price: 0, total_views: 24, active_sellers: 1
+          total_views: 24, active_sellers: 1
         },
         {
           id: '2', slug: 'vehicles', name: 'Véhicules', icon: 'fa-car',
           description: 'Voitures, motos, camions', sort_order: 2,
           listings_count: 1, is_trending: false, growth_rate: '+0%',
-          avg_price: 0, total_views: 8, active_sellers: 1
+          total_views: 8, active_sellers: 1
         },
         {
           id: '3', slug: 'real-estate', name: 'Immobilier', icon: 'fa-home',
           description: 'Appartements, villas, terrains', sort_order: 3,
           listings_count: 0, is_trending: false, growth_rate: '+0%',
-          avg_price: 0, total_views: 0, active_sellers: 0
+          total_views: 0, active_sellers: 0
         }
       ])
       setLastUpdated(new Date().toLocaleTimeString('fr-SN'))
@@ -463,7 +453,7 @@ export function CategoriesSection() {
                     {category.description}
                   </p>
                   
-                  {/* Statistiques enrichies */}
+                  {/* Statistiques enrichies - SANS PRIX MOYEN */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-sm">
                       <div className="flex items-center space-x-1 text-slate-600">
@@ -473,13 +463,7 @@ export function CategoriesSection() {
                       <ArrowRight className={`h-4 w-4 ${colors.secondary} group-hover:translate-x-1 transition-transform`} />
                     </div>
 
-                    {/* Afficher le prix moyen seulement s'il y a des annonces */}
-                    {category.avg_price && category.avg_price > 0 && category.listings_count > 0 && (
-                      <div className="flex items-center justify-between text-xs text-slate-500">
-                        <span>Prix moyen:</span>
-                        <span className="font-semibold">{formatPrice(category.avg_price)}</span>
-                      </div>
-                    )}
+                    {/* ✅ SECTION PRIX MOYEN COMPLÈTEMENT SUPPRIMÉE */}
 
                     <div className="grid grid-cols-2 gap-2 text-xs text-slate-500">
                       <div className="flex items-center gap-1">

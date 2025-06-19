@@ -28,18 +28,26 @@ export function Header() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
 
+  // ✅ NAVIGATION SIMPLE SANS DUPLICATION
   const navigation = [
-    { name: 'Accueil', href: '/', active: true },
+    { name: 'Accueil', href: '/' },
     { name: 'Annonces', href: '/listings' },
-    { name: 'Catégories', href: '/categories' },
-    { name: 'À propos', href: '/about' },
-    { name: 'Contact', href: '/contact' },
   ]
 
   const handleLogout = () => {
     logout()
     setShowUserMenu(false)
     router.push('/')
+  }
+
+  // ✅ FONCTION POUR GÉRER LE CONTACT
+  const handleContactClick = () => {
+    // Scroll vers le footer ou ouvrir modal contact
+    const footer = document.querySelector('footer')
+    if (footer) {
+      footer.scrollIntoView({ behavior: 'smooth' })
+    }
+    setIsMobileMenuOpen(false)
   }
 
   return (
@@ -59,12 +67,15 @@ export function Header() {
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <Link href="/help" className="hover:text-blue-200 transition-colors">
+              <button 
+                onClick={handleContactClick}
+                className="hover:text-blue-200 transition-colors cursor-pointer"
+              >
                 Centre d'aide
-              </Link>
+              </button>
               <span>•</span>
-              <Link href="/business" className="hover:text-blue-200 transition-colors">
-                SenMarket Business
+              <Link href="/dashboard" className="hover:text-blue-200 transition-colors">
+                SenMarket Pro
               </Link>
             </div>
           </div>
@@ -156,7 +167,7 @@ export function Header() {
                         </Link>
                         
                         <Link 
-                          href="/dashboard?tab=listings" 
+                          href="/dashboard" 
                           className="flex items-center px-4 py-2 hover:bg-slate-50 text-slate-700"
                           onClick={() => setShowUserMenu(false)}
                         >
@@ -165,7 +176,7 @@ export function Header() {
                         </Link>
                         
                         <Link 
-                          href="/dashboard?tab=messages" 
+                          href="/dashboard" 
                           className="flex items-center px-4 py-2 hover:bg-slate-50 text-slate-700"
                           onClick={() => setShowUserMenu(false)}
                         >
@@ -174,7 +185,7 @@ export function Header() {
                         </Link>
                         
                         <Link 
-                          href="/dashboard?tab=payments" 
+                          href="/dashboard" 
                           className="flex items-center px-4 py-2 hover:bg-slate-50 text-slate-700"
                           onClick={() => setShowUserMenu(false)}
                         >
@@ -183,7 +194,7 @@ export function Header() {
                         </Link>
                         
                         <Link 
-                          href="/dashboard?tab=settings" 
+                          href="/dashboard" 
                           className="flex items-center px-4 py-2 hover:bg-slate-50 text-slate-700"
                           onClick={() => setShowUserMenu(false)}
                         >
@@ -204,7 +215,7 @@ export function Header() {
                     )}
                   </div>
 
-                  {/* Bouton publier */}
+                  {/* ✅ Bouton publier - UNIQUEMENT pour utilisateur connecté */}
                   <Button 
                     onClick={() => router.push('/sell')}
                     className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 py-2.5 rounded-lg shadow-sm"
@@ -215,7 +226,7 @@ export function Header() {
                 </>
               ) : (
                 <>
-                  {/* Utilisateur non connecté */}
+                  {/* ✅ Utilisateur NON connecté - SEULEMENT Connexion et S'inscrire */}
                   <Button 
                     variant="ghost" 
                     onClick={() => router.push('/auth/login')}
@@ -259,16 +270,28 @@ export function Header() {
               
               {/* Navigation mobile */}
               <div className="px-4 space-y-1">
-                {navigation.map((item) => (
-                  <Link
-                    key={item.name}
-                    href={item.href}
-                    className="block px-4 py-3 rounded-lg font-medium text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-                    onClick={() => setIsMobileMenuOpen(false)}
-                  >
-                    {item.name}
-                  </Link>
-                ))}
+                <Link
+                  href="/"
+                  className="block px-4 py-3 rounded-lg font-medium text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  Accueil
+                </Link>
+                
+                <Link
+                  href="/listings"
+                  className="block px-4 py-3 rounded-lg font-medium text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  Annonces
+                </Link>
+                
+                <button
+                  onClick={handleContactClick}
+                  className="block w-full text-left px-4 py-3 rounded-lg font-medium text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                >
+                  Contact
+                </button>
               </div>
 
               {/* Actions mobile */}
@@ -299,6 +322,7 @@ export function Header() {
                       Dashboard
                     </Button>
                     
+                    {/* ✅ Bouton publier SEULEMENT pour utilisateur connecté en mobile */}
                     <Button 
                       onClick={() => {
                         router.push('/sell')
@@ -324,6 +348,7 @@ export function Header() {
                   </>
                 ) : (
                   <>
+                    {/* ✅ Utilisateur NON connecté en mobile - PAS de bouton publier */}
                     <Button 
                       onClick={() => {
                         router.push('/auth/login')

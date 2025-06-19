@@ -18,7 +18,19 @@ import {
   Loader2,
   Package,
   SlidersHorizontal,
-  ArrowUpDown
+  ArrowUpDown,
+  Car,
+  Home,
+  Smartphone,
+  Shirt,
+  Briefcase,
+  Wrench,
+  Sofa,
+  Zap,
+  User,
+  Star,
+  MessageCircle,
+  Phone
 } from 'lucide-react';
 
 import { Header } from '@/components/layout/header';
@@ -115,21 +127,42 @@ export default function ListingsPage() {
     currentPage: 1
   });
 
-  // ✅ FONCTION HELPER POUR LES IMAGES (FIX PRINCIPAL)
+  // ✅ MAPPING DES ICÔNES LUCIDE POUR REMPLACER fa-
+  const getCategoryIcon = (iconString: string) => {
+    const iconMap: { [key: string]: any } = {
+      'fa-car': Car,
+      'fa-home': Home,
+      'fa-laptop': Smartphone,
+      'fa-tshirt': Shirt,
+      'fa-briefcase': Briefcase,
+      'fa-tools': Wrench,
+      'fa-couch': Sofa,
+      'fa-paw': Heart,
+      'car': Car,
+      'home': Home,
+      'laptop': Smartphone,
+      'tshirt': Shirt,
+      'briefcase': Briefcase,
+      'tools': Wrench,
+      'couch': Sofa,
+      'paw': Heart
+    };
+    
+    return iconMap[iconString] || Package;
+  };
+
+  // ✅ FONCTION HELPER POUR LES IMAGES
   const getImageUrl = (imagePath: string) => {
     if (!imagePath) return null;
 
-    // Si l'URL est déjà complète
     if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
       return imagePath;
     }
 
-    // Si l'URL commence par /
     if (imagePath.startsWith('/')) {
       return `http://localhost:8080${imagePath}`;
     }
 
-    // Sinon construire l'URL
     return `http://localhost:8080/uploads/${imagePath}`;
   };
 
@@ -169,13 +202,11 @@ export default function ListingsPage() {
 
       let categoryId = 'all';
       if (categoryParam) {
-        // Si c'est un slug, convertir en ID
         if (categoryParam.includes('-') || categoryParam.length < 30) {
           const foundId = getCategoryIdFromSlug(categoryParam);
           categoryId = foundId || 'all';
           console.log(`🔄 Conversion slug "${categoryParam}" → ID "${categoryId}"`);
         } else {
-          // C'est déjà un ID
           categoryId = categoryParam;
         }
       }
@@ -217,7 +248,6 @@ export default function ListingsPage() {
     setError(null);
 
     try {
-      // ✅ CONSTRUCTION URL AVEC CATEGORY_ID
       const params = new URLSearchParams();
 
       if (filters.search) params.append('search', filters.search);
@@ -225,7 +255,10 @@ export default function ListingsPage() {
         params.append('category_id', filters.category_id);
         console.log(`🎯 Filtrage par catégorie ID: ${filters.category_id}`);
       }
-      if (filters.region && filters.region !== 'all') params.append('region', filters.region);
+      if (filters.region && filters.region !== 'all') {
+        params.append('region', filters.region);
+        console.log(`🌍 Filtrage par région: "${filters.region}" (recherche LIKE)`);
+      }
       if (filters.min_price) params.append('min_price', filters.min_price);
       if (filters.max_price) params.append('max_price', filters.max_price);
       if (filters.sort) params.append('sort', filters.sort);
@@ -248,7 +281,6 @@ export default function ListingsPage() {
           currentPage: data.data.page || 1
         });
 
-        // Debug images
         debugImageUrls(data.data.listings || []);
       } else {
         setListings([]);
@@ -271,7 +303,6 @@ export default function ListingsPage() {
 
     if (updatedFilters.search) params.append('search', updatedFilters.search);
 
-    // ✅ CONVERTIR CATEGORY_ID → SLUG POUR URL
     if (updatedFilters.category_id && updatedFilters.category_id !== 'all') {
       const category = categories.find(cat => cat.id === updatedFilters.category_id);
       if (category) {
@@ -354,6 +385,353 @@ export default function ListingsPage() {
   // ✅ NOM CATÉGORIE ACTUELLE
   const currentCategoryName = categories.find(cat => cat.id === filters.category_id)?.name;
 
+  // ✅ RENDU OPTIMISÉ POUR CHAQUE MODE D'AFFICHAGE
+  const renderGridView = () => (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+      {listings.map((listing) => {
+        const imageUrl = listing.images && listing.images.length > 0
+          ? getImageUrl(listing.images[0])
+          : null;
+
+        return (
+          <motion.div
+            key={listing.id}
+            layout
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="group"
+          >
+            <Card className="overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer border-0 shadow-lg">
+
+              {/* Image */}
+              <div
+                className="relative aspect-video bg-gradient-to-br from-blue-100 to-orange-100 overflow-hidden"
+                onClick={() => router.push(`/listings/${listing.id}`)}
+              >
+                {imageUrl ? (
+                  <img
+                    src={imageUrl}
+                    alt={listing.title}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    onError={(e) => {
+                      console.error('❌ Erreur image listing:', imageUrl);
+                      e.currentTarget.style.display = 'none';
+                      const fallback = e.currentTarget.nextElementSibling as HTMLElement;
+                      if (fallback) fallback.style.display = 'flex';
+                    }}
+                  />
+                ) : null}
+
+                {/* Fallback */}
+                <div
+                  className="absolute inset-0 flex items-center justify-center"
+                  style={{ display: imageUrl ? 'none' : 'flex' }}
+                >
+                  <div className="text-center">
+                    <Package className="h-12 w-12 text-slate-400 mx-auto mb-2" />
+                    <p className="text-xs text-slate-500">Pas d'image</p>
+                  </div>
+                </div>
+
+                {/* Badges */}
+                <div className="absolute top-3 left-3">
+                  {listing.is_featured && (
+                    <Badge className="bg-yellow-500 text-white text-xs">
+                      ⭐ Vedette
+                    </Badge>
+                  )}
+                </div>
+
+                {/* Actions */}
+                <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 w-8 p-0 bg-white/80 hover:bg-white"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleFavorite(listing.id);
+                    }}
+                  >
+                    <Heart
+                      className={`h-4 w-4 ${favorites.has(listing.id)
+                          ? 'fill-red-500 text-red-500'
+                          : 'text-slate-600'
+                        }`}
+                    />
+                  </Button>
+
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 w-8 p-0 bg-white/80 hover:bg-white"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigator.share?.({
+                        title: listing.title,
+                        url: `${window.location.origin}/listings/${listing.id}`
+                      });
+                    }}
+                  >
+                    <Share2 className="h-4 w-4 text-slate-600" />
+                  </Button>
+                </div>
+
+                {/* Statistiques */}
+                <div className="absolute bottom-3 right-3 bg-black/50 text-white px-2 py-1 rounded text-xs flex items-center gap-1">
+                  <Eye className="h-3 w-3" />
+                  <span>{listing.views_count || 0}</span>
+                </div>
+              </div>
+
+              {/* Contenu */}
+              <CardContent className="p-4">
+                <div className="space-y-3">
+
+                  {/* Titre et catégorie */}
+                  <div>
+                    <h3
+                      className="font-semibold text-slate-900 line-clamp-2 group-hover:text-blue-600 transition-colors cursor-pointer"
+                      onClick={() => router.push(`/listings/${listing.id}`)}
+                    >
+                      {listing.title}
+                    </h3>
+
+                    {/* Badge catégorie AVEC icône Lucide */}
+                    {listing.category && (
+                      <div className="flex items-center gap-1 mt-1">
+                        {(() => {
+                          const IconComponent = getCategoryIcon(listing.category.icon);
+                          return <IconComponent className="h-3 w-3 text-slate-500" />;
+                        })()}
+                        <Badge variant="secondary" className="text-xs">
+                          {listing.category.name}
+                        </Badge>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Prix */}
+                  <div className="text-2xl font-bold text-blue-600">
+                    {formatPrice(listing.price)}
+                  </div>
+
+                  {/* Informations */}
+                  <div className="flex items-center justify-between text-sm text-slate-600">
+                    <div className="flex items-center gap-1">
+                      <MapPin className="h-4 w-4" />
+                      <span>{listing.region}</span>
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                      <Clock className="h-4 w-4" />
+                      <span>{formatTimeAgo(listing.created_at)}</span>
+                    </div>
+                  </div>
+
+                  {/* Vendeur */}
+                  {listing.user && (
+                    <div className="text-xs text-slate-500 flex items-center gap-1">
+                      <span>Par {listing.user.first_name}</span>
+                      {listing.user.is_verified && (
+                        <Badge variant="outline" className="text-xs">
+                          ✓ Vérifié
+                        </Badge>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        );
+      })}
+    </div>
+  );
+
+  // ✅ VUE LISTE COMPACTE ET ÉLÉGANTE
+  const renderListView = () => (
+    <div className="space-y-4">
+      {listings.map((listing) => {
+        const imageUrl = listing.images && listing.images.length > 0
+          ? getImageUrl(listing.images[0])
+          : null;
+
+        return (
+          <motion.div
+            key={listing.id}
+            layout
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="group"
+          >
+            <Card 
+              className="overflow-hidden hover:shadow-lg transition-all duration-300 cursor-pointer border border-slate-200 hover:border-blue-300"
+              onClick={() => router.push(`/listings/${listing.id}`)}
+            >
+              <CardContent className="p-4">
+                <div className="flex gap-4">
+                  
+                  {/* Image compacte */}
+                  <div className="relative w-24 h-24 rounded-lg overflow-hidden bg-gradient-to-br from-blue-100 to-orange-100 flex-shrink-0">
+                    {imageUrl ? (
+                      <img
+                        src={imageUrl}
+                        alt={listing.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        onError={(e) => {
+                          console.error('❌ Erreur image listing:', imageUrl);
+                          e.currentTarget.style.display = 'none';
+                          const fallback = e.currentTarget.nextElementSibling as HTMLElement;
+                          if (fallback) fallback.style.display = 'flex';
+                        }}
+                      />
+                    ) : null}
+
+                    {/* Fallback compact */}
+                    <div
+                      className="absolute inset-0 flex items-center justify-center"
+                      style={{ display: imageUrl ? 'none' : 'flex' }}
+                    >
+                      <Package className="h-6 w-6 text-slate-400" />
+                    </div>
+
+                    {/* Badge vedette */}
+                    {listing.is_featured && (
+                      <div className="absolute -top-1 -right-1">
+                        <Badge className="bg-yellow-500 text-white text-xs px-1 py-0.5">
+                          ⭐
+                        </Badge>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Contenu principal */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between">
+                      
+                      {/* Infos principales */}
+                      <div className="flex-1 min-w-0">
+                        
+                        {/* Titre et catégorie */}
+                        <div className="mb-2">
+                          <h3 className="font-semibold text-slate-900 line-clamp-1 group-hover:text-blue-600 transition-colors">
+                            {listing.title}
+                          </h3>
+                          
+                          {listing.category && (
+                            <div className="flex items-center gap-1 mt-1">
+                              {(() => {
+                                const IconComponent = getCategoryIcon(listing.category.icon);
+                                return <IconComponent className="h-3 w-3 text-slate-500" />;
+                              })()}
+                              <Badge variant="secondary" className="text-xs">
+                                {listing.category.name}
+                              </Badge>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Description courte */}
+                        <p className="text-sm text-slate-600 line-clamp-2 mb-3">
+                          {listing.description}
+                        </p>
+
+                        {/* Méta-infos */}
+                        <div className="flex items-center gap-4 text-xs text-slate-500">
+                          <div className="flex items-center gap-1">
+                            <MapPin className="h-3 w-3" />
+                            <span>{listing.region}</span>
+                          </div>
+                          
+                          <div className="flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            <span>{formatTimeAgo(listing.created_at)}</span>
+                          </div>
+                          
+                          <div className="flex items-center gap-1">
+                            <Eye className="h-3 w-3" />
+                            <span>{listing.views_count || 0} vues</span>
+                          </div>
+
+                          {listing.user && (
+                            <div className="flex items-center gap-1">
+                              <User className="h-3 w-3" />
+                              <span>{listing.user.first_name}</span>
+                              {listing.user.is_verified && (
+                                <span className="text-green-600">✓</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Prix et actions */}
+                      <div className="flex flex-col items-end gap-2 ml-4">
+                        
+                        {/* Prix */}
+                        <div className="text-xl font-bold text-blue-600">
+                          {formatPrice(listing.price)}
+                        </div>
+
+                        {/* Actions compactes */}
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 w-7 p-0"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleFavorite(listing.id);
+                            }}
+                          >
+                            <Heart
+                              className={`h-3 w-3 ${favorites.has(listing.id)
+                                  ? 'fill-red-500 text-red-500'
+                                  : 'text-slate-600'
+                                }`}
+                            />
+                          </Button>
+
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 w-7 p-0"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigator.share?.({
+                                title: listing.title,
+                                url: `${window.location.origin}/listings/${listing.id}`
+                              });
+                            }}
+                          >
+                            <Share2 className="h-3 w-3 text-slate-600" />
+                          </Button>
+
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 w-7 p-0"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              // Action contact
+                            }}
+                          >
+                            <MessageCircle className="h-3 w-3 text-slate-600" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        );
+      })}
+    </div>
+  );
+
   return (
     <>
       <Header />
@@ -376,15 +754,50 @@ export default function ListingsPage() {
                 </span>
               </div>
 
-              <h1 className="text-3xl font-bold text-slate-900">
-                {currentCategoryName ? `Annonces ${currentCategoryName}` : 'Toutes les annonces'}
-              </h1>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h1 className="text-3xl font-bold text-slate-900">
+                    {currentCategoryName ? `Annonces ${currentCategoryName}` : 'Toutes les annonces'}
+                  </h1>
 
-              {pagination.total > 0 && (
-                <p className="text-slate-600 mt-1">
-                  {pagination.total.toLocaleString()} annonce{pagination.total > 1 ? 's' : ''} trouvée{pagination.total > 1 ? 's' : ''}
-                </p>
-              )}
+                  {pagination.total > 0 && (
+                    <p className="text-slate-600 mt-1">
+                      {pagination.total.toLocaleString()} annonce{pagination.total > 1 ? 's' : ''} trouvée{pagination.total > 1 ? 's' : ''}
+                    </p>
+                  )}
+                </div>
+
+                {/* Toggle vue - Compact et élégant */}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-slate-600 hidden sm:block">Affichage :</span>
+                  <div className="flex bg-slate-100 rounded-md p-0.5">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setViewMode('grid')}
+                      className={`h-7 px-2 text-xs transition-all ${
+                        viewMode === 'grid' 
+                          ? 'bg-white shadow-sm text-slate-900' 
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <Grid className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setViewMode('list')}
+                      className={`h-7 px-2 text-xs transition-all ${
+                        viewMode === 'list' 
+                          ? 'bg-white shadow-sm text-slate-900' 
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <List className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Barre de recherche et filtres */}
@@ -404,7 +817,7 @@ export default function ListingsPage() {
               </div>
 
               {/* Filtres rapides */}
-              <div className="flex gap-3">
+              <div className="flex flex-wrap gap-3">
 
                 {/* Catégorie */}
                 <Select
@@ -416,14 +829,18 @@ export default function ListingsPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Toutes catégories</SelectItem>
-                    {categories.map(category => (
-                      <SelectItem key={category.id} value={category.id}>
-                        <div className="flex items-center gap-2">
-                          <span>{category.icon}</span>
-                          <span>{category.name}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
+                    {categories.map(category => {
+                      const IconComponent = getCategoryIcon(category.icon);
+                      
+                      return (
+                        <SelectItem key={category.id} value={category.id}>
+                          <div className="flex items-center gap-2">
+                            <IconComponent className="h-4 w-4" />
+                            <span>{category.name}</span>
+                          </div>
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
 
@@ -469,29 +886,8 @@ export default function ListingsPage() {
                   <SlidersHorizontal className="h-5 w-5 mr-2" />
                   Filtres
                 </Button>
-
-                {/* Toggle vue */}
-                <div className="flex border border-slate-300 rounded-lg overflow-hidden">
-                  <Button
-                    variant={viewMode === 'grid' ? 'default' : 'ghost'}
-                    size="sm"
-                    onClick={() => setViewMode('grid')}
-                    className="h-12 px-4 rounded-none"
-                  >
-                    <Grid className="h-5 w-5" />
-                  </Button>
-                  <Button
-                    variant={viewMode === 'list' ? 'default' : 'ghost'}
-                    size="sm"
-                    onClick={() => setViewMode('list')}
-                    className="h-12 px-4 rounded-none"
-                  >
-                    <List className="h-5 w-5" />
-                  </Button>
-                </div>
               </div>
             </div>
-
 
             {/* Filtres avancés */}
             <AnimatePresence>
@@ -572,163 +968,8 @@ export default function ListingsPage() {
             </div>
           ) : (
             <>
-              {/* ✅ GRILLE D'ANNONCES AVEC IMAGES CORRIGÉES */}
-              <div className={`grid gap-6 ${viewMode === 'grid'
-                  ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
-                  : 'grid-cols-1'
-                }`}>
-                {listings.map((listing) => {
-                  const imageUrl = listing.images && listing.images.length > 0
-                    ? getImageUrl(listing.images[0])
-                    : null;
-
-                  return (
-                    <motion.div
-                      key={listing.id}
-                      layout
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="group"
-                    >
-                      <Card className="overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer border-0 shadow-lg">
-
-                        {/* Image */}
-                        <div
-                          className="relative aspect-video bg-gradient-to-br from-blue-100 to-orange-100 overflow-hidden"
-                          onClick={() => router.push(`/listings/${listing.id}`)}
-                        >
-                          {imageUrl ? (
-                            <img
-                              src={imageUrl}
-                              alt={listing.title}
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                              onError={(e) => {
-                                console.error('❌ Erreur image listing:', imageUrl);
-                                e.currentTarget.style.display = 'none';
-                                const fallback = e.currentTarget.nextElementSibling as HTMLElement;
-                                if (fallback) fallback.style.display = 'flex';
-                              }}
-                            />
-                          ) : null}
-
-                          {/* Fallback */}
-                          <div
-                            className="absolute inset-0 flex items-center justify-center"
-                            style={{ display: imageUrl ? 'none' : 'flex' }}
-                          >
-                            <div className="text-center">
-                              <Package className="h-12 w-12 text-slate-400 mx-auto mb-2" />
-                              <p className="text-xs text-slate-500">Pas d'image</p>
-                            </div>
-                          </div>
-
-                          {/* Badges */}
-                          <div className="absolute top-3 left-3">
-                            {listing.is_featured && (
-                              <Badge className="bg-yellow-500 text-white text-xs">
-                                ⭐ Vedette
-                              </Badge>
-                            )}
-                          </div>
-
-                          {/* Actions */}
-                          <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 w-8 p-0 bg-white/80 hover:bg-white"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleFavorite(listing.id);
-                              }}
-                            >
-                              <Heart
-                                className={`h-4 w-4 ${favorites.has(listing.id)
-                                    ? 'fill-red-500 text-red-500'
-                                    : 'text-slate-600'
-                                  }`}
-                              />
-                            </Button>
-
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 w-8 p-0 bg-white/80 hover:bg-white"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                navigator.share?.({
-                                  title: listing.title,
-                                  url: `${window.location.origin}/listings/${listing.id}`
-                                });
-                              }}
-                            >
-                              <Share2 className="h-4 w-4 text-slate-600" />
-                            </Button>
-                          </div>
-
-                          {/* Statistiques */}
-                          <div className="absolute bottom-3 right-3 bg-black/50 text-white px-2 py-1 rounded text-xs flex items-center gap-1">
-                            <Eye className="h-3 w-3" />
-                            <span>{listing.views_count || 0}</span>
-                          </div>
-                        </div>
-
-                        {/* Contenu */}
-                        <CardContent className="p-4">
-                          <div className="space-y-3">
-
-                            {/* Titre et catégorie */}
-                            <div>
-                              <h3
-                                className="font-semibold text-slate-900 line-clamp-2 group-hover:text-blue-600 transition-colors cursor-pointer"
-                                onClick={() => router.push(`/listings/${listing.id}`)}
-                              >
-                                {listing.title}
-                              </h3>
-
-                              {listing.category && (
-                                <Badge variant="secondary" className="text-xs mt-1">
-                                  {listing.category.name}
-                                </Badge>
-                              )}
-                            </div>
-
-                            {/* Prix */}
-                            <div className="text-2xl font-bold text-blue-600">
-                              {formatPrice(listing.price)}
-                            </div>
-
-                            {/* Informations */}
-                            <div className="flex items-center justify-between text-sm text-slate-600">
-                              <div className="flex items-center gap-1">
-                                <MapPin className="h-4 w-4" />
-                                <span>{listing.region}</span>
-                              </div>
-
-                              <div className="flex items-center gap-1">
-                                <Clock className="h-4 w-4" />
-                                <span>{formatTimeAgo(listing.created_at)}</span>
-                              </div>
-                            </div>
-
-                            {/* Vendeur */}
-                            {listing.user && (
-                              <div className="text-xs text-slate-500 flex items-center gap-1">
-                                <span>Par {listing.user.first_name}</span>
-                                {listing.user.is_verified && (
-                                  <Badge variant="outline" className="text-xs">
-                                    ✓ Vérifié
-                                  </Badge>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </motion.div>
-                  );
-                })}
-              </div>
+              {/* Rendu conditionnel selon le mode d'affichage */}
+              {viewMode === 'grid' ? renderGridView() : renderListView()}
 
               {/* Pagination */}
               {pagination.pages > 1 && (
