@@ -294,7 +294,8 @@ if query.Status == "" || query.Status == "active" {
 	}
 
 	if query.Region != "" {
-		db = db.Where("region = ?", query.Region)
+		// db = db.Where("region = ?", query.Region)
+		  db = db.Where("region LIKE ?", query.Region+"%")
 	}
 
 	if query.UserID != "" {

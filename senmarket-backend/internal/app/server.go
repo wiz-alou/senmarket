@@ -200,7 +200,8 @@ func (a *Application) setupRoutes() {
 
 		// Routes annonces protégées (utilisateur vérifié)
 		listingsProtected := api.Group("/listings")
-		listingsProtected.Use(a.middleware.RequireVerifiedUser())
+		// listingsProtected.Use(a.middleware.RequireVerifiedUser())
+		listingsProtected.Use(a.middleware.RequireAuth())
 		{
 			listingsProtected.POST("", listingHandler.CreateListing)
 			listingsProtected.PUT("/:id", listingHandler.UpdateListing)

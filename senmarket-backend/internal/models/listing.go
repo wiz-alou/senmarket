@@ -2,40 +2,11 @@
 package models
 
 import (
-	"database/sql/driver"
-	"encoding/json"
-	"fmt"
 	"time"
-    "github.com/lib/pq"  
+	"github.com/lib/pq"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
-
-// StringArray pour gérer les arrays de strings en PostgreSQL
-type StringArray []string
-
-func (s StringArray) Value() (driver.Value, error) {
-	if len(s) == 0 {
-		return "{}", nil
-	}
-	return json.Marshal(s)
-}
-
-func (s *StringArray) Scan(value interface{}) error {
-	if value == nil {
-		*s = StringArray{}
-		return nil
-	}
-	
-	switch v := value.(type) {
-	case []byte:
-		return json.Unmarshal(v, s)
-	case string:
-		return json.Unmarshal([]byte(v), s)
-	default:
-		return fmt.Errorf("cannot scan %T into StringArray", value)
-	}
-}
 
 type Listing struct {
 	ID          uuid.UUID      `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
