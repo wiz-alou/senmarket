@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
+import Link from 'next/link';
 import {
   Search,
   Filter,
@@ -35,8 +36,10 @@ import {
   Award,
   Sparkles,
   ArrowRight,
-  Verified,
-  Crown
+  CheckCircle,
+  Crown,
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react';
 
 import { Header } from '@/components/layout/header';
@@ -45,7 +48,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useFavoritesStore } from '@/stores/favorites.store';
 
 // Types
 interface Listing {
@@ -105,6 +108,9 @@ const SENEGAL_REGIONS = [
 export default function ListingsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  
+  // ✅ STORE FAVORIS
+  const { toggleFavorite, isFavorite } = useFavoritesStore();
 
   // États
   const [listings, setListings] = useState<Listing[]>([]);
@@ -113,7 +119,6 @@ export default function ListingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [showFilters, setShowFilters] = useState(false);
-  const [favorites, setFavorites] = useState<Set<string>>(new Set());
 
   // Filtres et pagination
   const [filters, setFilters] = useState<ListingFilters>({
@@ -124,7 +129,7 @@ export default function ListingsPage() {
     max_price: searchParams.get('max_price') || '',
     sort: searchParams.get('sort') || 'date',
     page: 1,
-    limit: 24 // Augmenté pour plus d'annonces par page
+    limit: 24
   });
 
   const [pagination, setPagination] = useState({
@@ -258,83 +263,16 @@ export default function ListingsPage() {
           pages: data.data.pages || 0,
           currentPage: data.data.page || 1
         });
-      } else {
-        setListings([]);
-        setPagination({ total: 0, pages: 0, currentPage: 1 });
       }
     } catch (error) {
       console.error('❌ Erreur chargement annonces:', error);
       setError('Erreur lors du chargement des annonces');
-      setListings([]);
     } finally {
       setLoading(false);
     }
   };
 
-  // ✅ MISE À JOUR URL AVEC SLUG
-  const updateUrlParams = useCallback((newFilters: Partial<ListingFilters>) => {
-    const params = new URLSearchParams();
-
-    const updatedFilters = { ...filters, ...newFilters };
-
-    if (updatedFilters.search) params.append('search', updatedFilters.search);
-
-    if (updatedFilters.category_id && updatedFilters.category_id !== 'all') {
-      const category = categories.find(cat => cat.id === updatedFilters.category_id);
-      if (category) {
-        params.append('category', category.slug);
-      }
-    }
-
-    if (updatedFilters.region && updatedFilters.region !== 'all') params.append('region', updatedFilters.region);
-    if (updatedFilters.min_price) params.append('min_price', updatedFilters.min_price);
-    if (updatedFilters.max_price) params.append('max_price', updatedFilters.max_price);
-    if (updatedFilters.sort && updatedFilters.sort !== 'date') params.append('sort', updatedFilters.sort);
-
-    const newUrl = params.toString() ? `/listings?${params.toString()}` : '/listings';
-    router.push(newUrl, { scroll: false });
-  }, [filters, categories, router]);
-
-  // Gestionnaires d'événements
-  const handleFilterChange = (key: keyof ListingFilters, value: string | number) => {
-    const newFilters = { ...filters, [key]: value, page: 1 };
-    setFilters(newFilters);
-    updateUrlParams(newFilters);
-  };
-
-  const handlePageChange = (page: number) => {
-    const newFilters = { ...filters, page };
-    setFilters(newFilters);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const clearFilters = () => {
-    const clearedFilters: ListingFilters = {
-      search: '',
-      category_id: 'all',
-      region: 'all',
-      min_price: '',
-      max_price: '',
-      sort: 'date',
-      page: 1,
-      limit: 24
-    };
-    setFilters(clearedFilters);
-    router.push('/listings');
-  };
-
-  const toggleFavorite = (listingId: string) => {
-    setFavorites(prev => {
-      const newFavorites = new Set(prev);
-      if (newFavorites.has(listingId)) {
-        newFavorites.delete(listingId);
-      } else {
-        newFavorites.add(listingId);
-      }
-      return newFavorites;
-    });
-  };
-
+  // Fonctions utilitaires
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('fr-SN', {
       style: 'currency',
@@ -346,705 +284,651 @@ export default function ListingsPage() {
   const formatTimeAgo = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
-    const diff = now.getTime() - date.getTime();
-
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    const minutes = Math.floor(diff / (1000 * 60));
-
-    if (days > 0) return `${days}j`;
-    if (hours > 0) return `${hours}h`;
-    return `${minutes}min`;
+    const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
+    
+    if (diffInHours < 1) return 'À l\'instant';
+    if (diffInHours < 24) return `Il y a ${diffInHours}h`;
+    const diffInDays = Math.floor(diffInHours / 24);
+    if (diffInDays < 7) return `Il y a ${diffInDays}j`;
+    const diffInWeeks = Math.floor(diffInDays / 7);
+    return `Il y a ${diffInWeeks}sem`;
   };
 
-  // ✅ NOM CATÉGORIE ACTUELLE
-  const currentCategoryName = categories.find(cat => cat.id === filters.category_id)?.name;
+  const truncateText = (text: string, maxLength: number) => {
+    return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
+  };
 
-  // ✅ RENDU GRILLE COMPACTE AVEC TAILLE UNIFORME
-  const renderGridView = () => (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
-      {listings.map((listing, index) => {
-        const imageUrl = listing.images && listing.images.length > 0
-          ? getImageUrl(listing.images[0])
-          : null;
+  // ✅ FONCTION FAVORIS CORRIGÉE
+  const handleToggleFavorite = (listing: Listing) => {
+    console.log('🔥 Toggle favori pour:', listing.title);
+    toggleFavorite(listing.id, listing); // ✅ Passer l'objet listing complet
+  };
 
-        return (
-          <motion.div
-            key={listing.id}
-            layout
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: index * 0.05 }}
-            className="group"
-          >
-            <Card className="overflow-hidden hover:shadow-lg transition-all duration-300 cursor-pointer border-0 bg-white/90 backdrop-blur-sm hover:bg-white/95 hover:scale-[1.02] h-full flex flex-col">
+  // Gestion des filtres
+  const handleFilterChange = (key: keyof ListingFilters, value: string) => {
+    setFilters(prev => ({
+      ...prev,
+      [key]: value,
+      page: 1 // Reset page quand on change les filtres
+    }));
+  };
 
-              {/* Image compacte - TAILLE FIXE */}
-              <div
-                className="relative aspect-square bg-gradient-to-br from-blue-100 via-purple-50 to-orange-100 overflow-hidden flex-shrink-0"
-                onClick={() => router.push(`/listings/${listing.id}`)}
-              >
-                {imageUrl ? (
-                  <img
-                    src={imageUrl}
-                    alt={listing.title}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
-                      const fallback = e.currentTarget.nextElementSibling as HTMLElement;
-                      if (fallback) fallback.style.display = 'flex';
-                    }}
-                  />
-                ) : null}
+  const handlePageChange = (page: number) => {
+    setFilters(prev => ({ ...prev, page }));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
-                {/* Fallback compact */}
-                <div
-                  className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200"
-                  style={{ display: imageUrl ? 'none' : 'flex' }}
-                >
-                  <Package className="h-8 w-8 text-slate-400" />
-                </div>
-
-                {/* Badge vedette compact */}
-                {listing.is_featured && (
-                  <div className="absolute top-2 left-2">
-                    <Badge className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white text-xs border-0 px-2 py-1">
-                      <Crown className="h-2 w-2 mr-1" />
-                    </Badge>
-                  </div>
-                )}
-
-                {/* Actions compactes */}
-                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-6 w-6 p-0 bg-white/80 hover:bg-white rounded-full"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleFavorite(listing.id);
-                    }}
-                  >
-                    <Heart
-                      className={`h-3 w-3 ${
-                        favorites.has(listing.id)
-                          ? 'fill-red-500 text-red-500'
-                          : 'text-slate-600'
-                      }`}
-                    />
-                  </Button>
-                </div>
-
-                {/* Stats compactes */}
-                <div className="absolute bottom-2 right-2 bg-black/60 text-white px-2 py-1 rounded text-xs flex items-center gap-1">
-                  <Eye className="h-2 w-2" />
-                  <span>{listing.views_count || 0}</span>
-                </div>
-              </div>
-
-              {/* Contenu compact - HAUTEUR FLEXIBLE AVEC MIN-HEIGHT */}
-              <CardContent className="p-3 flex-1 flex flex-col justify-between min-h-[140px]">
-                
-                <div className="space-y-2 flex-1">
-                  {/* Catégorie compacte */}
-                  {listing.category && (
-                    <Badge variant="secondary" className="text-xs px-2 py-0.5 w-fit">
-                      {listing.category.name}
-                    </Badge>
-                  )}
-
-                  {/* Titre compact - HAUTEUR FIXE */}
-                  <h3
-                    className="font-semibold text-sm text-slate-900 line-clamp-2 group-hover:text-blue-600 transition-colors cursor-pointer leading-tight min-h-[2.5rem] flex items-start"
-                    onClick={() => router.push(`/listings/${listing.id}`)}
-                  >
-                    {listing.title}
-                  </h3>
-
-                  {/* Prix compact */}
-                  <div className="text-lg font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                    {formatPrice(listing.price)}
-                  </div>
-                </div>
-
-                {/* Footer fixe en bas */}
-                <div className="space-y-2 mt-auto">
-                  {/* Localisation compacte */}
-                  <div className="flex items-center justify-between text-xs text-slate-500">
-                    <div className="flex items-center gap-1 flex-1 min-w-0">
-                      <MapPin className="h-3 w-3 flex-shrink-0" />
-                      <span className="truncate">{listing.region}</span>
-                    </div>
-                    <span className="flex-shrink-0 ml-2">{formatTimeAgo(listing.created_at)}</span>
-                  </div>
-
-                  {/* Vendeur compact */}
-                  {listing.user && (
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-slate-600 truncate flex-1">Par {listing.user.first_name}</span>
-                      {listing.user.is_verified && (
-                        <Verified className="h-3 w-3 text-green-600 flex-shrink-0 ml-2" />
-                      )}
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        );
-      })}
-    </div>
-  );
-
-  // ✅ VUE LISTE COMPACTE
-  const renderListView = () => (
-    <div className="space-y-3">
-      {listings.map((listing, index) => {
-        const imageUrl = listing.images && listing.images.length > 0
-          ? getImageUrl(listing.images[0])
-          : null;
-
-        return (
-          <motion.div
-            key={listing.id}
-            layout
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: index * 0.05 }}
-            className="group"
-          >
-            <Card 
-              className="overflow-hidden hover:shadow-lg transition-all duration-300 cursor-pointer border-0 bg-white/90 backdrop-blur-sm hover:bg-white/95"
-              onClick={() => router.push(`/listings/${listing.id}`)}
-            >
-              <CardContent className="p-4">
-                <div className="flex gap-4">
-                  
-                  {/* Image compacte */}
-                  <div className="relative w-20 h-20 rounded-lg overflow-hidden bg-gradient-to-br from-blue-100 to-orange-100 flex-shrink-0">
-                    {imageUrl ? (
-                      <img
-                        src={imageUrl}
-                        alt={listing.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        onError={(e) => {
-                          e.currentTarget.style.display = 'none';
-                          const fallback = e.currentTarget.nextElementSibling as HTMLElement;
-                          if (fallback) fallback.style.display = 'flex';
-                        }}
-                      />
-                    ) : null}
-
-                    <div
-                      className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200"
-                      style={{ display: imageUrl ? 'none' : 'flex' }}
-                    >
-                      <Package className="h-6 w-6 text-slate-400" />
-                    </div>
-
-                    {listing.is_featured && (
-                      <div className="absolute top-1 left-1">
-                        <Crown className="h-3 w-3 text-yellow-500" />
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Contenu principal compact */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between">
-                      
-                      <div className="flex-1 min-w-0 space-y-1">
-                        
-                        {/* Catégorie et titre */}
-                        <div className="space-y-1">
-                          {listing.category && (
-                            <Badge variant="secondary" className="text-xs px-2 py-0.5">
-                              {listing.category.name}
-                            </Badge>
-                          )}
-
-                          <h3 className="font-semibold text-base text-slate-900 line-clamp-1 group-hover:text-blue-600 transition-colors">
-                            {listing.title}
-                          </h3>
-                        </div>
-
-                        {/* Méta-infos compactes */}
-                        <div className="flex items-center gap-4 text-xs text-slate-500">
-                          <div className="flex items-center gap-1">
-                            <MapPin className="h-3 w-3" />
-                            <span>{listing.region}</span>
-                          </div>
-                          
-                          <div className="flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            <span>{formatTimeAgo(listing.created_at)}</span>
-                          </div>
-                          
-                          <div className="flex items-center gap-1">
-                            <Eye className="h-3 w-3" />
-                            <span>{listing.views_count || 0}</span>
-                          </div>
-
-                          {listing.user && (
-                            <div className="flex items-center gap-1">
-                              <User className="h-3 w-3" />
-                              <span>{listing.user.first_name}</span>
-                              {listing.user.is_verified && (
-                                <Verified className="h-3 w-3 text-green-600" />
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Prix et actions */}
-                      <div className="flex flex-col items-end gap-2 ml-4">
-                        
-                        <div className="text-lg font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                          {formatPrice(listing.price)}
-                        </div>
-
-                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-6 w-6 p-0 bg-white/80 hover:bg-white rounded-full"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleFavorite(listing.id);
-                            }}
-                          >
-                            <Heart
-                              className={`h-3 w-3 ${favorites.has(listing.id)
-                                  ? 'fill-red-500 text-red-500'
-                                  : 'text-slate-600'
-                                }`}
-                            />
-                          </Button>
-
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-6 w-6 p-0 bg-white/80 hover:bg-white rounded-full"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigator.share?.({
-                                title: listing.title,
-                                url: `${window.location.origin}/listings/${listing.id}`
-                              });
-                            }}
-                          >
-                            <Share2 className="h-3 w-3 text-slate-600" />
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        );
-      })}
-    </div>
-  );
+  const clearFilters = () => {
+    setFilters({
+      search: '',
+      category_id: 'all',
+      region: 'all',
+      min_price: '',
+      max_price: '',
+      sort: 'date',
+      page: 1,
+      limit: 24
+    });
+  };
 
   return (
     <>
       <Header />
-
-      <main className="min-h-screen bg-gradient-to-br from-slate-50/90 via-blue-50/50 to-purple-50/30">
-
-        {/* Hero Section Compact */}
-        <section className="bg-white/90 backdrop-blur-sm border-b border-white/50 shadow-sm">
-          <div className="container mx-auto px-6 py-4">
-
-            {/* En-tête compact */}
-            <motion.div 
-              className="mb-4"
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4 }}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <h1 className="text-xl font-bold text-slate-900">
-                    {currentCategoryName ? `${currentCategoryName}` : 'Toutes les annonces'}
-                  </h1>
-
-                  {pagination.total > 0 && (
-                    <p className="text-slate-600 text-sm mt-1">
-                      <span className="font-semibold text-blue-600">{pagination.total}</span> annonce{pagination.total > 1 ? 's' : ''} disponibles
-                    </p>
-                  )}
-                </div>
-
-                {/* Toggle vue compact */}
-                <div className="flex bg-white rounded-lg p-0.5 border shadow-sm">
+      
+      <main className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/30">
+        
+        {/* Header avec breadcrumb */}
+        <section className="bg-white/90 backdrop-blur-sm border-b border-white/50 shadow-sm sticky top-16 z-40">
+          <div className="container mx-auto px-6 py-6">
+            
+            {/* Titre et stats */}
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
+              <div>
+                <h1 className="text-3xl md:text-4xl font-bold text-slate-900 mb-2">
+                  Toutes les annonces
+                </h1>
+                <p className="text-slate-600">
+                  {loading ? 'Chargement...' : `${pagination.total} annonce${pagination.total !== 1 ? 's' : ''} disponible${pagination.total !== 1 ? 's' : ''}`}
+                </p>
+              </div>
+              
+              <div className="flex items-center gap-3">
+                {/* Mode d'affichage */}
+                <div className="flex bg-white rounded-xl border border-slate-200 p-1">
                   <Button
-                    variant="ghost"
+                    variant={viewMode === 'grid' ? 'default' : 'ghost'}
                     size="sm"
                     onClick={() => setViewMode('grid')}
-                    className={`h-7 px-3 text-xs transition-all ${
-                      viewMode === 'grid' 
-                        ? 'bg-blue-600 text-white shadow-sm' 
-                        : 'text-slate-600 hover:bg-slate-50'
-                    }`}
+                    className="px-3"
                   >
-                    <Grid className="h-3 w-3 mr-1" />
-                    Grille
+                    <Grid className="h-4 w-4" />
                   </Button>
                   <Button
-                    variant="ghost"
+                    variant={viewMode === 'list' ? 'default' : 'ghost'}
                     size="sm"
                     onClick={() => setViewMode('list')}
-                    className={`h-7 px-3 text-xs transition-all ${
-                      viewMode === 'list' 
-                        ? 'bg-blue-600 text-white shadow-sm' 
-                        : 'text-slate-600 hover:bg-slate-50'
-                    }`}
+                    className="px-3"
                   >
-                    <List className="h-3 w-3 mr-1" />
-                    Liste
+                    <List className="h-4 w-4" />
                   </Button>
                 </div>
+
+                {/* Bouton filtres mobile */}
+                <Button
+                  variant="outline"
+                  onClick={() => setShowFilters(!showFilters)}
+                  className="lg:hidden"
+                >
+                  <Filter className="h-4 w-4 mr-2" />
+                  Filtres
+                </Button>
+
+                {/* Refresh */}
+                <Button
+                  variant="outline"
+                  onClick={fetchListings}
+                  disabled={loading}
+                  size="sm"
+                >
+                  <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                </Button>
               </div>
-            </motion.div>
+            </div>
 
-            {/* Barre de recherche et filtres COMPACT */}
-            <motion.div 
-              className="flex flex-col lg:flex-row gap-3"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.2 }}
-            >
-
-              {/* Recherche compact */}
-              <div className="flex-1">
+            {/* Barre de filtres */}
+            <div className={`grid grid-cols-1 lg:grid-cols-5 gap-4 transition-all duration-300 ${showFilters || window.innerWidth >= 1024 ? 'block' : 'hidden lg:grid'}`}>
+              
+              {/* Recherche */}
+              <div className="lg:col-span-2">
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-slate-400" />
                   <Input
-                    placeholder="Rechercher..."
+                    type="text"
+                    placeholder="Rechercher une annonce..."
                     value={filters.search}
                     onChange={(e) => handleFilterChange('search', e.target.value)}
-                    className="pl-10 h-10 bg-white border-slate-200 rounded-lg focus:ring-1 focus:ring-blue-500/50 transition-all"
+                    className="pl-10 bg-white/90 border-slate-200 focus:border-blue-500"
                   />
-                  {filters.search && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="absolute right-2 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0 hover:bg-slate-100"
-                      onClick={() => handleFilterChange('search', '')}
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
-                  )}
                 </div>
               </div>
 
-              {/* Filtres compact */}
-              <div className="flex flex-wrap gap-2">
-
-                {/* Catégorie compact */}
-                <Select
+              {/* Catégorie */}
+              <div>
+                <select
                   value={filters.category_id}
-                  onValueChange={(value) => handleFilterChange('category_id', value)}
+                  onChange={(e) => handleFilterChange('category_id', e.target.value)}
+                  className="w-full px-3 py-2 bg-white/90 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
-                  <SelectTrigger className="w-44 h-10 bg-white border-slate-200 rounded-lg text-sm">
-                    <SelectValue placeholder="Toutes catégories" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white border-slate-200 shadow-lg">
-                    <SelectItem value="all" className="text-sm">
-                      <div className="flex items-center gap-2">
-                        <Package className="h-3 w-3" />
-                        Toutes catégories
-                      </div>
-                    </SelectItem>
-                    {categories.map(category => {
-                      const IconComponent = getCategoryIcon(category.icon);
-                      return (
-                        <SelectItem key={category.id} value={category.id} className="text-sm">
-                          <div className="flex items-center gap-2">
-                            <IconComponent className="h-3 w-3 text-slate-600" />
-                            <span>{category.name}</span>
-                          </div>
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
+                  <option value="all">Toutes catégories</option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-                {/* Région compact */}
-                <Select
+              {/* Région */}
+              <div>
+                <select
                   value={filters.region}
-                  onValueChange={(value) => handleFilterChange('region', value)}
+                  onChange={(e) => handleFilterChange('region', e.target.value)}
+                  className="w-full px-3 py-2 bg-white/90 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
-                  <SelectTrigger className="w-36 h-10 bg-white border-slate-200 rounded-lg text-sm">
-                    <SelectValue placeholder="Régions" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white border-slate-200 shadow-lg">
-                    <SelectItem value="all" className="text-sm">Tout le Sénégal</SelectItem>
-                    {SENEGAL_REGIONS.map(region => (
-                      <SelectItem key={region} value={region} className="text-sm">{region}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  <option value="all">Toutes régions</option>
+                  {SENEGAL_REGIONS.map((region) => (
+                    <option key={region} value={region}>
+                      {region}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-                {/* Tri compact */}
-                <Select
+              {/* Tri */}
+              <div>
+                <select
                   value={filters.sort}
-                  onValueChange={(value) => handleFilterChange('sort', value)}
+                  onChange={(e) => handleFilterChange('sort', e.target.value)}
+                  className="w-full px-3 py-2 bg-white/90 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
-                  <SelectTrigger className="w-32 h-10 bg-white border-slate-200 rounded-lg text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white border-slate-200 shadow-lg">
-                    <SelectItem value="date" className="text-sm">Plus récent</SelectItem>
-                    <SelectItem value="price_asc" className="text-sm">Prix ↑</SelectItem>
-                    <SelectItem value="price_desc" className="text-sm">Prix ↓</SelectItem>
-                    <SelectItem value="views" className="text-sm">Populaire</SelectItem>
-                  </SelectContent>
-                </Select>
+                  <option value="date">Plus récent</option>
+                  <option value="price_asc">Prix croissant</option>
+                  <option value="price_desc">Prix décroissant</option>
+                  <option value="views">Plus vues</option>
+                </select>
+              </div>
+            </div>
 
-                {/* Bouton filtres avancés compact */}
+            {/* Filtres actifs */}
+            {(filters.search || filters.category_id !== 'all' || filters.region !== 'all' || filters.min_price || filters.max_price) && (
+              <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-slate-200">
+                <span className="text-sm text-slate-600 font-medium">Filtres actifs :</span>
+                
+                {filters.search && (
+                  <Badge variant="secondary" className="flex items-center gap-1">
+                    <Search className="h-3 w-3" />
+                    {filters.search}
+                    <X 
+                      className="h-3 w-3 cursor-pointer hover:text-red-500" 
+                      onClick={() => handleFilterChange('search', '')}
+                    />
+                  </Badge>
+                )}
+                
+                {filters.category_id !== 'all' && (
+                  <Badge variant="secondary" className="flex items-center gap-1">
+                    <Package className="h-3 w-3" />
+                    {categories.find(c => c.id === filters.category_id)?.name}
+                    <X 
+                      className="h-3 w-3 cursor-pointer hover:text-red-500" 
+                      onClick={() => handleFilterChange('category_id', 'all')}
+                    />
+                  </Badge>
+                )}
+                
+                {filters.region !== 'all' && (
+                  <Badge variant="secondary" className="flex items-center gap-1">
+                    <MapPin className="h-3 w-3" />
+                    {filters.region}
+                    <X 
+                      className="h-3 w-3 cursor-pointer hover:text-red-500" 
+                      onClick={() => handleFilterChange('region', 'all')}
+                    />
+                  </Badge>
+                )}
+
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
-                  onClick={() => setShowFilters(!showFilters)}
-                  className="h-10 px-3 bg-white border-slate-200 rounded-lg hover:bg-slate-50 text-sm"
+                  onClick={clearFilters}
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
                 >
-                  <SlidersHorizontal className="h-4 w-4 mr-1" />
-                  Plus
-                  <ChevronDown className={`h-3 w-3 ml-1 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+                  Tout effacer
                 </Button>
               </div>
-            </motion.div>
-
-            {/* Filtres avancés compact */}
-            <AnimatePresence>
-              {showFilters && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-200"
-                >
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-
-                    <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">
-                        Prix min (FCFA)
-                      </label>
-                      <Input
-                        type="number"
-                        placeholder="0"
-                        value={filters.min_price}
-                        onChange={(e) => handleFilterChange('min_price', e.target.value)}
-                        className="h-9 text-sm"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">
-                        Prix max (FCFA)
-                      </label>
-                      <Input
-                        type="number"
-                        placeholder="10000000"
-                        value={filters.max_price}
-                        onChange={(e) => handleFilterChange('max_price', e.target.value)}
-                        className="h-9 text-sm"
-                      />
-                    </div>
-
-                    <div className="md:col-span-2 flex gap-2">
-                      <Button 
-                        onClick={clearFilters} 
-                        variant="outline" 
-                        size="sm"
-                        className="flex-1 h-9 text-sm"
-                      >
-                        <X className="h-3 w-3 mr-1" />
-                        Effacer
-                      </Button>
-                      <Button 
-                        onClick={() => setShowFilters(false)} 
-                        size="sm"
-                        className="flex-1 h-9 bg-blue-600 text-white text-sm"
-                      >
-                        Appliquer
-                      </Button>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            )}
           </div>
         </section>
 
         {/* Contenu principal */}
-        <section className="container mx-auto px-6 py-6">
+        <div className="container mx-auto px-6 py-8">
+          
+          {/* Loading state */}
+          {loading && (
+            <div className="flex justify-center items-center py-20">
+              <div className="text-center">
+                <Loader2 className="h-12 w-12 animate-spin mx-auto mb-4 text-blue-600" />
+                <p className="text-slate-600">Chargement des annonces...</p>
+              </div>
+            </div>
+          )}
 
-          {loading ? (
-            <motion.div 
-              className="flex flex-col items-center justify-center py-20"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-            >
-              <div className="relative">
-                <div className="w-16 h-16 bg-gradient-to-r from-blue-600 to-purple-600 rounded-full flex items-center justify-center mb-6">
-                  <Loader2 className="h-8 w-8 animate-spin text-white" />
+          {/* Error state */}
+          {error && (
+            <div className="text-center py-20">
+              <div className="bg-red-50 border border-red-200 rounded-2xl p-8 max-w-md mx-auto">
+                <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-red-800 mb-2">Erreur de chargement</h3>
+                <p className="text-red-600 mb-4">{error}</p>
+                <Button onClick={fetchListings} className="bg-red-600 hover:bg-red-700 text-white">
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Réessayer
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Empty state */}
+          {!loading && !error && listings.length === 0 && (
+            <div className="text-center py-20">
+              <div className="bg-white/80 backdrop-blur-sm rounded-3xl p-12 shadow-lg border border-white/50 max-w-2xl mx-auto">
+                <Package className="h-16 w-16 text-slate-400 mx-auto mb-6" />
+                <h3 className="text-2xl font-bold text-slate-900 mb-4">
+                  Aucune annonce trouvée
+                </h3>
+                <p className="text-slate-600 mb-8">
+                  Aucune annonce ne correspond à vos critères de recherche.
+                  Essayez de modifier vos filtres ou de rechercher autre chose.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                  <Button onClick={clearFilters} variant="outline">
+                    <X className="h-4 w-4 mr-2" />
+                    Effacer les filtres
+                  </Button>
+                  <Link href="/sell">
+                    <Button className="bg-blue-600 hover:bg-blue-700 text-white">
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      Publier une annonce
+                    </Button>
+                  </Link>
                 </div>
-                <div className="absolute inset-0 w-16 h-16 bg-gradient-to-r from-blue-600 to-purple-600 rounded-full animate-ping opacity-20"></div>
               </div>
-              <span className="text-slate-700 text-lg font-medium">Chargement des annonces...</span>
-            </motion.div>
-          ) : error ? (
-            <motion.div 
-              className="text-center py-20"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-            >
-              <div className="w-20 h-20 bg-gradient-to-br from-red-500 to-orange-600 rounded-full flex items-center justify-center mx-auto mb-6">
-                <Package className="h-10 w-10 text-white" />
-              </div>
-              <h3 className="text-2xl font-bold text-slate-900 mb-3">Oups ! Une erreur s'est produite</h3>
-              <p className="text-slate-600 mb-8 text-lg">{error}</p>
-              <Button 
-                onClick={fetchListings}
-                className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-3 rounded-xl shadow-lg hover:shadow-xl"
-              >
-                <ArrowRight className="h-4 w-4 mr-2" />
-                Réessayer le chargement
-              </Button>
-            </motion.div>
-          ) : listings.length === 0 ? (
-            <motion.div 
-              className="text-center py-20"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-            >
-              <div className="w-24 h-24 bg-gradient-to-br from-slate-400 to-slate-600 rounded-full flex items-center justify-center mx-auto mb-8">
-                <Search className="h-12 w-12 text-white" />
-              </div>
-              <h3 className="text-3xl font-bold text-slate-900 mb-4">Aucune annonce trouvée</h3>
-              <p className="text-slate-600 mb-8 text-lg max-w-md mx-auto">
-                Essayez de modifier vos critères de recherche ou explorez d'autres catégories.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Button 
-                  onClick={clearFilters} 
-                  variant="outline"
-                  className="bg-white/80 border-white/50 shadow-lg rounded-xl px-8 py-3"
+            </div>
+          )}
+
+          {/* Listings grid/list */}
+          {!loading && !error && listings.length > 0 && (
+            <AnimatePresence mode="wait">
+              
+              {/* Mode grille */}
+              {viewMode === 'grid' && (
+                <motion.div
+                  key="grid"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
                 >
-                  <X className="h-4 w-4 mr-2" />
-                  Effacer les filtres
-                </Button>
-                <Button 
-                  onClick={() => router.push('/sell')}
-                  className="bg-gradient-to-r from-green-600 to-emerald-600 text-white px-8 py-3 rounded-xl shadow-lg hover:shadow-xl"
-                >
-                  <Zap className="h-4 w-4 mr-2" />
-                  Publier une annonce
-                </Button>
-              </div>
-            </motion.div>
-          ) : (
-            <>
-              {/* Rendu conditionnel selon le mode d'affichage */}
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.6 }}
-              >
-                {viewMode === 'grid' ? renderGridView() : renderListView()}
-              </motion.div>
+                  {listings.map((listing, index) => (
+                    <motion.div
+                      key={listing.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.05 }}
+                    >
+                      <Card className="group bg-white/90 backdrop-blur-sm border-white/50 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 overflow-hidden h-full flex flex-col">
+                        
+                        {/* Image */}
+                        <div className="relative aspect-[4/3] overflow-hidden">
+                          <Link href={`/listings/${listing.id}`}>
+                            <img
+                              src={getImageUrl(listing.images?.[0]) || '/placeholder-image.jpg'}
+                              alt={listing.title}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                            />
+                          </Link>
+                          
+                          {/* Actions overlay */}
+                          <div className="absolute top-3 right-3 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button
+                              size="icon"
+                              variant="secondary"
+                              className={`bg-white/95 hover:bg-white shadow-lg ${
+                                isFavorite(listing.id) ? 'text-red-500' : 'text-slate-600'
+                              }`}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleToggleFavorite(listing); // ✅ CORRIGÉ
+                              }}
+                            >
+                              <Heart className={`h-4 w-4 ${isFavorite(listing.id) ? 'fill-current' : ''}`} />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="secondary"
+                              className="bg-white/95 hover:bg-white shadow-lg text-slate-600"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                if (navigator.share) {
+                                  navigator.share({
+                                    title: listing.title,
+                                    url: `${window.location.origin}/listings/${listing.id}`
+                                  });
+                                }
+                              }}
+                            >
+                              <Share2 className="h-4 w-4" />
+                            </Button>
+                          </div>
 
-              {/* Pagination compact */}
-              {pagination.pages > 1 && (
-                <motion.div 
-                  className="flex items-center justify-center gap-2 mt-12"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.6, delay: 0.3 }}
-                >
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={pagination.currentPage <= 1}
-                    onClick={() => handlePageChange(pagination.currentPage - 1)}
-                    className="bg-white/80 backdrop-blur-sm border-white/50 shadow-lg rounded-lg px-4 py-2 disabled:opacity-50"
-                  >
-                    <ArrowRight className="h-3 w-3 mr-1 rotate-180" />
-                    Précédent
-                  </Button>
+                          {/* Badges */}
+                          <div className="absolute bottom-3 left-3 flex gap-2">
+                            <Badge className="bg-black/70 text-white border-0">
+                              <Eye className="h-3 w-3 mr-1" />
+                              {listing.views_count || 0}
+                            </Badge>
+                            {listing.is_featured && (
+                              <Badge className="bg-gradient-to-r from-yellow-500 to-orange-500 text-white border-0">
+                                <Star className="h-3 w-3 mr-1 fill-current" />
+                                Premium
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
 
-                  <div className="flex gap-1">
-                    {Array.from({ length: Math.min(pagination.pages, 5) }, (_, i) => {
-                      const page = pagination.currentPage <= 3
-                        ? i + 1
-                        : pagination.currentPage - 2 + i;
+                        {/* Contenu */}
+                        <CardContent className="p-4 flex-1 flex flex-col">
+                          <div className="space-y-3 flex-1">
+                            
+                            {/* Titre et prix */}
+                            <div>
+                              <Link href={`/listings/${listing.id}`}>
+                                <h3 className="font-bold text-slate-900 text-lg leading-tight hover:text-blue-600 transition-colors">
+                                  {truncateText(listing.title, 60)}
+                                </h3>
+                              </Link>
+                              <div className="text-2xl font-bold text-blue-600 mt-1">
+                                {formatPrice(listing.price)}
+                              </div>
+                            </div>
 
-                      if (page > pagination.pages) return null;
+                            {/* Description */}
+                            <p className="text-slate-600 text-sm leading-relaxed">
+                              {truncateText(listing.description, 80)}
+                            </p>
 
-                      return (
-                        <Button
-                          key={page}
-                          variant={page === pagination.currentPage ? 'default' : 'outline'}
-                          size="sm"
-                          onClick={() => handlePageChange(page)}
-                          className={`w-8 h-8 rounded-lg text-sm ${
-                            page === pagination.currentPage
-                              ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg'
-                              : 'bg-white/80 border-white/50 text-slate-700 shadow-lg hover:bg-white/90'
-                          }`}
-                        >
-                          {page}
-                        </Button>
-                      );
-                    })}
-                  </div>
+                            {/* Localisation et catégorie */}
+                            <div className="flex items-center justify-between text-sm text-slate-500">
+                              <div className="flex items-center gap-1">
+                                <MapPin className="h-4 w-4" />
+                                <span>{listing.region}</span>
+                              </div>
+                              {listing.category && (
+                                <div className="flex items-center gap-1">
+                                  {React.createElement(getCategoryIcon(listing.category.icon), { className: "h-4 w-4" })}
+                                  <span>{listing.category.name}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
 
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={pagination.currentPage >= pagination.pages}
-                    onClick={() => handlePageChange(pagination.currentPage + 1)}
-                    className="bg-white/80 backdrop-blur-sm border-white/50 shadow-lg rounded-lg px-4 py-2 disabled:opacity-50"
-                  >
-                    Suivant
-                    <ArrowRight className="h-3 w-3 ml-1" />
-                  </Button>
+                          {/* Footer */}
+                          <div className="flex items-center justify-between text-sm text-slate-500 pt-3 mt-3 border-t border-slate-100">
+                            <div className="flex items-center gap-1">
+                              <User className="h-4 w-4" />
+                              <span>
+                                {listing.user?.first_name} {listing.user?.last_name}
+                                {listing.user?.is_verified && (
+                                  <CheckCircle className="h-3 w-3 text-green-500 inline ml-1" />
+                                )}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Clock className="h-4 w-4" />
+                              <span>{formatTimeAgo(listing.created_at)}</span>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  ))}
                 </motion.div>
               )}
 
-              {/* Statistiques en bas compact */}
-              <motion.div 
-                className="text-center mt-8 p-4 bg-white/60 backdrop-blur-sm rounded-xl border border-white/50 shadow-lg"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.6, delay: 0.4 }}
-              >
-                <div className="flex items-center justify-center gap-6 text-sm text-slate-600">
+              {/* Mode liste */}
+              {viewMode === 'list' && (
+                <motion.div
+                  key="list"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="space-y-4"
+                >
+                  {listings.map((listing, index) => (
+                    <motion.div
+                      key={listing.id}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.02 }}
+                    >
+                      <Card className="group bg-white/90 backdrop-blur-sm border-white/50 shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden">
+                        <CardContent className="p-6">
+                          <div className="flex gap-6">
+                            
+                            {/* Image */}
+                            <div className="flex-shrink-0 w-32 h-24 rounded-lg overflow-hidden">
+                              <Link href={`/listings/${listing.id}`}>
+                                <img
+                                  src={getImageUrl(listing.images?.[0]) || '/placeholder-image.jpg'}
+                                  alt={listing.title}
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                />
+                              </Link>
+                            </div>
+
+                            {/* Contenu */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex justify-between items-start mb-2">
+                                <div className="flex-1 min-w-0 mr-4">
+                                  <Link href={`/listings/${listing.id}`}>
+                                    <h3 className="font-bold text-xl text-slate-900 hover:text-blue-600 transition-colors mb-1">
+                                      {listing.title}
+                                    </h3>
+                                  </Link>
+                                  <p className="text-slate-600 text-sm leading-relaxed">
+                                    {truncateText(listing.description, 120)}
+                                  </p>
+                                </div>
+                                <div className="text-right">
+                                  <div className="text-2xl font-bold text-blue-600 mb-2">
+                                    {formatPrice(listing.price)}
+                                  </div>
+                                  <div className="flex gap-1">
+                                    <Button
+                                      size="icon"
+                                      variant="outline"
+                                      className={`h-8 w-8 ${
+                                        isFavorite(listing.id) 
+                                          ? 'text-red-500 border-red-200 bg-red-50' 
+                                          : 'text-slate-600'
+                                      }`}
+                                      onClick={() => handleToggleFavorite(listing)}
+                                    >
+                                      <Heart className={`h-4 w-4 ${isFavorite(listing.id) ? 'fill-current' : ''}`} />
+                                    </Button>
+                                    <Button
+                                      size="icon"
+                                      variant="outline"
+                                      className="h-8 w-8"
+                                      onClick={() => {
+                                        if (navigator.share) {
+                                          navigator.share({
+                                            title: listing.title,
+                                            url: `${window.location.origin}/listings/${listing.id}`
+                                          });
+                                        }
+                                      }}
+                                    >
+                                      <Share2 className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Métadonnées */}
+                              <div className="flex flex-wrap items-center gap-4 text-sm text-slate-500">
+                                <div className="flex items-center gap-1">
+                                  <MapPin className="h-4 w-4" />
+                                  <span>{listing.region}</span>
+                                </div>
+                                {listing.category && (
+                                  <div className="flex items-center gap-1">
+                                    {React.createElement(getCategoryIcon(listing.category.icon), { className: "h-4 w-4" })}
+                                    <span>{listing.category.name}</span>
+                                  </div>
+                                )}
+                                <div className="flex items-center gap-1">
+                                  <User className="h-4 w-4" />
+                                  <span>
+                                    {listing.user?.first_name} {listing.user?.last_name}
+                                    {listing.user?.is_verified && (
+                                      <CheckCircle className="h-3 w-3 text-green-500 inline ml-1" />
+                                    )}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Clock className="h-4 w-4" />
+                                  <span>{formatTimeAgo(listing.created_at)}</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Eye className="h-4 w-4" />
+                                  <span>{listing.views_count || 0} vues</span>
+                                </div>
+                                {listing.is_featured && (
+                                  <Badge className="bg-gradient-to-r from-yellow-500 to-orange-500 text-white border-0">
+                                    <Star className="h-3 w-3 mr-1 fill-current" />
+                                    Premium
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          )}
+
+          {/* Pagination */}
+          {!loading && !error && listings.length > 0 && pagination.pages > 1 && (
+            <motion.div 
+              className="flex justify-center mt-12"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+            >
+              <div className="flex items-center gap-2 bg-white/80 backdrop-blur-sm rounded-2xl p-2 shadow-lg border border-white/50">
+                
+                {/* Page précédente */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handlePageChange(pagination.currentPage - 1)}
+                  disabled={pagination.currentPage === 1}
+                  className="px-3"
+                >
+                  <ChevronDown className="h-4 w-4 rotate-90" />
+                  Précédent
+                </Button>
+
+                {/* Numéros de pages */}
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: Math.min(pagination.pages, 5) }, (_, i) => {
+                    let pageNum;
+                    if (pagination.pages <= 5) {
+                      pageNum = i + 1;
+                    } else {
+                      if (pagination.currentPage <= 3) {
+                        pageNum = i + 1;
+                      } else if (pagination.currentPage >= pagination.pages - 2) {
+                        pageNum = pagination.pages - 4 + i;
+                      } else {
+                        pageNum = pagination.currentPage - 2 + i;
+                      }
+                    }
+
+                    return (
+                      <Button
+                        key={pageNum}
+                        variant={pageNum === pagination.currentPage ? 'default' : 'ghost'}
+                        size="sm"
+                        onClick={() => handlePageChange(pageNum)}
+                        className="w-8 h-8 p-0"
+                      >
+                        {pageNum}
+                      </Button>
+                    );
+                  })}
+                </div>
+
+                {/* Page suivante */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handlePageChange(pagination.currentPage + 1)}
+                  disabled={pagination.currentPage === pagination.pages}
+                  className="px-3"
+                >
+                  Suivant
+                  <ChevronDown className="h-4 w-4 -rotate-90" />
+                </Button>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Stats en bas */}
+          {!loading && !error && listings.length > 0 && (
+            <motion.div 
+              className="text-center mt-8"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.5 }}
+            >
+              <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 shadow-lg border border-white/50 inline-block">
+                <div className="flex items-center gap-6 text-sm text-slate-600">
                   <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                    <Package className="h-4 w-4 text-blue-500" />
                     <span>
-                      Affichage de <span className="font-bold">{((pagination.currentPage - 1) * filters.limit) + 1}</span> à{' '}
-                      <span className="font-bold">{Math.min(pagination.currentPage * filters.limit, pagination.total)}</span>
+                      Affichage de <strong>{(pagination.currentPage - 1) * filters.limit + 1}</strong> à{' '}
+                      <strong>{Math.min(pagination.currentPage * filters.limit, pagination.total)}</strong> sur{' '}
+                      <strong>{pagination.total}</strong> annonces
                     </span>
                   </div>
+                  <div className="w-px h-4 bg-slate-300"></div>
                   <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                    <span>
-                      sur <span className="font-bold text-green-600">{pagination.total}</span> annonce{pagination.total > 1 ? 's' : ''}
-                    </span>
+                    <TrendingUp className="h-4 w-4 text-green-500" />
+                    <span>Page <strong>{pagination.currentPage}</strong> sur <strong>{pagination.pages}</strong></span>
                   </div>
                 </div>
-              </motion.div>
-            </>
+              </div>
+            </motion.div>
           )}
-        </section>
+        </div>
       </main>
 
       <Footer />

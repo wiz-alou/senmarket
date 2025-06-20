@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
+import { useFavoritesStore } from '@/stores/favorites.store' // ✅ IMPORT STORE FAVORIS
 import { 
   Star, 
   MapPin, 
@@ -69,7 +70,9 @@ export function FeaturedListings() {
   const [listings, setListings] = useState<Listing[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [favorites, setFavorites] = useState<Set<string>>(new Set())
+  
+  // ✅ STORE FAVORIS
+  const { toggleFavorite, isFavorite } = useFavoritesStore()
 
   // ✅ FONCTION HELPER POUR LES IMAGES
   const getImageUrl = (imagePath: string) => {
@@ -159,16 +162,10 @@ export function FeaturedListings() {
     return `${days}j`
   }
 
-  const handleFavorite = (listingId: string) => {
-    setFavorites(prev => {
-      const newFavorites = new Set(prev)
-      if (newFavorites.has(listingId)) {
-        newFavorites.delete(listingId)
-      } else {
-        newFavorites.add(listingId)
-      }
-      return newFavorites
-    })
+  // ✅ FONCTION FAVORIS CORRIGÉE
+  const handleFavorite = (listing: Listing) => {
+    console.log('🔥 Featured toggle favori pour:', listing.title)
+    toggleFavorite(listing.id, listing) // ✅ Passer l'objet listing complet
   }
 
   const handleShare = (listing: Listing) => {
@@ -319,13 +316,11 @@ export function FeaturedListings() {
         </motion.div>
 
         {/* 🎯 GRILLE UNIFORME - HAUTEUR FIXE */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-16">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-16">
           {listings.map((listing, index) => {
             const imageUrl = listing.images && listing.images.length > 0 
               ? getImageUrl(listing.images[0]) 
               : null
-
-            const isFavorite = favorites.has(listing.id)
 
             return (
               <motion.div
@@ -394,21 +389,21 @@ export function FeaturedListings() {
                       </Badge>
                     </div>
                     
-                    {/* Actions overlay premium */}
+                    {/* ✅ ACTIONS OVERLAY CORRIGÉES */}
                     <div className="absolute top-4 right-4 flex flex-col space-y-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                       <Button 
                         size="icon" 
                         variant="secondary" 
                         className={`bg-white/95 hover:bg-white shadow-lg transition-colors ${
-                          isFavorite ? 'text-red-500' : 'text-slate-600'
+                          isFavorite(listing.id) ? 'text-red-500' : 'text-slate-600'
                         }`}
                         onClick={(e) => {
                           e.preventDefault()
                           e.stopPropagation()
-                          handleFavorite(listing.id)
+                          handleFavorite(listing) // ✅ CORRIGÉ - Passer l'objet complet
                         }}
                       >
-                        <Heart className={`h-4 w-4 ${isFavorite ? 'fill-current' : ''}`} />
+                        <Heart className={`h-4 w-4 ${isFavorite(listing.id) ? 'fill-current' : ''}`} />
                       </Button>
                       <Button 
                         size="icon" 
@@ -445,13 +440,15 @@ export function FeaturedListings() {
                       
                       {/* Titre et prix - TAILLE CONTRÔLÉE RÉDUITE */}
                       <div className="space-y-2">
-                        <h3 className="font-bold text-slate-900 text-base leading-tight h-[2.5rem] overflow-hidden">
-                          {/* 🎯 TITRE TRONQUÉ À 2 LIGNES MAX */}
-                          {truncateText(listing.title, 50)}
-                        </h3>
+                        <Link href={`/listings/${listing.id}`}>
+                          <h3 className="font-bold text-slate-900 text-base leading-tight h-[2.5rem] overflow-hidden hover:text-blue-600 transition-colors cursor-pointer">
+                            {/* 🎯 TITRE TRONQUÉ À 2 LIGNES MAX */}
+                            {truncateText(listing.title, 50)}
+                          </h3>
+                        </Link>
                         
                         <div className="flex items-center justify-between">
-                          <div className="text-xl font-bold text-slate-900">
+                          <div className="text-xl font-bold text-blue-600">
                             {formatPrice(listing.price)}
                           </div>
                           <Badge variant="outline" className="text-xs font-medium border-green-200 text-green-700 bg-green-50">
@@ -603,7 +600,6 @@ export function FeaturedListings() {
                 Publier mon annonce
               </Button>
             </div>
-
             {/* Trust indicators */}
             <div className="flex items-center justify-center space-x-6 mt-8 text-sm text-slate-500">
               <div className="flex items-center space-x-1">
