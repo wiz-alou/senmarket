@@ -50,7 +50,7 @@ import { Separator } from '@/components/ui/separator'
 import { Progress } from '@/components/ui/progress'
 
 // ✅ Utiliser le store auth
-import { useAuthStore } from '@/stores/authStore'
+import { useAuthStore } from '@/stores/auth.store'
 
 // Types basés sur votre API
 interface DashboardStats {

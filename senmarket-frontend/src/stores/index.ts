@@ -3,6 +3,7 @@ export { useFavoritesStore } from './favorites.store';
 export { useAppStore } from './app.store';
 export { useListingsStore } from './listings.store';
 
+
 // Hook personnalisé pour les notifications
 export const useNotifications = () => {
   const { addNotification, removeNotification, clearNotifications, notifications } = useAppStore();

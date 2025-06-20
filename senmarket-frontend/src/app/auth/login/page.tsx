@@ -10,7 +10,7 @@ import { Footer } from '@/components/layout/footer';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { useAuthStore } from '@/stores/authStore'; // ✅ Utiliser le store
+import { useAuthStore } from '@/stores/auth.store'; // ✅ Utiliser le store
 import { 
   Eye,
   EyeOff,

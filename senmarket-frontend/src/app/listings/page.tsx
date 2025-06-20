@@ -109,8 +109,8 @@ export default function ListingsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
-  // ✅ STORE FAVORIS
-  const { toggleFavorite, isFavorite } = useFavoritesStore();
+  // ✅ STORE FAVORIS AVEC FONCTIONS CORRECTES
+  const { addFavorite, removeFavorite, isFavorite } = useFavoritesStore();
 
   // États
   const [listings, setListings] = useState<Listing[]>([]);
@@ -298,10 +298,32 @@ export default function ListingsPage() {
     return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
   };
 
-  // ✅ FONCTION FAVORIS CORRIGÉE
+  // ✅ FONCTION FAVORIS CORRIGÉE AVEC TOGGLE MANUEL
   const handleToggleFavorite = (listing: Listing) => {
     console.log('🔥 Toggle favori pour:', listing.title);
-    toggleFavorite(listing.id, listing); // ✅ Passer l'objet listing complet
+    
+    if (isFavorite(listing.id)) {
+      // Déjà en favori → Retirer
+      console.log('💔 Retrait du favori');
+      removeFavorite(listing.id);
+    } else {
+      // Pas en favori → Ajouter
+      console.log('❤️ Ajout au favori');
+      addFavorite(listing.id, {
+        id: listing.id,
+        title: listing.title,
+        price: listing.price,
+        currency: listing.currency,
+        images: listing.images,
+        region: listing.region,
+        addedAt: new Date().toISOString(),
+        category: listing.category,
+        user: listing.user ? {
+          first_name: listing.user.first_name,
+          last_name: listing.user.last_name
+        } : undefined
+      });
+    }
   };
 
   // Gestion des filtres
@@ -396,7 +418,7 @@ export default function ListingsPage() {
             </div>
 
             {/* Barre de filtres */}
-            <div className={`grid grid-cols-1 lg:grid-cols-5 gap-4 transition-all duration-300 ${showFilters || window.innerWidth >= 1024 ? 'block' : 'hidden lg:grid'}`}>
+            <div className={`grid grid-cols-1 lg:grid-cols-5 gap-4 transition-all duration-300 ${showFilters || (typeof window !== 'undefined' && window.innerWidth >= 1024) ? 'block' : 'hidden lg:grid'}`}>
               
               {/* Recherche */}
               <div className="lg:col-span-2">
@@ -598,7 +620,7 @@ export default function ListingsPage() {
                             />
                           </Link>
                           
-                          {/* Actions overlay */}
+                          {/* ✅ ACTIONS OVERLAY CORRIGÉES */}
                           <div className="absolute top-3 right-3 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                             <Button
                               size="icon"
@@ -609,7 +631,7 @@ export default function ListingsPage() {
                               onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                handleToggleFavorite(listing); // ✅ CORRIGÉ
+                                handleToggleFavorite(listing); // ✅ FONCTION CORRIGÉE
                               }}
                             >
                               <Heart className={`h-4 w-4 ${isFavorite(listing.id) ? 'fill-current' : ''}`} />

@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
-import { useFavoritesStore } from '@/stores/favorites.store' // ✅ IMPORT STORE FAVORIS
+import { useFavoritesStore } from '@/stores/favorites.store'
 import { 
   Star, 
   MapPin, 
@@ -71,8 +71,8 @@ export function FeaturedListings() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   
-  // ✅ STORE FAVORIS
-  const { toggleFavorite, isFavorite } = useFavoritesStore()
+  // ✅ STORE FAVORIS AVEC FONCTIONS CORRECTES
+  const { addFavorite, removeFavorite, isFavorite } = useFavoritesStore()
 
   // ✅ FONCTION HELPER POUR LES IMAGES
   const getImageUrl = (imagePath: string) => {
@@ -162,10 +162,32 @@ export function FeaturedListings() {
     return `${days}j`
   }
 
-  // ✅ FONCTION FAVORIS CORRIGÉE
+  // ✅ FONCTION FAVORIS CORRIGÉE AVEC TOGGLE MANUEL
   const handleFavorite = (listing: Listing) => {
     console.log('🔥 Featured toggle favori pour:', listing.title)
-    toggleFavorite(listing.id, listing) // ✅ Passer l'objet listing complet
+    
+    if (isFavorite(listing.id)) {
+      // Déjà en favori → Retirer
+      console.log('💔 Retrait du favori')
+      removeFavorite(listing.id)
+    } else {
+      // Pas en favori → Ajouter
+      console.log('❤️ Ajout au favori')
+      addFavorite(listing.id, {
+        id: listing.id,
+        title: listing.title,
+        price: listing.price,
+        currency: listing.currency,
+        images: listing.images,
+        region: listing.region,
+        addedAt: new Date().toISOString(),
+        category: listing.category,
+        user: {
+          first_name: listing.user.first_name,
+          last_name: listing.user.last_name
+        }
+      })
+    }
   }
 
   const handleShare = (listing: Listing) => {
@@ -400,7 +422,7 @@ export function FeaturedListings() {
                         onClick={(e) => {
                           e.preventDefault()
                           e.stopPropagation()
-                          handleFavorite(listing) // ✅ CORRIGÉ - Passer l'objet complet
+                          handleFavorite(listing) // ✅ FONCTION CORRIGÉE
                         }}
                       >
                         <Heart className={`h-4 w-4 ${isFavorite(listing.id) ? 'fill-current' : ''}`} />

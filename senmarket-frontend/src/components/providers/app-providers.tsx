@@ -1,3 +1,6 @@
+// 🔧 APP PROVIDERS CORRIGÉ
+// src/components/providers/app-providers.tsx
+
 'use client'
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -5,7 +8,7 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { ThemeProvider } from 'next-themes'
 import { ToastProvider } from './toast-provider'
 import { useState, useEffect } from 'react'
-import { useAuthStore } from '@/stores'
+import { useAuthStore } from '@/stores/auth.store' // ✅ Import du bon store
 
 interface AppProvidersProps {
   children: React.ReactNode
@@ -36,10 +39,12 @@ export function AppProviders({ children }: AppProvidersProps) {
       })
   )
 
+  // ✅ RÉCUPÉRER LA FONCTION CORRECTE
   const { loadUserFromStorage } = useAuthStore()
 
-  // Charger l'utilisateur depuis le localStorage au démarrage
+  // ✅ CHARGER L'UTILISATEUR AU DÉMARRAGE
   useEffect(() => {
+    console.log('🚀 App Providers - Initialisation auth...')
     loadUserFromStorage()
   }, [loadUserFromStorage])
 

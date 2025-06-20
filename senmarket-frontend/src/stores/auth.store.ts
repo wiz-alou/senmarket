@@ -1,7 +1,6 @@
-// 🔧 MISE À JOUR AUTH STORE POUR GÉRER LES FAVORIS
+// 🔧 AUTH STORE AVEC HYDRATATION AMÉLIORÉE
 // src/stores/auth.store.ts
 
-import React from 'react';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
@@ -23,6 +22,7 @@ interface AuthState {
   user: User | null;
   token: string | null;
   isAuthenticated: boolean;
+  isHydrated: boolean; // ✅ NOUVEL ÉTAT
 }
 
 interface AuthActions {
@@ -32,6 +32,9 @@ interface AuthActions {
   register: (userData: any) => Promise<void>;
   logout: () => void;
   clearAuth: () => void;
+  loadUserFromStorage: () => void;
+  initializeAuth: () => void;
+  setHydrated: (hydrated: boolean) => void; // ✅ NOUVELLE ACTION
 }
 
 export const useAuthStore = create<AuthState & AuthActions>()(
@@ -41,6 +44,39 @@ export const useAuthStore = create<AuthState & AuthActions>()(
       user: null,
       token: null,
       isAuthenticated: false,
+      isHydrated: false, // ✅ NOUVEL ÉTAT
+
+      // ✅ NOUVELLE ACTION
+      setHydrated: (hydrated) => {
+        set({ isHydrated: hydrated });
+      },
+
+      // ✅ FONCTION POUR CHARGER L'UTILISATEUR DU LOCALSTORAGE
+      loadUserFromStorage: () => {
+        const state = get();
+        console.log('🔄 Chargement utilisateur depuis localStorage...', {
+          user: state.user?.first_name,
+          token: !!state.token,
+          isAuthenticated: state.isAuthenticated
+        });
+
+        // Marquer comme hydraté
+        set({ isHydrated: true });
+
+        // Si on a un utilisateur et un token, initialiser les favoris
+        if (state.user && state.token && typeof window !== 'undefined') {
+          import('./favorites.store').then(({ useFavoritesStore }) => {
+            const setCurrentUser = useFavoritesStore.getState().setCurrentUser;
+            setCurrentUser(state.user!.id);
+            console.log('✅ Favoris initialisés pour:', state.user!.first_name);
+          });
+        }
+      },
+
+      // ✅ ALIAS POUR COMPATIBILITÉ
+      initializeAuth: () => {
+        get().loadUserFromStorage();
+      },
 
       // Actions
       setUser: (user) => {
@@ -48,10 +84,10 @@ export const useAuthStore = create<AuthState & AuthActions>()(
         
         // ✅ INITIALISER LES FAVORIS POUR CE USER
         if (typeof window !== 'undefined') {
-          // Import dynamique pour éviter les erreurs SSR
           import('./favorites.store').then(({ useFavoritesStore }) => {
             const setCurrentUser = useFavoritesStore.getState().setCurrentUser;
             setCurrentUser(user.id);
+            console.log('✅ Favoris configurés pour:', user.first_name);
           });
         }
       },
@@ -172,22 +208,28 @@ export const useAuthStore = create<AuthState & AuthActions>()(
     }),
     {
       name: 'senmarket-auth',
+      // ✅ FONCTION APPELÉE APRÈS HYDRATATION DU STORE
+      onRehydrateStorage: () => (state) => {
+        console.log('🔄 Store auth hydraté');
+        
+        if (state) {
+          // Marquer comme hydraté
+          state.setHydrated(true);
+          
+          if (state.user) {
+            console.log('🔄 Store hydraté, initialisation favoris pour:', state.user.first_name);
+            // Petite delay pour s'assurer que le DOM est prêt
+            setTimeout(() => {
+              if (typeof window !== 'undefined') {
+                import('./favorites.store').then(({ useFavoritesStore }) => {
+                  const setCurrentUser = useFavoritesStore.getState().setCurrentUser;
+                  setCurrentUser(state.user!.id);
+                });
+              }
+            }, 50);
+          }
+        }
+      }
     }
   )
 );
-
-// ✅ HOOK POUR INITIALISER LES FAVORIS AU DÉMARRAGE
-export const useInitializeAuth = () => {
-  const { user } = useAuthStore();
-  
-  React.useEffect(() => {
-    // Initialiser les favoris si un user est déjà connecté
-    if (user && typeof window !== 'undefined') {
-      import('./favorites.store').then(({ useFavoritesStore }) => {
-        const setCurrentUser = useFavoritesStore.getState().setCurrentUser;
-        setCurrentUser(user.id);
-        console.log('🔄 Favoris initialisés pour utilisateur existant:', user.first_name);
-      });
-    }
-  }, [user]);
-};
