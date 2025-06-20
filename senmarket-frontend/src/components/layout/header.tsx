@@ -1,11 +1,4 @@
-// ✅ FONCTION POUR GÉRER LE CONTACT
-  const handleContactClick = () => {
-    const footer = document.querySelector('footer')
-    if (footer) {
-      footer.scrollIntoView({ behavior: 'smooth' })
-    }
-    setIsMobileMenuOpen(false)
-  }'use client'
+'use client'
 
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
@@ -49,6 +42,33 @@ export function Header() {
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const [notifications, setNotifications] = useState(3)
+
+  // ✅ FONCTION POUR GÉRER LE CONTACT
+  const handleContactClick = () => {
+    const footer = document.querySelector('footer')
+    if (footer) {
+      footer.scrollIntoView({ behavior: 'smooth' })
+    }
+    setIsMobileMenuOpen(false)
+  }
+
+  // ✅ FONCTION POUR SCROLL VERS SECTION CATEGORIES
+  const handleCategoriesClick = () => {
+    // Si on est sur la homepage, scroll vers la section
+    if (window.location.pathname === '/') {
+      const categoriesSection = document.querySelector('#categories-section')
+      if (categoriesSection) {
+        categoriesSection.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'start' 
+        })
+      }
+    } else {
+      // Si on est sur une autre page, aller à la homepage puis scroll
+      router.push('/#categories-section')
+    }
+    setIsMobileMenuOpen(false)
+  }
 
   // ✅ NAVIGATION ENRICHIE AVEC ICÔNES
   const navigation = [
@@ -99,24 +119,6 @@ export function Header() {
     setShowUserMenu(false)
     setIsMobileMenuOpen(false)
     router.push('/')
-  }
-
-  // ✅ FONCTION POUR SCROLL VERS SECTION CATEGORIES
-  const handleCategoriesClick = () => {
-    // Si on est sur la homepage, scroll vers la section
-    if (window.location.pathname === '/') {
-      const categoriesSection = document.querySelector('#categories-section')
-      if (categoriesSection) {
-        categoriesSection.scrollIntoView({ 
-          behavior: 'smooth', 
-          block: 'start' 
-        })
-      }
-    } else {
-      // Si on est sur une autre page, aller à la homepage puis scroll
-      router.push('/#categories-section')
-    }
-    setIsMobileMenuOpen(false)
   }
 
   // ✅ QUICK ACTIONS POUR UTILISATEUR CONNECTÉ

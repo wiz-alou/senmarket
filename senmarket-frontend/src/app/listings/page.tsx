@@ -30,7 +30,13 @@ import {
   User,
   Star,
   MessageCircle,
-  Phone
+  Phone,
+  TrendingUp,
+  Award,
+  Sparkles,
+  ArrowRight,
+  Verified,
+  Crown
 } from 'lucide-react';
 
 import { Header } from '@/components/layout/header';
@@ -387,8 +393,8 @@ export default function ListingsPage() {
 
   // ✅ RENDU OPTIMISÉ POUR CHAQUE MODE D'AFFICHAGE
   const renderGridView = () => (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-      {listings.map((listing) => {
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+      {listings.map((listing, index) => {
         const imageUrl = listing.images && listing.images.length > 0
           ? getImageUrl(listing.images[0])
           : null;
@@ -397,22 +403,23 @@ export default function ListingsPage() {
           <motion.div
             key={listing.id}
             layout
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: index * 0.1 }}
             className="group"
           >
-            <Card className="overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer border-0 shadow-lg">
+            <Card className="overflow-hidden hover:shadow-2xl transition-all duration-500 cursor-pointer border-0 bg-white/80 backdrop-blur-sm hover:bg-white/95 hover:scale-[1.02] transform">
 
-              {/* Image */}
+              {/* Image avec animations premium */}
               <div
-                className="relative aspect-video bg-gradient-to-br from-blue-100 to-orange-100 overflow-hidden"
+                className="relative aspect-[4/3] bg-gradient-to-br from-blue-100 via-purple-50 to-orange-100 overflow-hidden"
                 onClick={() => router.push(`/listings/${listing.id}`)}
               >
                 {imageUrl ? (
                   <img
                     src={imageUrl}
                     alt={listing.title}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
                     onError={(e) => {
                       console.error('❌ Erreur image listing:', imageUrl);
                       e.currentTarget.style.display = 'none';
@@ -422,125 +429,205 @@ export default function ListingsPage() {
                   />
                 ) : null}
 
-                {/* Fallback */}
+                {/* Fallback premium */}
                 <div
-                  className="absolute inset-0 flex items-center justify-center"
+                  className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200"
                   style={{ display: imageUrl ? 'none' : 'flex' }}
                 >
                   <div className="text-center">
-                    <Package className="h-12 w-12 text-slate-400 mx-auto mb-2" />
-                    <p className="text-xs text-slate-500">Pas d'image</p>
+                    <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-3">
+                      <Package className="h-8 w-8 text-white" />
+                    </div>
+                    <p className="text-sm text-slate-600 font-medium">Image bientôt disponible</p>
                   </div>
                 </div>
 
-                {/* Badges */}
-                <div className="absolute top-3 left-3">
+                {/* Overlay gradient */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+
+                {/* Badges premium */}
+                <div className="absolute top-4 left-4 space-y-2">
                   {listing.is_featured && (
-                    <Badge className="bg-yellow-500 text-white text-xs">
-                      ⭐ Vedette
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 shadow-lg"
+                    >
+                      <Crown className="h-3 w-3" />
+                      Vedette
+                    </motion.div>
+                  )}
+                  
+                  {listing.views_count && listing.views_count > 50 && (
+                    <Badge className="bg-gradient-to-r from-green-500 to-emerald-600 text-white border-0">
+                      <TrendingUp className="h-3 w-3 mr-1" />
+                      Populaire
                     </Badge>
                   )}
                 </div>
 
-                {/* Actions */}
-                <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-8 w-8 p-0 bg-white/80 hover:bg-white"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleFavorite(listing.id);
-                    }}
-                  >
-                    <Heart
-                      className={`h-4 w-4 ${favorites.has(listing.id)
-                          ? 'fill-red-500 text-red-500'
-                          : 'text-slate-600'
+                {/* Actions floating premium */}
+                <div className="absolute top-4 right-4 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-2 group-hover:translate-x-0">
+                  <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-9 w-9 p-0 bg-white/90 hover:bg-white backdrop-blur-sm border border-white/50 shadow-lg"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleFavorite(listing.id);
+                      }}
+                    >
+                      <Heart
+                        className={`h-4 w-4 transition-colors ${
+                          favorites.has(listing.id)
+                            ? 'fill-red-500 text-red-500'
+                            : 'text-slate-600 hover:text-red-500'
                         }`}
-                    />
-                  </Button>
+                      />
+                    </Button>
+                  </motion.div>
 
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-8 w-8 p-0 bg-white/80 hover:bg-white"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      navigator.share?.({
-                        title: listing.title,
-                        url: `${window.location.origin}/listings/${listing.id}`
-                      });
-                    }}
-                  >
-                    <Share2 className="h-4 w-4 text-slate-600" />
-                  </Button>
+                  <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-9 w-9 p-0 bg-white/90 hover:bg-white backdrop-blur-sm border border-white/50 shadow-lg"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigator.share?.({
+                          title: listing.title,
+                          url: `${window.location.origin}/listings/${listing.id}`
+                        });
+                      }}
+                    >
+                      <Share2 className="h-4 w-4 text-slate-600 hover:text-blue-600" />
+                    </Button>
+                  </motion.div>
+
+                  <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-9 w-9 p-0 bg-white/90 hover:bg-white backdrop-blur-sm border border-white/50 shadow-lg"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        router.push(`/listings/${listing.id}#contact`);
+                      }}
+                    >
+                      <MessageCircle className="h-4 w-4 text-slate-600 hover:text-green-600" />
+                    </Button>
+                  </motion.div>
                 </div>
 
-                {/* Statistiques */}
-                <div className="absolute bottom-3 right-3 bg-black/50 text-white px-2 py-1 rounded text-xs flex items-center gap-1">
-                  <Eye className="h-3 w-3" />
-                  <span>{listing.views_count || 0}</span>
+                {/* Statistiques avec design premium */}
+                <div className="absolute bottom-4 right-4 flex items-center gap-3">
+                  <div className="bg-black/60 backdrop-blur-sm text-white px-3 py-1.5 rounded-full text-xs flex items-center gap-1.5 border border-white/20">
+                    <Eye className="h-3 w-3" />
+                    <span className="font-medium">{listing.views_count || 0}</span>
+                  </div>
+                  
+                  {listing.images && listing.images.length > 1 && (
+                    <div className="bg-black/60 backdrop-blur-sm text-white px-3 py-1.5 rounded-full text-xs flex items-center gap-1.5 border border-white/20">
+                      <Sparkles className="h-3 w-3" />
+                      <span className="font-medium">{listing.images.length}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* Contenu */}
-              <CardContent className="p-4">
+              {/* Contenu avec design premium */}
+              <CardContent className="p-6 space-y-4">
+
+                {/* En-tête avec catégorie premium */}
                 <div className="space-y-3">
+                  {listing.category && (
+                    <div className="flex items-center gap-2">
+                      {(() => {
+                        const IconComponent = getCategoryIcon(listing.category.icon);
+                        return (
+                          <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+                            <IconComponent className="h-4 w-4 text-white" />
+                          </div>
+                        );
+                      })()}
+                      <Badge variant="secondary" className="bg-gradient-to-r from-slate-100 to-slate-200 text-slate-700 border-0 font-medium">
+                        {listing.category.name}
+                      </Badge>
+                    </div>
+                  )}
 
-                  {/* Titre et catégorie */}
-                  <div>
-                    <h3
-                      className="font-semibold text-slate-900 line-clamp-2 group-hover:text-blue-600 transition-colors cursor-pointer"
-                      onClick={() => router.push(`/listings/${listing.id}`)}
-                    >
-                      {listing.title}
-                    </h3>
+                  <h3
+                    className="font-bold text-slate-900 text-lg line-clamp-2 group-hover:text-blue-600 transition-colors cursor-pointer leading-tight"
+                    onClick={() => router.push(`/listings/${listing.id}`)}
+                  >
+                    {listing.title}
+                  </h3>
+                </div>
 
-                    {/* Badge catégorie AVEC icône Lucide */}
-                    {listing.category && (
-                      <div className="flex items-center gap-1 mt-1">
-                        {(() => {
-                          const IconComponent = getCategoryIcon(listing.category.icon);
-                          return <IconComponent className="h-3 w-3 text-slate-500" />;
-                        })()}
-                        <Badge variant="secondary" className="text-xs">
-                          {listing.category.name}
-                        </Badge>
+                {/* Prix premium avec animation */}
+                <motion.div 
+                  className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent"
+                  whileHover={{ scale: 1.05 }}
+                >
+                  {formatPrice(listing.price)}
+                </motion.div>
+
+                {/* Description */}
+                <p className="text-slate-600 text-sm line-clamp-2 leading-relaxed">
+                  {listing.description}
+                </p>
+
+                {/* Informations avec design premium */}
+                <div className="space-y-3 pt-2 border-t border-slate-100">
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2 text-slate-600">
+                      <div className="w-5 h-5 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-full flex items-center justify-center">
+                        <MapPin className="h-3 w-3 text-white" />
                       </div>
-                    )}
-                  </div>
-
-                  {/* Prix */}
-                  <div className="text-2xl font-bold text-blue-600">
-                    {formatPrice(listing.price)}
-                  </div>
-
-                  {/* Informations */}
-                  <div className="flex items-center justify-between text-sm text-slate-600">
-                    <div className="flex items-center gap-1">
-                      <MapPin className="h-4 w-4" />
-                      <span>{listing.region}</span>
+                      <span className="font-medium">{listing.region}</span>
                     </div>
 
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-2 text-slate-500">
                       <Clock className="h-4 w-4" />
-                      <span>{formatTimeAgo(listing.created_at)}</span>
+                      <span className="text-xs">{formatTimeAgo(listing.created_at)}</span>
                     </div>
                   </div>
 
-                  {/* Vendeur */}
+                  {/* Vendeur premium */}
                   {listing.user && (
-                    <div className="text-xs text-slate-500 flex items-center gap-1">
-                      <span>Par {listing.user.first_name}</span>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-xs">
+                        <div className="w-6 h-6 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center">
+                          <User className="h-3 w-3 text-white" />
+                        </div>
+                        <span className="text-slate-600">Par <span className="font-semibold">{listing.user.first_name}</span></span>
+                      </div>
+                      
                       {listing.user.is_verified && (
-                        <Badge variant="outline" className="text-xs">
-                          ✓ Vérifié
+                        <Badge className="bg-gradient-to-r from-green-500 to-emerald-600 text-white text-xs border-0">
+                          <Verified className="h-3 w-3 mr-1" />
+                          Vérifié
                         </Badge>
                       )}
                     </div>
                   )}
                 </div>
+
+                {/* Call to action premium */}
+                <motion.div
+                  className="pt-2"
+                  whileHover={{ y: -2 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <Button 
+                    className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold py-3 rounded-xl border-0 shadow-lg hover:shadow-xl transition-all duration-300"
+                    onClick={() => router.push(`/listings/${listing.id}`)}
+                  >
+                    Voir les détails
+                    <ArrowRight className="h-4 w-4 ml-2" />
+                  </Button>
+                </motion.div>
               </CardContent>
             </Card>
           </motion.div>
@@ -549,10 +636,10 @@ export default function ListingsPage() {
     </div>
   );
 
-  // ✅ VUE LISTE COMPACTE ET ÉLÉGANTE
+  // ✅ VUE LISTE ULTRA-PREMIUM
   const renderListView = () => (
-    <div className="space-y-4">
-      {listings.map((listing) => {
+    <div className="space-y-6">
+      {listings.map((listing, index) => {
         const imageUrl = listing.images && listing.images.length > 0
           ? getImageUrl(listing.images[0])
           : null;
@@ -561,24 +648,25 @@ export default function ListingsPage() {
           <motion.div
             key={listing.id}
             layout
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: index * 0.1 }}
             className="group"
           >
             <Card 
-              className="overflow-hidden hover:shadow-lg transition-all duration-300 cursor-pointer border border-slate-200 hover:border-blue-300"
+              className="overflow-hidden hover:shadow-2xl transition-all duration-500 cursor-pointer border-0 bg-white/80 backdrop-blur-sm hover:bg-white/95 hover:scale-[1.01] transform"
               onClick={() => router.push(`/listings/${listing.id}`)}
             >
-              <CardContent className="p-4">
-                <div className="flex gap-4">
+              <CardContent className="p-6">
+                <div className="flex gap-6">
                   
-                  {/* Image compacte */}
-                  <div className="relative w-24 h-24 rounded-lg overflow-hidden bg-gradient-to-br from-blue-100 to-orange-100 flex-shrink-0">
+                  {/* Image premium */}
+                  <div className="relative w-32 h-32 rounded-xl overflow-hidden bg-gradient-to-br from-blue-100 via-purple-50 to-orange-100 flex-shrink-0">
                     {imageUrl ? (
                       <img
                         src={imageUrl}
                         alt={listing.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                         onError={(e) => {
                           console.error('❌ Erreur image listing:', imageUrl);
                           e.currentTarget.style.display = 'none';
@@ -588,138 +676,177 @@ export default function ListingsPage() {
                       />
                     ) : null}
 
-                    {/* Fallback compact */}
+                    {/* Fallback premium */}
                     <div
-                      className="absolute inset-0 flex items-center justify-center"
+                      className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200"
                       style={{ display: imageUrl ? 'none' : 'flex' }}
                     >
-                      <Package className="h-6 w-6 text-slate-400" />
+                      <Package className="h-8 w-8 text-slate-400" />
                     </div>
 
-                    {/* Badge vedette */}
-                    {listing.is_featured && (
-                      <div className="absolute -top-1 -right-1">
-                        <Badge className="bg-yellow-500 text-white text-xs px-1 py-0.5">
-                          ⭐
+                    {/* Badges overlay */}
+                    <div className="absolute top-2 left-2">
+                      {listing.is_featured && (
+                        <Badge className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white text-xs border-0">
+                          <Crown className="h-3 w-3" />
                         </Badge>
+                      )}
+                    </div>
+
+                    {/* Image count */}
+                    {listing.images && listing.images.length > 1 && (
+                      <div className="absolute bottom-2 right-2 bg-black/60 backdrop-blur-sm text-white px-2 py-1 rounded text-xs">
+                        +{listing.images.length - 1}
                       </div>
                     )}
                   </div>
 
-                  {/* Contenu principal */}
+                  {/* Contenu principal premium */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between">
+                    <div className="flex items-start justify-between h-full">
                       
                       {/* Infos principales */}
-                      <div className="flex-1 min-w-0">
+                      <div className="flex-1 min-w-0 space-y-3">
                         
-                        {/* Titre et catégorie */}
-                        <div className="mb-2">
-                          <h3 className="font-semibold text-slate-900 line-clamp-1 group-hover:text-blue-600 transition-colors">
-                            {listing.title}
-                          </h3>
-                          
+                        {/* Catégorie et titre */}
+                        <div className="space-y-2">
                           {listing.category && (
-                            <div className="flex items-center gap-1 mt-1">
+                            <div className="flex items-center gap-2">
                               {(() => {
                                 const IconComponent = getCategoryIcon(listing.category.icon);
-                                return <IconComponent className="h-3 w-3 text-slate-500" />;
+                                return (
+                                  <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+                                    <IconComponent className="h-3 w-3 text-white" />
+                                  </div>
+                                );
                               })()}
-                              <Badge variant="secondary" className="text-xs">
+                              <Badge variant="secondary" className="bg-gradient-to-r from-slate-100 to-slate-200 text-slate-700 border-0 text-xs">
                                 {listing.category.name}
                               </Badge>
                             </div>
                           )}
+
+                          <h3 className="font-bold text-xl text-slate-900 line-clamp-1 group-hover:text-blue-600 transition-colors">
+                            {listing.title}
+                          </h3>
                         </div>
 
-                        {/* Description courte */}
-                        <p className="text-sm text-slate-600 line-clamp-2 mb-3">
+                        {/* Description */}
+                        <p className="text-slate-600 text-sm line-clamp-2 leading-relaxed">
                           {listing.description}
                         </p>
 
-                        {/* Méta-infos */}
-                        <div className="flex items-center gap-4 text-xs text-slate-500">
-                          <div className="flex items-center gap-1">
-                            <MapPin className="h-3 w-3" />
-                            <span>{listing.region}</span>
+                        {/* Méta-infos premium */}
+                        <div className="flex items-center gap-6 text-xs">
+                          <div className="flex items-center gap-1.5 text-slate-600">
+                            <div className="w-4 h-4 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-full flex items-center justify-center">
+                              <MapPin className="h-2.5 w-2.5 text-white" />
+                            </div>
+                            <span className="font-medium">{listing.region}</span>
                           </div>
                           
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1.5 text-slate-500">
                             <Clock className="h-3 w-3" />
                             <span>{formatTimeAgo(listing.created_at)}</span>
                           </div>
                           
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1.5 text-slate-500">
                             <Eye className="h-3 w-3" />
                             <span>{listing.views_count || 0} vues</span>
                           </div>
 
                           {listing.user && (
-                            <div className="flex items-center gap-1">
-                              <User className="h-3 w-3" />
-                              <span>{listing.user.first_name}</span>
+                            <div className="flex items-center gap-1.5 text-slate-600">
+                              <div className="w-4 h-4 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center">
+                                <User className="h-2.5 w-2.5 text-white" />
+                              </div>
+                              <span>Par {listing.user.first_name}</span>
                               {listing.user.is_verified && (
-                                <span className="text-green-600">✓</span>
+                                <Verified className="h-3 w-3 text-green-600" />
                               )}
                             </div>
                           )}
                         </div>
                       </div>
 
-                      {/* Prix et actions */}
-                      <div className="flex flex-col items-end gap-2 ml-4">
+                      {/* Prix et actions premium */}
+                      <div className="flex flex-col items-end gap-4 ml-6">
                         
-                        {/* Prix */}
-                        <div className="text-xl font-bold text-blue-600">
+                        {/* Prix premium */}
+                        <motion.div 
+                          className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent text-right"
+                          whileHover={{ scale: 1.05 }}
+                        >
                           {formatPrice(listing.price)}
+                        </motion.div>
+
+                        {/* Actions premium */}
+                        <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300">
+                          <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }}>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 w-8 p-0 bg-white/80 hover:bg-white border border-slate-200 shadow-sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleFavorite(listing.id);
+                              }}
+                            >
+                              <Heart
+                                className={`h-3 w-3 ${favorites.has(listing.id)
+                                    ? 'fill-red-500 text-red-500'
+                                    : 'text-slate-600 hover:text-red-500'
+                                  }`}
+                              />
+                            </Button>
+                          </motion.div>
+
+                          <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }}>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 w-8 p-0 bg-white/80 hover:bg-white border border-slate-200 shadow-sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigator.share?.({
+                                  title: listing.title,
+                                  url: `${window.location.origin}/listings/${listing.id}`
+                                });
+                              }}
+                            >
+                              <Share2 className="h-3 w-3 text-slate-600 hover:text-blue-600" />
+                            </Button>
+                          </motion.div>
+
+                          <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }}>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 w-8 p-0 bg-white/80 hover:bg-white border border-slate-200 shadow-sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                router.push(`/listings/${listing.id}#contact`);
+                              }}
+                            >
+                              <MessageCircle className="h-3 w-3 text-slate-600 hover:text-green-600" />
+                            </Button>
+                          </motion.div>
                         </div>
 
-                        {/* Actions compactes */}
-                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Button
+                        {/* Call to action compact */}
+                        <motion.div whileHover={{ y: -1 }} transition={{ duration: 0.2 }}>
+                          <Button 
                             size="sm"
-                            variant="ghost"
-                            className="h-7 w-7 p-0"
+                            className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium px-6 py-2 rounded-lg border-0 shadow-lg hover:shadow-xl transition-all duration-300"
                             onClick={(e) => {
                               e.stopPropagation();
-                              toggleFavorite(listing.id);
+                              router.push(`/listings/${listing.id}`);
                             }}
                           >
-                            <Heart
-                              className={`h-3 w-3 ${favorites.has(listing.id)
-                                  ? 'fill-red-500 text-red-500'
-                                  : 'text-slate-600'
-                                }`}
-                            />
+                            Voir détails
+                            <ArrowRight className="h-3 w-3 ml-2" />
                           </Button>
-
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 w-7 p-0"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigator.share?.({
-                                title: listing.title,
-                                url: `${window.location.origin}/listings/${listing.id}`
-                              });
-                            }}
-                          >
-                            <Share2 className="h-3 w-3 text-slate-600" />
-                          </Button>
-
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 w-7 p-0"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              // Action contact
-                            }}
-                          >
-                            <MessageCircle className="h-3 w-3 text-slate-600" />
-                          </Button>
-                        </div>
+                        </motion.div>
                       </div>
                     </div>
                   </div>
@@ -736,18 +863,59 @@ export default function ListingsPage() {
     <>
       <Header />
 
-      <main className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+      {/* Background animé premium */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <motion.div 
+          className="absolute top-20 left-10 w-96 h-96 bg-gradient-to-r from-blue-400/10 to-purple-600/10 rounded-full blur-3xl"
+          animate={{ 
+            x: [0, 50, 0],
+            y: [0, -30, 0],
+            scale: [1, 1.2, 1]
+          }}
+          transition={{ 
+            duration: 20,
+            repeat: Infinity,
+            ease: "easeInOut"
+          }}
+        />
+        <motion.div 
+          className="absolute bottom-20 right-10 w-[500px] h-[500px] bg-gradient-to-r from-emerald-400/10 to-blue-600/10 rounded-full blur-3xl" 
+          animate={{ 
+            x: [0, -60, 0],
+            y: [0, 40, 0],
+            scale: [1, 0.8, 1]
+          }}
+          transition={{ 
+            duration: 25,
+            repeat: Infinity,
+            ease: "easeInOut",
+            delay: 5
+          }}
+        />
+      </div>
 
-        {/* En-tête avec filtres */}
-        <section className="bg-white border-b border-slate-200 sticky top-16 z-40">
-          <div className="container mx-auto px-6 py-6">
+      <main className="min-h-screen bg-gradient-to-br from-slate-50/90 via-blue-50/50 to-purple-50/30 relative">
 
-            {/* Titre et breadcrumb */}
-            <div className="mb-6">
-              <div className="flex items-center gap-2 text-sm text-slate-600 mb-2">
-                <button onClick={() => router.push('/')} className="hover:text-blue-600">
+        {/* Hero Section Premium - NON STICKY */}
+        <section className="bg-white/90 backdrop-blur-sm border-b border-white/50 shadow-sm">
+          <div className="container mx-auto px-6 py-4">
+
+            {/* En-tête compact */}
+            <motion.div 
+              className="mb-4"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4 }}
+            >
+              {/* Breadcrumb compact */}
+              <div className="flex items-center gap-2 text-xs text-slate-600 mb-2">
+                <motion.button 
+                  onClick={() => router.push('/')} 
+                  className="hover:text-blue-600 transition-colors flex items-center gap-1"
+                  whileHover={{ x: -1 }}
+                >
                   Accueil
-                </button>
+                </motion.button>
                 <span>/</span>
                 <span className="text-slate-900 font-medium">
                   {currentCategoryName ? `${currentCategoryName}` : 'Toutes les annonces'}
@@ -756,86 +924,108 @@ export default function ListingsPage() {
 
               <div className="flex items-center justify-between">
                 <div>
-                  <h1 className="text-3xl font-bold text-slate-900">
-                    {currentCategoryName ? `Annonces ${currentCategoryName}` : 'Toutes les annonces'}
+                  <h1 className="text-xl font-bold text-slate-900 leading-tight">
+                    {currentCategoryName ? `${currentCategoryName}` : 'Marketplace SenMarket'}
                   </h1>
 
                   {pagination.total > 0 && (
-                    <p className="text-slate-600 mt-1">
-                      {pagination.total.toLocaleString()} annonce{pagination.total > 1 ? 's' : ''} trouvée{pagination.total > 1 ? 's' : ''}
+                    <p className="text-slate-600 text-sm mt-1">
+                      <span className="font-semibold text-blue-600">{pagination.total}</span> annonce{pagination.total > 1 ? 's' : ''} • 
+                      <span className="text-green-600 font-medium ml-1">Certifiées</span>
                     </p>
                   )}
                 </div>
 
-                {/* Toggle vue - Compact et élégant */}
+                {/* Toggle vue compact */}
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-slate-600 hidden sm:block">Affichage :</span>
-                  <div className="flex bg-slate-100 rounded-md p-0.5">
+                  <span className="text-xs text-slate-600 hidden sm:block">Affichage :</span>
+                  <div className="flex bg-white rounded-lg p-0.5 border shadow-sm">
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => setViewMode('grid')}
-                      className={`h-7 px-2 text-xs transition-all ${
+                      className={`h-7 px-3 text-xs transition-all ${
                         viewMode === 'grid' 
-                          ? 'bg-white shadow-sm text-slate-900' 
-                          : 'text-slate-600 hover:text-slate-900'
+                          ? 'bg-blue-600 text-white shadow-sm' 
+                          : 'text-slate-600 hover:bg-slate-50'
                       }`}
                     >
-                      <Grid className="h-3 w-3" />
+                      <Grid className="h-3 w-3 mr-1" />
+                      Grille
                     </Button>
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => setViewMode('list')}
-                      className={`h-7 px-2 text-xs transition-all ${
+                      className={`h-7 px-3 text-xs transition-all ${
                         viewMode === 'list' 
-                          ? 'bg-white shadow-sm text-slate-900' 
-                          : 'text-slate-600 hover:text-slate-900'
+                          ? 'bg-blue-600 text-white shadow-sm' 
+                          : 'text-slate-600 hover:bg-slate-50'
                       }`}
                     >
-                      <List className="h-3 w-3" />
+                      <List className="h-3 w-3 mr-1" />
+                      Liste
                     </Button>
                   </div>
                 </div>
               </div>
-            </div>
+            </motion.div>
 
-            {/* Barre de recherche et filtres */}
-            <div className="flex flex-col lg:flex-row gap-4">
+            {/* Barre de recherche et filtres COMPACT */}
+            <motion.div 
+              className="flex flex-col lg:flex-row gap-3"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.2 }}
+            >
 
-              {/* Recherche */}
+              {/* Recherche compact */}
               <div className="flex-1">
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-slate-400" />
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
                   <Input
-                    placeholder="Rechercher des annonces..."
+                    placeholder="Rechercher..."
                     value={filters.search}
                     onChange={(e) => handleFilterChange('search', e.target.value)}
-                    className="pl-10 h-12 text-lg"
+                    className="pl-10 h-10 bg-white border-slate-200 rounded-lg focus:ring-1 focus:ring-blue-500/50 transition-all"
                   />
+                  {filters.search && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-2 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0 hover:bg-slate-100"
+                      onClick={() => handleFilterChange('search', '')}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  )}
                 </div>
               </div>
 
-              {/* Filtres rapides */}
-              <div className="flex flex-wrap gap-3">
+              {/* Filtres compact */}
+              <div className="flex flex-wrap gap-2">
 
-                {/* Catégorie */}
+                {/* Catégorie compact */}
                 <Select
                   value={filters.category_id}
                   onValueChange={(value) => handleFilterChange('category_id', value)}
                 >
-                  <SelectTrigger className="w-48 h-12">
+                  <SelectTrigger className="w-44 h-10 bg-white border-slate-200 rounded-lg text-sm">
                     <SelectValue placeholder="Toutes catégories" />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Toutes catégories</SelectItem>
+                  <SelectContent className="bg-white border-slate-200 shadow-lg">
+                    <SelectItem value="all" className="text-sm">
+                      <div className="flex items-center gap-2">
+                        <Package className="h-3 w-3" />
+                        Toutes catégories
+                      </div>
+                    </SelectItem>
                     {categories.map(category => {
                       const IconComponent = getCategoryIcon(category.icon);
-                      
                       return (
-                        <SelectItem key={category.id} value={category.id}>
+                        <SelectItem key={category.id} value={category.id} className="text-sm">
                           <div className="flex items-center gap-2">
-                            <IconComponent className="h-4 w-4" />
+                            <IconComponent className="h-3 w-3 text-slate-600" />
                             <span>{category.name}</span>
                           </div>
                         </SelectItem>
@@ -844,93 +1034,106 @@ export default function ListingsPage() {
                   </SelectContent>
                 </Select>
 
-                {/* Région */}
+                {/* Région compact */}
                 <Select
                   value={filters.region}
                   onValueChange={(value) => handleFilterChange('region', value)}
                 >
-                  <SelectTrigger className="w-40 h-12">
-                    <SelectValue placeholder="Toutes régions" />
+                  <SelectTrigger className="w-36 h-10 bg-white border-slate-200 rounded-lg text-sm">
+                    <SelectValue placeholder="Régions" />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Toutes régions</SelectItem>
+                  <SelectContent className="bg-white border-slate-200 shadow-lg">
+                    <SelectItem value="all" className="text-sm">Tout le Sénégal</SelectItem>
                     {SENEGAL_REGIONS.map(region => (
-                      <SelectItem key={region} value={region}>{region}</SelectItem>
+                      <SelectItem key={region} value={region} className="text-sm">{region}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
 
-                {/* Tri */}
+                {/* Tri compact */}
                 <Select
                   value={filters.sort}
                   onValueChange={(value) => handleFilterChange('sort', value)}
                 >
-                  <SelectTrigger className="w-40 h-12">
+                  <SelectTrigger className="w-32 h-10 bg-white border-slate-200 rounded-lg text-sm">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="date">Plus récent</SelectItem>
-                    <SelectItem value="price_asc">Prix croissant</SelectItem>
-                    <SelectItem value="price_desc">Prix décroissant</SelectItem>
-                    <SelectItem value="views">Plus vues</SelectItem>
+                  <SelectContent className="bg-white border-slate-200 shadow-lg">
+                    <SelectItem value="date" className="text-sm">Plus récent</SelectItem>
+                    <SelectItem value="price_asc" className="text-sm">Prix ↑</SelectItem>
+                    <SelectItem value="price_desc" className="text-sm">Prix ↓</SelectItem>
+                    <SelectItem value="views" className="text-sm">Populaire</SelectItem>
                   </SelectContent>
                 </Select>
 
-                {/* Bouton filtres avancés */}
+                {/* Bouton filtres avancés compact */}
                 <Button
                   variant="outline"
-                  size="lg"
+                  size="sm"
                   onClick={() => setShowFilters(!showFilters)}
-                  className="h-12"
+                  className="h-10 px-3 bg-white border-slate-200 rounded-lg hover:bg-slate-50 text-sm"
                 >
-                  <SlidersHorizontal className="h-5 w-5 mr-2" />
-                  Filtres
+                  <SlidersHorizontal className="h-4 w-4 mr-1" />
+                  Plus
+                  <ChevronDown className={`h-3 w-3 ml-1 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
                 </Button>
               </div>
-            </div>
+            </motion.div>
 
-            {/* Filtres avancés */}
+            {/* Filtres avancés compact */}
             <AnimatePresence>
               {showFilters && (
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }}
-                  className="mt-6 p-6 bg-slate-50 rounded-lg border border-slate-200"
+                  transition={{ duration: 0.2 }}
+                  className="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-200"
                 >
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
 
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Prix minimum (FCFA)
+                      <label className="block text-xs font-medium text-slate-700 mb-1">
+                        Prix min (FCFA)
                       </label>
                       <Input
                         type="number"
                         placeholder="0"
                         value={filters.min_price}
                         onChange={(e) => handleFilterChange('min_price', e.target.value)}
+                        className="h-9 text-sm"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Prix maximum (FCFA)
+                      <label className="block text-xs font-medium text-slate-700 mb-1">
+                        Prix max (FCFA)
                       </label>
                       <Input
                         type="number"
-                        placeholder="1000000"
+                        placeholder="10000000"
                         value={filters.max_price}
                         onChange={(e) => handleFilterChange('max_price', e.target.value)}
+                        className="h-9 text-sm"
                       />
                     </div>
 
-                    <div className="md:col-span-2 flex gap-3">
-                      <Button onClick={clearFilters} variant="outline" className="flex-1">
-                        <X className="h-4 w-4 mr-2" />
-                        Effacer les filtres
+                    <div className="md:col-span-2 flex gap-2">
+                      <Button 
+                        onClick={clearFilters} 
+                        variant="outline" 
+                        size="sm"
+                        className="flex-1 h-9 text-sm"
+                      >
+                        <X className="h-3 w-3 mr-1" />
+                        Effacer
                       </Button>
-                      <Button onClick={() => setShowFilters(false)} className="flex-1">
-                        Appliquer les filtres
+                      <Button 
+                        onClick={() => setShowFilters(false)} 
+                        size="sm"
+                        className="flex-1 h-9 bg-blue-600 text-white text-sm"
+                      >
+                        Appliquer
                       </Button>
                     </div>
                   </div>
@@ -941,52 +1144,109 @@ export default function ListingsPage() {
         </section>
 
         {/* Contenu principal */}
-        <section className="container mx-auto px-6 py-8">
+        <section className="container mx-auto px-6 py-6">
 
           {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-blue-600 mr-3" />
-              <span className="text-slate-600">Chargement des annonces...</span>
-            </div>
+            <motion.div 
+              className="flex flex-col items-center justify-center py-20"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+            >
+              <div className="relative">
+                <div className="w-16 h-16 bg-gradient-to-r from-blue-600 to-purple-600 rounded-full flex items-center justify-center mb-6">
+                  <Loader2 className="h-8 w-8 animate-spin text-white" />
+                </div>
+                <div className="absolute inset-0 w-16 h-16 bg-gradient-to-r from-blue-600 to-purple-600 rounded-full animate-ping opacity-20"></div>
+              </div>
+              <span className="text-slate-700 text-lg font-medium">Chargement des annonces premium...</span>
+              <span className="text-slate-500 text-sm mt-2">Préparation de votre sélection personnalisée</span>
+            </motion.div>
           ) : error ? (
-            <div className="text-center py-12">
-              <Package className="h-16 w-16 text-slate-400 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold text-slate-900 mb-2">Erreur de chargement</h3>
-              <p className="text-slate-600 mb-6">{error}</p>
-              <Button onClick={fetchListings}>Réessayer</Button>
-            </div>
-          ) : listings.length === 0 ? (
-            <div className="text-center py-12">
-              <Package className="h-16 w-16 text-slate-400 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold text-slate-900 mb-2">Aucune annonce trouvée</h3>
-              <p className="text-slate-600 mb-6">
-                Essayez de modifier vos critères de recherche ou explorez d'autres catégories.
-              </p>
-              <Button onClick={clearFilters} variant="outline">
-                Effacer les filtres
+            <motion.div 
+              className="text-center py-20"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              <div className="w-20 h-20 bg-gradient-to-br from-red-500 to-orange-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                <Package className="h-10 w-10 text-white" />
+              </div>
+              <h3 className="text-2xl font-bold text-slate-900 mb-3">Oups ! Une erreur s'est produite</h3>
+              <p className="text-slate-600 mb-8 text-lg">{error}</p>
+              <Button 
+                onClick={fetchListings}
+                className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-3 rounded-xl shadow-lg hover:shadow-xl"
+              >
+                <ArrowRight className="h-4 w-4 mr-2" />
+                Réessayer le chargement
               </Button>
-            </div>
+            </motion.div>
+          ) : listings.length === 0 ? (
+            <motion.div 
+              className="text-center py-20"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              <div className="w-24 h-24 bg-gradient-to-br from-slate-400 to-slate-600 rounded-full flex items-center justify-center mx-auto mb-8">
+                <Search className="h-12 w-12 text-white" />
+              </div>
+              <h3 className="text-3xl font-bold text-slate-900 mb-4">Aucune annonce trouvée</h3>
+              <p className="text-slate-600 mb-8 text-lg max-w-md mx-auto">
+                Essayez de modifier vos critères de recherche ou explorez d'autres catégories pour découvrir de superbes opportunités.
+              </p>
+              <div className="space-y-4">
+                <Button 
+                  onClick={clearFilters} 
+                  variant="outline"
+                  className="bg-white/80 border-white/50 shadow-lg rounded-xl px-8 py-3"
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  Effacer les filtres
+                </Button>
+                <div>
+                  <Button 
+                    onClick={() => router.push('/sell')}
+                    className="bg-gradient-to-r from-green-600 to-emerald-600 text-white px-8 py-3 rounded-xl shadow-lg hover:shadow-xl ml-4"
+                  >
+                    <Zap className="h-4 w-4 mr-2" />
+                    Publier une annonce
+                  </Button>
+                </div>
+              </div>
+            </motion.div>
           ) : (
             <>
               {/* Rendu conditionnel selon le mode d'affichage */}
-              {viewMode === 'grid' ? renderGridView() : renderListView()}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.6 }}
+              >
+                {viewMode === 'grid' ? renderGridView() : renderListView()}
+              </motion.div>
 
-              {/* Pagination */}
+              {/* Pagination premium */}
               {pagination.pages > 1 && (
-                <div className="flex items-center justify-center gap-2 mt-12">
+                <motion.div 
+                  className="flex items-center justify-center gap-3 mt-16"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.6, delay: 0.3 }}
+                >
                   <Button
                     variant="outline"
                     disabled={pagination.currentPage <= 1}
                     onClick={() => handlePageChange(pagination.currentPage - 1)}
+                    className="bg-white/80 backdrop-blur-sm border-white/50 shadow-lg rounded-xl px-6 py-3 disabled:opacity-50"
                   >
+                    <ArrowRight className="h-4 w-4 mr-2 rotate-180" />
                     Précédent
                   </Button>
 
-                  <div className="flex gap-1">
-                    {Array.from({ length: Math.min(pagination.pages, 5) }, (_, i) => {
-                      const page = pagination.currentPage <= 3
+                  <div className="flex gap-2">
+                    {Array.from({ length: Math.min(pagination.pages, 7) }, (_, i) => {
+                      const page = pagination.currentPage <= 4
                         ? i + 1
-                        : pagination.currentPage - 2 + i;
+                        : pagination.currentPage - 3 + i;
 
                       if (page > pagination.pages) return null;
 
@@ -996,7 +1256,11 @@ export default function ListingsPage() {
                           variant={page === pagination.currentPage ? 'default' : 'outline'}
                           size="sm"
                           onClick={() => handlePageChange(page)}
-                          className="w-10"
+                          className={`w-12 h-12 rounded-xl ${
+                            page === pagination.currentPage
+                              ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg'
+                              : 'bg-white/80 border-white/50 text-slate-700 shadow-lg hover:bg-white/90'
+                          }`}
                         >
                           {page}
                         </Button>
@@ -1008,18 +1272,37 @@ export default function ListingsPage() {
                     variant="outline"
                     disabled={pagination.currentPage >= pagination.pages}
                     onClick={() => handlePageChange(pagination.currentPage + 1)}
+                    className="bg-white/80 backdrop-blur-sm border-white/50 shadow-lg rounded-xl px-6 py-3 disabled:opacity-50"
                   >
                     Suivant
+                    <ArrowRight className="h-4 w-4 ml-2" />
                   </Button>
-                </div>
+                </motion.div>
               )}
 
-              {/* Statistiques en bas */}
-              <div className="text-center text-sm text-slate-600 mt-8">
-                Affichage de {((pagination.currentPage - 1) * filters.limit) + 1} à{' '}
-                {Math.min(pagination.currentPage * filters.limit, pagination.total)} sur{' '}
-                {pagination.total} annonce{pagination.total > 1 ? 's' : ''}
-              </div>
+              {/* Statistiques en bas premium */}
+              <motion.div 
+                className="text-center mt-12 p-6 bg-white/60 backdrop-blur-sm rounded-2xl border border-white/50 shadow-lg"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.6, delay: 0.4 }}
+              >
+                <div className="flex items-center justify-center gap-8 text-sm text-slate-600">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                    <span>
+                      Affichage de <span className="font-bold">{((pagination.currentPage - 1) * filters.limit) + 1}</span> à{' '}
+                      <span className="font-bold">{Math.min(pagination.currentPage * filters.limit, pagination.total)}</span>
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                    <span>
+                      sur <span className="font-bold text-green-600">{pagination.total}</span> annonce{pagination.total > 1 ? 's' : ''} certifiée{pagination.total > 1 ? 's' : ''}
+                    </span>
+                  </div>
+                </div>
+              </motion.div>
             </>
           )}
         </section>

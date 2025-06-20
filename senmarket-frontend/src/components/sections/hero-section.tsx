@@ -46,6 +46,21 @@ export function HeroSection() {
   const [globalStats, setGlobalStats] = useState<GlobalStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [isLive, setIsLive] = useState(false)
+  const [currentTime, setCurrentTime] = useState<string>('')
+  const [mounted, setMounted] = useState(false)
+
+  // ✅ FIX: Gérer l'hydratation pour l'horloge
+  useEffect(() => {
+    setMounted(true)
+    setCurrentTime(new Date().toLocaleTimeString('fr-SN'))
+    
+    // Mettre à jour l'heure toutes les secondes
+    const timeInterval = setInterval(() => {
+      setCurrentTime(new Date().toLocaleTimeString('fr-SN'))
+    }, 1000)
+
+    return () => clearInterval(timeInterval)
+  }, [])
 
   // Charger les statistiques réelles avec estimation intelligente des utilisateurs
   useEffect(() => {
@@ -472,11 +487,13 @@ export function HeroSection() {
                   )}
                 </p>
                 
-                {/* Indicateur de dernière mise à jour */}
-                <div className="text-xs text-slate-400 mt-2 flex items-center justify-center gap-1">
-                  <Clock className="h-3 w-3" />
-                  Mis à jour: {new Date().toLocaleTimeString('fr-SN')}
-                </div>
+                {/* ✅ FIX: Indicateur de dernière mise à jour hydratation-safe */}
+                {mounted && (
+                  <div className="text-xs text-slate-400 mt-2 flex items-center justify-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    Mis à jour: {currentTime}
+                  </div>
+                )}
               </motion.div>
 
               {/* Statistiques en grille avec animations */}
@@ -581,9 +598,6 @@ export function HeroSection() {
             </motion.div>
           </motion.div>
         </div>
-        
-        {/* Call-to-action bas avec contact */}
- 
       </div>
 
       {/* Indicateur de scroll animé */}
