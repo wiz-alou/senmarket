@@ -124,7 +124,7 @@ export default function ListingsPage() {
     max_price: searchParams.get('max_price') || '',
     sort: searchParams.get('sort') || 'date',
     page: 1,
-    limit: 20
+    limit: 24 // Augmenté pour plus d'annonces par page
   });
 
   const [pagination, setPagination] = useState({
@@ -172,24 +172,6 @@ export default function ListingsPage() {
     return `http://localhost:8080/uploads/${imagePath}`;
   };
 
-  // ✅ FONCTION DEBUG POUR LES IMAGES
-  const debugImageUrls = (listings: Listing[]) => {
-    console.log('🔍 DEBUG IMAGES LISTINGS:');
-    listings.forEach((listing, index) => {
-      console.log(`📝 Annonce ${index + 1}: ${listing.title}`);
-      console.log(`  - Images brutes:`, listing.images);
-
-      if (listing.images && listing.images.length > 0) {
-        listing.images.forEach((img, imgIndex) => {
-          const finalUrl = getImageUrl(img);
-          console.log(`  - Image ${imgIndex + 1}:`, img, '→', finalUrl);
-        });
-      } else {
-        console.log('  - Aucune image');
-      }
-    });
-  };
-
   // ✅ CONVERSION SLUG → CATEGORY_ID
   const getCategoryIdFromSlug = useCallback((slug: string) => {
     const category = categories.find(cat => cat.slug === slug);
@@ -211,7 +193,6 @@ export default function ListingsPage() {
         if (categoryParam.includes('-') || categoryParam.length < 30) {
           const foundId = getCategoryIdFromSlug(categoryParam);
           categoryId = foundId || 'all';
-          console.log(`🔄 Conversion slug "${categoryParam}" → ID "${categoryId}"`);
         } else {
           categoryId = categoryParam;
         }
@@ -238,11 +219,8 @@ export default function ListingsPage() {
 
   const fetchCategories = async () => {
     try {
-      console.log('📡 Chargement catégories...');
       const response = await fetch('http://localhost:8080/api/v1/categories');
       const data = await response.json();
-
-      console.log('✅ Catégories reçues:', data.data);
       setCategories(data.data || []);
     } catch (error) {
       console.error('❌ Erreur chargement catégories:', error);
@@ -259,11 +237,9 @@ export default function ListingsPage() {
       if (filters.search) params.append('search', filters.search);
       if (filters.category_id && filters.category_id !== 'all') {
         params.append('category_id', filters.category_id);
-        console.log(`🎯 Filtrage par catégorie ID: ${filters.category_id}`);
       }
       if (filters.region && filters.region !== 'all') {
         params.append('region', filters.region);
-        console.log(`🌍 Filtrage par région: "${filters.region}" (recherche LIKE)`);
       }
       if (filters.min_price) params.append('min_price', filters.min_price);
       if (filters.max_price) params.append('max_price', filters.max_price);
@@ -272,12 +248,8 @@ export default function ListingsPage() {
       params.append('limit', filters.limit.toString());
 
       const url = `http://localhost:8080/api/v1/listings?${params.toString()}`;
-      console.log('📡 Requête URL:', url);
-
       const response = await fetch(url);
       const data = await response.json();
-
-      console.log('✅ Données reçues:', data);
 
       if (data.data) {
         setListings(data.data.listings || []);
@@ -286,8 +258,6 @@ export default function ListingsPage() {
           pages: data.data.pages || 0,
           currentPage: data.data.page || 1
         });
-
-        debugImageUrls(data.data.listings || []);
       } else {
         setListings([]);
         setPagination({ total: 0, pages: 0, currentPage: 1 });
@@ -313,7 +283,6 @@ export default function ListingsPage() {
       const category = categories.find(cat => cat.id === updatedFilters.category_id);
       if (category) {
         params.append('category', category.slug);
-        console.log(`🔄 URL: ID "${updatedFilters.category_id}" → slug "${category.slug}"`);
       }
     }
 
@@ -348,7 +317,7 @@ export default function ListingsPage() {
       max_price: '',
       sort: 'date',
       page: 1,
-      limit: 20
+      limit: 24
     };
     setFilters(clearedFilters);
     router.push('/listings');
@@ -383,17 +352,17 @@ export default function ListingsPage() {
     const hours = Math.floor(diff / (1000 * 60 * 60));
     const minutes = Math.floor(diff / (1000 * 60));
 
-    if (days > 0) return `il y a ${days}j`;
-    if (hours > 0) return `il y a ${hours}h`;
-    return `il y a ${minutes}min`;
+    if (days > 0) return `${days}j`;
+    if (hours > 0) return `${hours}h`;
+    return `${minutes}min`;
   };
 
   // ✅ NOM CATÉGORIE ACTUELLE
   const currentCategoryName = categories.find(cat => cat.id === filters.category_id)?.name;
 
-  // ✅ RENDU OPTIMISÉ POUR CHAQUE MODE D'AFFICHAGE
+  // ✅ RENDU GRILLE COMPACTE AVEC TAILLE UNIFORME
   const renderGridView = () => (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
       {listings.map((listing, index) => {
         const imageUrl = listing.images && listing.images.length > 0
           ? getImageUrl(listing.images[0])
@@ -403,25 +372,24 @@ export default function ListingsPage() {
           <motion.div
             key={listing.id}
             layout
-            initial={{ opacity: 0, y: 30 }}
+            initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: index * 0.1 }}
+            transition={{ duration: 0.4, delay: index * 0.05 }}
             className="group"
           >
-            <Card className="overflow-hidden hover:shadow-2xl transition-all duration-500 cursor-pointer border-0 bg-white/80 backdrop-blur-sm hover:bg-white/95 hover:scale-[1.02] transform">
+            <Card className="overflow-hidden hover:shadow-lg transition-all duration-300 cursor-pointer border-0 bg-white/90 backdrop-blur-sm hover:bg-white/95 hover:scale-[1.02] h-full flex flex-col">
 
-              {/* Image avec animations premium */}
+              {/* Image compacte - TAILLE FIXE */}
               <div
-                className="relative aspect-[4/3] bg-gradient-to-br from-blue-100 via-purple-50 to-orange-100 overflow-hidden"
+                className="relative aspect-square bg-gradient-to-br from-blue-100 via-purple-50 to-orange-100 overflow-hidden flex-shrink-0"
                 onClick={() => router.push(`/listings/${listing.id}`)}
               >
                 {imageUrl ? (
                   <img
                     src={imageUrl}
                     alt={listing.title}
-                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     onError={(e) => {
-                      console.error('❌ Erreur image listing:', imageUrl);
                       e.currentTarget.style.display = 'none';
                       const fallback = e.currentTarget.nextElementSibling as HTMLElement;
                       if (fallback) fallback.style.display = 'flex';
@@ -429,205 +397,97 @@ export default function ListingsPage() {
                   />
                 ) : null}
 
-                {/* Fallback premium */}
+                {/* Fallback compact */}
                 <div
                   className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200"
                   style={{ display: imageUrl ? 'none' : 'flex' }}
                 >
-                  <div className="text-center">
-                    <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-3">
-                      <Package className="h-8 w-8 text-white" />
-                    </div>
-                    <p className="text-sm text-slate-600 font-medium">Image bientôt disponible</p>
-                  </div>
+                  <Package className="h-8 w-8 text-slate-400" />
                 </div>
 
-                {/* Overlay gradient */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-
-                {/* Badges premium */}
-                <div className="absolute top-4 left-4 space-y-2">
-                  {listing.is_featured && (
-                    <motion.div
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 shadow-lg"
-                    >
-                      <Crown className="h-3 w-3" />
-                      Vedette
-                    </motion.div>
-                  )}
-                  
-                  {listing.views_count && listing.views_count > 50 && (
-                    <Badge className="bg-gradient-to-r from-green-500 to-emerald-600 text-white border-0">
-                      <TrendingUp className="h-3 w-3 mr-1" />
-                      Populaire
+                {/* Badge vedette compact */}
+                {listing.is_featured && (
+                  <div className="absolute top-2 left-2">
+                    <Badge className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white text-xs border-0 px-2 py-1">
+                      <Crown className="h-2 w-2 mr-1" />
                     </Badge>
-                  )}
-                </div>
-
-                {/* Actions floating premium */}
-                <div className="absolute top-4 right-4 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-2 group-hover:translate-x-0">
-                  <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }}>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-9 w-9 p-0 bg-white/90 hover:bg-white backdrop-blur-sm border border-white/50 shadow-lg"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleFavorite(listing.id);
-                      }}
-                    >
-                      <Heart
-                        className={`h-4 w-4 transition-colors ${
-                          favorites.has(listing.id)
-                            ? 'fill-red-500 text-red-500'
-                            : 'text-slate-600 hover:text-red-500'
-                        }`}
-                      />
-                    </Button>
-                  </motion.div>
-
-                  <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }}>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-9 w-9 p-0 bg-white/90 hover:bg-white backdrop-blur-sm border border-white/50 shadow-lg"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        navigator.share?.({
-                          title: listing.title,
-                          url: `${window.location.origin}/listings/${listing.id}`
-                        });
-                      }}
-                    >
-                      <Share2 className="h-4 w-4 text-slate-600 hover:text-blue-600" />
-                    </Button>
-                  </motion.div>
-
-                  <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }}>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-9 w-9 p-0 bg-white/90 hover:bg-white backdrop-blur-sm border border-white/50 shadow-lg"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        router.push(`/listings/${listing.id}#contact`);
-                      }}
-                    >
-                      <MessageCircle className="h-4 w-4 text-slate-600 hover:text-green-600" />
-                    </Button>
-                  </motion.div>
-                </div>
-
-                {/* Statistiques avec design premium */}
-                <div className="absolute bottom-4 right-4 flex items-center gap-3">
-                  <div className="bg-black/60 backdrop-blur-sm text-white px-3 py-1.5 rounded-full text-xs flex items-center gap-1.5 border border-white/20">
-                    <Eye className="h-3 w-3" />
-                    <span className="font-medium">{listing.views_count || 0}</span>
                   </div>
-                  
-                  {listing.images && listing.images.length > 1 && (
-                    <div className="bg-black/60 backdrop-blur-sm text-white px-3 py-1.5 rounded-full text-xs flex items-center gap-1.5 border border-white/20">
-                      <Sparkles className="h-3 w-3" />
-                      <span className="font-medium">{listing.images.length}</span>
-                    </div>
-                  )}
+                )}
+
+                {/* Actions compactes */}
+                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 w-6 p-0 bg-white/80 hover:bg-white rounded-full"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleFavorite(listing.id);
+                    }}
+                  >
+                    <Heart
+                      className={`h-3 w-3 ${
+                        favorites.has(listing.id)
+                          ? 'fill-red-500 text-red-500'
+                          : 'text-slate-600'
+                      }`}
+                    />
+                  </Button>
+                </div>
+
+                {/* Stats compactes */}
+                <div className="absolute bottom-2 right-2 bg-black/60 text-white px-2 py-1 rounded text-xs flex items-center gap-1">
+                  <Eye className="h-2 w-2" />
+                  <span>{listing.views_count || 0}</span>
                 </div>
               </div>
 
-              {/* Contenu avec design premium */}
-              <CardContent className="p-6 space-y-4">
-
-                {/* En-tête avec catégorie premium */}
-                <div className="space-y-3">
+              {/* Contenu compact - HAUTEUR FLEXIBLE AVEC MIN-HEIGHT */}
+              <CardContent className="p-3 flex-1 flex flex-col justify-between min-h-[140px]">
+                
+                <div className="space-y-2 flex-1">
+                  {/* Catégorie compacte */}
                   {listing.category && (
-                    <div className="flex items-center gap-2">
-                      {(() => {
-                        const IconComponent = getCategoryIcon(listing.category.icon);
-                        return (
-                          <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                            <IconComponent className="h-4 w-4 text-white" />
-                          </div>
-                        );
-                      })()}
-                      <Badge variant="secondary" className="bg-gradient-to-r from-slate-100 to-slate-200 text-slate-700 border-0 font-medium">
-                        {listing.category.name}
-                      </Badge>
-                    </div>
+                    <Badge variant="secondary" className="text-xs px-2 py-0.5 w-fit">
+                      {listing.category.name}
+                    </Badge>
                   )}
 
+                  {/* Titre compact - HAUTEUR FIXE */}
                   <h3
-                    className="font-bold text-slate-900 text-lg line-clamp-2 group-hover:text-blue-600 transition-colors cursor-pointer leading-tight"
+                    className="font-semibold text-sm text-slate-900 line-clamp-2 group-hover:text-blue-600 transition-colors cursor-pointer leading-tight min-h-[2.5rem] flex items-start"
                     onClick={() => router.push(`/listings/${listing.id}`)}
                   >
                     {listing.title}
                   </h3>
+
+                  {/* Prix compact */}
+                  <div className="text-lg font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                    {formatPrice(listing.price)}
+                  </div>
                 </div>
 
-                {/* Prix premium avec animation */}
-                <motion.div 
-                  className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent"
-                  whileHover={{ scale: 1.05 }}
-                >
-                  {formatPrice(listing.price)}
-                </motion.div>
-
-                {/* Description */}
-                <p className="text-slate-600 text-sm line-clamp-2 leading-relaxed">
-                  {listing.description}
-                </p>
-
-                {/* Informations avec design premium */}
-                <div className="space-y-3 pt-2 border-t border-slate-100">
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2 text-slate-600">
-                      <div className="w-5 h-5 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-full flex items-center justify-center">
-                        <MapPin className="h-3 w-3 text-white" />
-                      </div>
-                      <span className="font-medium">{listing.region}</span>
+                {/* Footer fixe en bas */}
+                <div className="space-y-2 mt-auto">
+                  {/* Localisation compacte */}
+                  <div className="flex items-center justify-between text-xs text-slate-500">
+                    <div className="flex items-center gap-1 flex-1 min-w-0">
+                      <MapPin className="h-3 w-3 flex-shrink-0" />
+                      <span className="truncate">{listing.region}</span>
                     </div>
-
-                    <div className="flex items-center gap-2 text-slate-500">
-                      <Clock className="h-4 w-4" />
-                      <span className="text-xs">{formatTimeAgo(listing.created_at)}</span>
-                    </div>
+                    <span className="flex-shrink-0 ml-2">{formatTimeAgo(listing.created_at)}</span>
                   </div>
 
-                  {/* Vendeur premium */}
+                  {/* Vendeur compact */}
                   {listing.user && (
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-xs">
-                        <div className="w-6 h-6 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center">
-                          <User className="h-3 w-3 text-white" />
-                        </div>
-                        <span className="text-slate-600">Par <span className="font-semibold">{listing.user.first_name}</span></span>
-                      </div>
-                      
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-600 truncate flex-1">Par {listing.user.first_name}</span>
                       {listing.user.is_verified && (
-                        <Badge className="bg-gradient-to-r from-green-500 to-emerald-600 text-white text-xs border-0">
-                          <Verified className="h-3 w-3 mr-1" />
-                          Vérifié
-                        </Badge>
+                        <Verified className="h-3 w-3 text-green-600 flex-shrink-0 ml-2" />
                       )}
                     </div>
                   )}
                 </div>
-
-                {/* Call to action premium */}
-                <motion.div
-                  className="pt-2"
-                  whileHover={{ y: -2 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <Button 
-                    className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold py-3 rounded-xl border-0 shadow-lg hover:shadow-xl transition-all duration-300"
-                    onClick={() => router.push(`/listings/${listing.id}`)}
-                  >
-                    Voir les détails
-                    <ArrowRight className="h-4 w-4 ml-2" />
-                  </Button>
-                </motion.div>
               </CardContent>
             </Card>
           </motion.div>
@@ -636,9 +496,9 @@ export default function ListingsPage() {
     </div>
   );
 
-  // ✅ VUE LISTE ULTRA-PREMIUM
+  // ✅ VUE LISTE COMPACTE
   const renderListView = () => (
-    <div className="space-y-6">
+    <div className="space-y-3">
       {listings.map((listing, index) => {
         const imageUrl = listing.images && listing.images.length > 0
           ? getImageUrl(listing.images[0])
@@ -648,27 +508,26 @@ export default function ListingsPage() {
           <motion.div
             key={listing.id}
             layout
-            initial={{ opacity: 0, y: 30 }}
+            initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: index * 0.1 }}
+            transition={{ duration: 0.4, delay: index * 0.05 }}
             className="group"
           >
             <Card 
-              className="overflow-hidden hover:shadow-2xl transition-all duration-500 cursor-pointer border-0 bg-white/80 backdrop-blur-sm hover:bg-white/95 hover:scale-[1.01] transform"
+              className="overflow-hidden hover:shadow-lg transition-all duration-300 cursor-pointer border-0 bg-white/90 backdrop-blur-sm hover:bg-white/95"
               onClick={() => router.push(`/listings/${listing.id}`)}
             >
-              <CardContent className="p-6">
-                <div className="flex gap-6">
+              <CardContent className="p-4">
+                <div className="flex gap-4">
                   
-                  {/* Image premium */}
-                  <div className="relative w-32 h-32 rounded-xl overflow-hidden bg-gradient-to-br from-blue-100 via-purple-50 to-orange-100 flex-shrink-0">
+                  {/* Image compacte */}
+                  <div className="relative w-20 h-20 rounded-lg overflow-hidden bg-gradient-to-br from-blue-100 to-orange-100 flex-shrink-0">
                     {imageUrl ? (
                       <img
                         src={imageUrl}
                         alt={listing.title}
-                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                         onError={(e) => {
-                          console.error('❌ Erreur image listing:', imageUrl);
                           e.currentTarget.style.display = 'none';
                           const fallback = e.currentTarget.nextElementSibling as HTMLElement;
                           if (fallback) fallback.style.display = 'flex';
@@ -676,91 +535,60 @@ export default function ListingsPage() {
                       />
                     ) : null}
 
-                    {/* Fallback premium */}
                     <div
                       className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200"
                       style={{ display: imageUrl ? 'none' : 'flex' }}
                     >
-                      <Package className="h-8 w-8 text-slate-400" />
+                      <Package className="h-6 w-6 text-slate-400" />
                     </div>
 
-                    {/* Badges overlay */}
-                    <div className="absolute top-2 left-2">
-                      {listing.is_featured && (
-                        <Badge className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white text-xs border-0">
-                          <Crown className="h-3 w-3" />
-                        </Badge>
-                      )}
-                    </div>
-
-                    {/* Image count */}
-                    {listing.images && listing.images.length > 1 && (
-                      <div className="absolute bottom-2 right-2 bg-black/60 backdrop-blur-sm text-white px-2 py-1 rounded text-xs">
-                        +{listing.images.length - 1}
+                    {listing.is_featured && (
+                      <div className="absolute top-1 left-1">
+                        <Crown className="h-3 w-3 text-yellow-500" />
                       </div>
                     )}
                   </div>
 
-                  {/* Contenu principal premium */}
+                  {/* Contenu principal compact */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between h-full">
+                    <div className="flex items-start justify-between">
                       
-                      {/* Infos principales */}
-                      <div className="flex-1 min-w-0 space-y-3">
+                      <div className="flex-1 min-w-0 space-y-1">
                         
                         {/* Catégorie et titre */}
-                        <div className="space-y-2">
+                        <div className="space-y-1">
                           {listing.category && (
-                            <div className="flex items-center gap-2">
-                              {(() => {
-                                const IconComponent = getCategoryIcon(listing.category.icon);
-                                return (
-                                  <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                                    <IconComponent className="h-3 w-3 text-white" />
-                                  </div>
-                                );
-                              })()}
-                              <Badge variant="secondary" className="bg-gradient-to-r from-slate-100 to-slate-200 text-slate-700 border-0 text-xs">
-                                {listing.category.name}
-                              </Badge>
-                            </div>
+                            <Badge variant="secondary" className="text-xs px-2 py-0.5">
+                              {listing.category.name}
+                            </Badge>
                           )}
 
-                          <h3 className="font-bold text-xl text-slate-900 line-clamp-1 group-hover:text-blue-600 transition-colors">
+                          <h3 className="font-semibold text-base text-slate-900 line-clamp-1 group-hover:text-blue-600 transition-colors">
                             {listing.title}
                           </h3>
                         </div>
 
-                        {/* Description */}
-                        <p className="text-slate-600 text-sm line-clamp-2 leading-relaxed">
-                          {listing.description}
-                        </p>
-
-                        {/* Méta-infos premium */}
-                        <div className="flex items-center gap-6 text-xs">
-                          <div className="flex items-center gap-1.5 text-slate-600">
-                            <div className="w-4 h-4 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-full flex items-center justify-center">
-                              <MapPin className="h-2.5 w-2.5 text-white" />
-                            </div>
-                            <span className="font-medium">{listing.region}</span>
+                        {/* Méta-infos compactes */}
+                        <div className="flex items-center gap-4 text-xs text-slate-500">
+                          <div className="flex items-center gap-1">
+                            <MapPin className="h-3 w-3" />
+                            <span>{listing.region}</span>
                           </div>
                           
-                          <div className="flex items-center gap-1.5 text-slate-500">
+                          <div className="flex items-center gap-1">
                             <Clock className="h-3 w-3" />
                             <span>{formatTimeAgo(listing.created_at)}</span>
                           </div>
                           
-                          <div className="flex items-center gap-1.5 text-slate-500">
+                          <div className="flex items-center gap-1">
                             <Eye className="h-3 w-3" />
-                            <span>{listing.views_count || 0} vues</span>
+                            <span>{listing.views_count || 0}</span>
                           </div>
 
                           {listing.user && (
-                            <div className="flex items-center gap-1.5 text-slate-600">
-                              <div className="w-4 h-4 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center">
-                                <User className="h-2.5 w-2.5 text-white" />
-                              </div>
-                              <span>Par {listing.user.first_name}</span>
+                            <div className="flex items-center gap-1">
+                              <User className="h-3 w-3" />
+                              <span>{listing.user.first_name}</span>
                               {listing.user.is_verified && (
                                 <Verified className="h-3 w-3 text-green-600" />
                               )}
@@ -769,84 +597,46 @@ export default function ListingsPage() {
                         </div>
                       </div>
 
-                      {/* Prix et actions premium */}
-                      <div className="flex flex-col items-end gap-4 ml-6">
+                      {/* Prix et actions */}
+                      <div className="flex flex-col items-end gap-2 ml-4">
                         
-                        {/* Prix premium */}
-                        <motion.div 
-                          className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent text-right"
-                          whileHover={{ scale: 1.05 }}
-                        >
+                        <div className="text-lg font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
                           {formatPrice(listing.price)}
-                        </motion.div>
-
-                        {/* Actions premium */}
-                        <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300">
-                          <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }}>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 w-8 p-0 bg-white/80 hover:bg-white border border-slate-200 shadow-sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleFavorite(listing.id);
-                              }}
-                            >
-                              <Heart
-                                className={`h-3 w-3 ${favorites.has(listing.id)
-                                    ? 'fill-red-500 text-red-500'
-                                    : 'text-slate-600 hover:text-red-500'
-                                  }`}
-                              />
-                            </Button>
-                          </motion.div>
-
-                          <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }}>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 w-8 p-0 bg-white/80 hover:bg-white border border-slate-200 shadow-sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                navigator.share?.({
-                                  title: listing.title,
-                                  url: `${window.location.origin}/listings/${listing.id}`
-                                });
-                              }}
-                            >
-                              <Share2 className="h-3 w-3 text-slate-600 hover:text-blue-600" />
-                            </Button>
-                          </motion.div>
-
-                          <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }}>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 w-8 p-0 bg-white/80 hover:bg-white border border-slate-200 shadow-sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                router.push(`/listings/${listing.id}#contact`);
-                              }}
-                            >
-                              <MessageCircle className="h-3 w-3 text-slate-600 hover:text-green-600" />
-                            </Button>
-                          </motion.div>
                         </div>
 
-                        {/* Call to action compact */}
-                        <motion.div whileHover={{ y: -1 }} transition={{ duration: 0.2 }}>
-                          <Button 
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button
                             size="sm"
-                            className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium px-6 py-2 rounded-lg border-0 shadow-lg hover:shadow-xl transition-all duration-300"
+                            variant="ghost"
+                            className="h-6 w-6 p-0 bg-white/80 hover:bg-white rounded-full"
                             onClick={(e) => {
                               e.stopPropagation();
-                              router.push(`/listings/${listing.id}`);
+                              toggleFavorite(listing.id);
                             }}
                           >
-                            Voir détails
-                            <ArrowRight className="h-3 w-3 ml-2" />
+                            <Heart
+                              className={`h-3 w-3 ${favorites.has(listing.id)
+                                  ? 'fill-red-500 text-red-500'
+                                  : 'text-slate-600'
+                                }`}
+                            />
                           </Button>
-                        </motion.div>
+
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 w-6 p-0 bg-white/80 hover:bg-white rounded-full"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigator.share?.({
+                                title: listing.title,
+                                url: `${window.location.origin}/listings/${listing.id}`
+                              });
+                            }}
+                          >
+                            <Share2 className="h-3 w-3 text-slate-600" />
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -863,40 +653,9 @@ export default function ListingsPage() {
     <>
       <Header />
 
-      {/* Background animé premium */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <motion.div 
-          className="absolute top-20 left-10 w-96 h-96 bg-gradient-to-r from-blue-400/10 to-purple-600/10 rounded-full blur-3xl"
-          animate={{ 
-            x: [0, 50, 0],
-            y: [0, -30, 0],
-            scale: [1, 1.2, 1]
-          }}
-          transition={{ 
-            duration: 20,
-            repeat: Infinity,
-            ease: "easeInOut"
-          }}
-        />
-        <motion.div 
-          className="absolute bottom-20 right-10 w-[500px] h-[500px] bg-gradient-to-r from-emerald-400/10 to-blue-600/10 rounded-full blur-3xl" 
-          animate={{ 
-            x: [0, -60, 0],
-            y: [0, 40, 0],
-            scale: [1, 0.8, 1]
-          }}
-          transition={{ 
-            duration: 25,
-            repeat: Infinity,
-            ease: "easeInOut",
-            delay: 5
-          }}
-        />
-      </div>
+      <main className="min-h-screen bg-gradient-to-br from-slate-50/90 via-blue-50/50 to-purple-50/30">
 
-      <main className="min-h-screen bg-gradient-to-br from-slate-50/90 via-blue-50/50 to-purple-50/30 relative">
-
-        {/* Hero Section Premium - NON STICKY */}
+        {/* Hero Section Compact */}
         <section className="bg-white/90 backdrop-blur-sm border-b border-white/50 shadow-sm">
           <div className="container mx-auto px-6 py-4">
 
@@ -907,66 +666,47 @@ export default function ListingsPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4 }}
             >
-              {/* Breadcrumb compact */}
-              <div className="flex items-center gap-2 text-xs text-slate-600 mb-2">
-                <motion.button 
-                  onClick={() => router.push('/')} 
-                  className="hover:text-blue-600 transition-colors flex items-center gap-1"
-                  whileHover={{ x: -1 }}
-                >
-                  Accueil
-                </motion.button>
-                <span>/</span>
-                <span className="text-slate-900 font-medium">
-                  {currentCategoryName ? `${currentCategoryName}` : 'Toutes les annonces'}
-                </span>
-              </div>
-
               <div className="flex items-center justify-between">
                 <div>
-                  <h1 className="text-xl font-bold text-slate-900 leading-tight">
-                    {currentCategoryName ? `${currentCategoryName}` : 'Marketplace SenMarket'}
+                  <h1 className="text-xl font-bold text-slate-900">
+                    {currentCategoryName ? `${currentCategoryName}` : 'Toutes les annonces'}
                   </h1>
 
                   {pagination.total > 0 && (
                     <p className="text-slate-600 text-sm mt-1">
-                      <span className="font-semibold text-blue-600">{pagination.total}</span> annonce{pagination.total > 1 ? 's' : ''} • 
-                      <span className="text-green-600 font-medium ml-1">Certifiées</span>
+                      <span className="font-semibold text-blue-600">{pagination.total}</span> annonce{pagination.total > 1 ? 's' : ''} disponibles
                     </p>
                   )}
                 </div>
 
                 {/* Toggle vue compact */}
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-600 hidden sm:block">Affichage :</span>
-                  <div className="flex bg-white rounded-lg p-0.5 border shadow-sm">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setViewMode('grid')}
-                      className={`h-7 px-3 text-xs transition-all ${
-                        viewMode === 'grid' 
-                          ? 'bg-blue-600 text-white shadow-sm' 
-                          : 'text-slate-600 hover:bg-slate-50'
-                      }`}
-                    >
-                      <Grid className="h-3 w-3 mr-1" />
-                      Grille
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setViewMode('list')}
-                      className={`h-7 px-3 text-xs transition-all ${
-                        viewMode === 'list' 
-                          ? 'bg-blue-600 text-white shadow-sm' 
-                          : 'text-slate-600 hover:bg-slate-50'
-                      }`}
-                    >
-                      <List className="h-3 w-3 mr-1" />
-                      Liste
-                    </Button>
-                  </div>
+                <div className="flex bg-white rounded-lg p-0.5 border shadow-sm">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setViewMode('grid')}
+                    className={`h-7 px-3 text-xs transition-all ${
+                      viewMode === 'grid' 
+                        ? 'bg-blue-600 text-white shadow-sm' 
+                        : 'text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Grid className="h-3 w-3 mr-1" />
+                    Grille
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setViewMode('list')}
+                    className={`h-7 px-3 text-xs transition-all ${
+                      viewMode === 'list' 
+                        ? 'bg-blue-600 text-white shadow-sm' 
+                        : 'text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <List className="h-3 w-3 mr-1" />
+                    Liste
+                  </Button>
                 </div>
               </div>
             </motion.div>
@@ -1158,8 +898,7 @@ export default function ListingsPage() {
                 </div>
                 <div className="absolute inset-0 w-16 h-16 bg-gradient-to-r from-blue-600 to-purple-600 rounded-full animate-ping opacity-20"></div>
               </div>
-              <span className="text-slate-700 text-lg font-medium">Chargement des annonces premium...</span>
-              <span className="text-slate-500 text-sm mt-2">Préparation de votre sélection personnalisée</span>
+              <span className="text-slate-700 text-lg font-medium">Chargement des annonces...</span>
             </motion.div>
           ) : error ? (
             <motion.div 
@@ -1191,9 +930,9 @@ export default function ListingsPage() {
               </div>
               <h3 className="text-3xl font-bold text-slate-900 mb-4">Aucune annonce trouvée</h3>
               <p className="text-slate-600 mb-8 text-lg max-w-md mx-auto">
-                Essayez de modifier vos critères de recherche ou explorez d'autres catégories pour découvrir de superbes opportunités.
+                Essayez de modifier vos critères de recherche ou explorez d'autres catégories.
               </p>
-              <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <Button 
                   onClick={clearFilters} 
                   variant="outline"
@@ -1202,15 +941,13 @@ export default function ListingsPage() {
                   <X className="h-4 w-4 mr-2" />
                   Effacer les filtres
                 </Button>
-                <div>
-                  <Button 
-                    onClick={() => router.push('/sell')}
-                    className="bg-gradient-to-r from-green-600 to-emerald-600 text-white px-8 py-3 rounded-xl shadow-lg hover:shadow-xl ml-4"
-                  >
-                    <Zap className="h-4 w-4 mr-2" />
-                    Publier une annonce
-                  </Button>
-                </div>
+                <Button 
+                  onClick={() => router.push('/sell')}
+                  className="bg-gradient-to-r from-green-600 to-emerald-600 text-white px-8 py-3 rounded-xl shadow-lg hover:shadow-xl"
+                >
+                  <Zap className="h-4 w-4 mr-2" />
+                  Publier une annonce
+                </Button>
               </div>
             </motion.div>
           ) : (
@@ -1224,29 +961,30 @@ export default function ListingsPage() {
                 {viewMode === 'grid' ? renderGridView() : renderListView()}
               </motion.div>
 
-              {/* Pagination premium */}
+              {/* Pagination compact */}
               {pagination.pages > 1 && (
                 <motion.div 
-                  className="flex items-center justify-center gap-3 mt-16"
+                  className="flex items-center justify-center gap-2 mt-12"
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.6, delay: 0.3 }}
                 >
                   <Button
                     variant="outline"
+                    size="sm"
                     disabled={pagination.currentPage <= 1}
                     onClick={() => handlePageChange(pagination.currentPage - 1)}
-                    className="bg-white/80 backdrop-blur-sm border-white/50 shadow-lg rounded-xl px-6 py-3 disabled:opacity-50"
+                    className="bg-white/80 backdrop-blur-sm border-white/50 shadow-lg rounded-lg px-4 py-2 disabled:opacity-50"
                   >
-                    <ArrowRight className="h-4 w-4 mr-2 rotate-180" />
+                    <ArrowRight className="h-3 w-3 mr-1 rotate-180" />
                     Précédent
                   </Button>
 
-                  <div className="flex gap-2">
-                    {Array.from({ length: Math.min(pagination.pages, 7) }, (_, i) => {
-                      const page = pagination.currentPage <= 4
+                  <div className="flex gap-1">
+                    {Array.from({ length: Math.min(pagination.pages, 5) }, (_, i) => {
+                      const page = pagination.currentPage <= 3
                         ? i + 1
-                        : pagination.currentPage - 3 + i;
+                        : pagination.currentPage - 2 + i;
 
                       if (page > pagination.pages) return null;
 
@@ -1256,7 +994,7 @@ export default function ListingsPage() {
                           variant={page === pagination.currentPage ? 'default' : 'outline'}
                           size="sm"
                           onClick={() => handlePageChange(page)}
-                          className={`w-12 h-12 rounded-xl ${
+                          className={`w-8 h-8 rounded-lg text-sm ${
                             page === pagination.currentPage
                               ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg'
                               : 'bg-white/80 border-white/50 text-slate-700 shadow-lg hover:bg-white/90'
@@ -1270,24 +1008,25 @@ export default function ListingsPage() {
 
                   <Button
                     variant="outline"
+                    size="sm"
                     disabled={pagination.currentPage >= pagination.pages}
                     onClick={() => handlePageChange(pagination.currentPage + 1)}
-                    className="bg-white/80 backdrop-blur-sm border-white/50 shadow-lg rounded-xl px-6 py-3 disabled:opacity-50"
+                    className="bg-white/80 backdrop-blur-sm border-white/50 shadow-lg rounded-lg px-4 py-2 disabled:opacity-50"
                   >
                     Suivant
-                    <ArrowRight className="h-4 w-4 ml-2" />
+                    <ArrowRight className="h-3 w-3 ml-1" />
                   </Button>
                 </motion.div>
               )}
 
-              {/* Statistiques en bas premium */}
+              {/* Statistiques en bas compact */}
               <motion.div 
-                className="text-center mt-12 p-6 bg-white/60 backdrop-blur-sm rounded-2xl border border-white/50 shadow-lg"
+                className="text-center mt-8 p-4 bg-white/60 backdrop-blur-sm rounded-xl border border-white/50 shadow-lg"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.6, delay: 0.4 }}
               >
-                <div className="flex items-center justify-center gap-8 text-sm text-slate-600">
+                <div className="flex items-center justify-center gap-6 text-sm text-slate-600">
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
                     <span>
@@ -1298,7 +1037,7 @@ export default function ListingsPage() {
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                     <span>
-                      sur <span className="font-bold text-green-600">{pagination.total}</span> annonce{pagination.total > 1 ? 's' : ''} certifiée{pagination.total > 1 ? 's' : ''}
+                      sur <span className="font-bold text-green-600">{pagination.total}</span> annonce{pagination.total > 1 ? 's' : ''}
                     </span>
                   </div>
                 </div>
