@@ -1,24 +1,37 @@
+// 🔧 MISE À JOUR AUTH STORE POUR GÉRER LES FAVORIS
+// src/stores/auth.store.ts
+
+import React from 'react';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { User } from '@/lib/api/types';
-import { authService } from '@/lib/api';
+
+interface User {
+  id: string;
+  phone: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  region: string;
+  is_verified: boolean;
+  is_premium: boolean;
+  avatar_url?: string;
+  created_at: string;
+  updated_at: string;
+}
 
 interface AuthState {
   user: User | null;
   token: string | null;
   isAuthenticated: boolean;
-  isLoading: boolean;
-  error: string | null;
 }
 
 interface AuthActions {
-  setUser: (user: User | null) => void;
-  setToken: (token: string | null) => void;
+  setUser: (user: User) => void;
+  setToken: (token: string) => void;
   login: (phone: string, password: string) => Promise<void>;
-  register: (data: any) => Promise<void>;
+  register: (userData: any) => Promise<void>;
   logout: () => void;
-  loadUserFromStorage: () => void;
-  clearError: () => void;
+  clearAuth: () => void;
 }
 
 export const useAuthStore = create<AuthState & AuthActions>()(
@@ -28,115 +41,153 @@ export const useAuthStore = create<AuthState & AuthActions>()(
       user: null,
       token: null,
       isAuthenticated: false,
-      isLoading: false,
-      error: null,
 
       // Actions
       setUser: (user) => {
-        set({ 
-          user, 
-          isAuthenticated: !!user 
-        });
+        set({ user, isAuthenticated: true });
         
-        // Synchroniser avec localStorage
+        // ✅ INITIALISER LES FAVORIS POUR CE USER
         if (typeof window !== 'undefined') {
-          if (user) {
-            localStorage.setItem('senmarket_user', JSON.stringify(user));
-          } else {
-            localStorage.removeItem('senmarket_user');
-          }
+          // Import dynamique pour éviter les erreurs SSR
+          import('./favorites.store').then(({ useFavoritesStore }) => {
+            const setCurrentUser = useFavoritesStore.getState().setCurrentUser;
+            setCurrentUser(user.id);
+          });
         }
       },
 
       setToken: (token) => {
-        set({ token, isAuthenticated: !!token });
-        
-        // Synchroniser avec localStorage
-        if (typeof window !== 'undefined') {
-          if (token) {
-            localStorage.setItem('senmarket_token', token);
-          } else {
-            localStorage.removeItem('senmarket_token');
-          }
-        }
+        set({ token });
       },
 
       login: async (phone, password) => {
-        set({ isLoading: true, error: null });
-        
         try {
-          const response = await authService.login({ phone, password });
-          
-          get().setUser(response.user);
-          get().setToken(response.token);
-          
-          set({ isLoading: false });
-        } catch (error) {
-          set({ 
-            isLoading: false, 
-            error: error instanceof Error ? error.message : 'Erreur de connexion' 
+          const response = await fetch('http://localhost:8080/api/v1/auth/login', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ phone, password }),
           });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Erreur de connexion');
+          }
+
+          const data = await response.json();
+          
+          set({
+            user: data.data.user,
+            token: data.data.token,
+            isAuthenticated: true,
+          });
+
+          // ✅ INITIALISER LES FAVORIS
+          if (typeof window !== 'undefined') {
+            import('./favorites.store').then(({ useFavoritesStore }) => {
+              const setCurrentUser = useFavoritesStore.getState().setCurrentUser;
+              setCurrentUser(data.data.user.id);
+            });
+          }
+
+          console.log('✅ Connexion réussie pour:', data.data.user.first_name);
+        } catch (error) {
+          console.error('❌ Erreur login:', error);
           throw error;
         }
       },
 
-      register: async (data) => {
-        set({ isLoading: true, error: null });
-        
+      register: async (userData) => {
         try {
-          const response = await authService.register(data);
-          
-          get().setUser(response.user);
-          get().setToken(response.token);
-          
-          set({ isLoading: false });
-        } catch (error) {
-          set({ 
-            isLoading: false, 
-            error: error instanceof Error ? error.message : 'Erreur d\'inscription' 
+          const response = await fetch('http://localhost:8080/api/v1/auth/register', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(userData),
           });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Erreur d\'inscription');
+          }
+
+          const data = await response.json();
+          
+          set({
+            user: data.data.user,
+            token: data.data.token,
+            isAuthenticated: true,
+          });
+
+          // ✅ INITIALISER LES FAVORIS
+          if (typeof window !== 'undefined') {
+            import('./favorites.store').then(({ useFavoritesStore }) => {
+              const setCurrentUser = useFavoritesStore.getState().setCurrentUser;
+              setCurrentUser(data.data.user.id);
+            });
+          }
+
+          console.log('✅ Inscription réussie pour:', data.data.user.first_name);
+        } catch (error) {
+          console.error('❌ Erreur register:', error);
           throw error;
         }
       },
 
       logout: () => {
-        authService.logout();
-        get().setUser(null);
-        get().setToken(null);
-        set({ error: null });
-      },
-
-      loadUserFromStorage: () => {
+        console.log('👋 Déconnexion utilisateur');
+        
+        // ✅ NETTOYER LES FAVORIS
         if (typeof window !== 'undefined') {
-          const token = localStorage.getItem('senmarket_token');
-          const userStr = localStorage.getItem('senmarket_user');
-          
-          if (token && userStr) {
-            try {
-              const user = JSON.parse(userStr);
-              set({ 
-                user, 
-                token, 
-                isAuthenticated: true 
-              });
-            } catch (error) {
-              // Nettoyer les données corrompues
-              localStorage.removeItem('senmarket_token');
-              localStorage.removeItem('senmarket_user');
-            }
-          }
+          import('./favorites.store').then(({ useFavoritesStore }) => {
+            const setCurrentUser = useFavoritesStore.getState().setCurrentUser;
+            setCurrentUser(null); // Vider les favoris pour cet utilisateur
+          });
         }
+
+        set({
+          user: null,
+          token: null,
+          isAuthenticated: false,
+        });
       },
 
-      clearError: () => set({ error: null }),
+      clearAuth: () => {
+        // ✅ NETTOYER LES FAVORIS
+        if (typeof window !== 'undefined') {
+          import('./favorites.store').then(({ useFavoritesStore }) => {
+            const setCurrentUser = useFavoritesStore.getState().setCurrentUser;
+            setCurrentUser(null);
+          });
+        }
+
+        set({
+          user: null,
+          token: null,
+          isAuthenticated: false,
+        });
+      },
     }),
     {
       name: 'senmarket-auth',
-      partialize: (state) => ({
-        user: state.user,
-        token: state.token,
-        isAuthenticated: state.isAuthenticated,
-      }),
     }
   )
 );
+
+// ✅ HOOK POUR INITIALISER LES FAVORIS AU DÉMARRAGE
+export const useInitializeAuth = () => {
+  const { user } = useAuthStore();
+  
+  React.useEffect(() => {
+    // Initialiser les favoris si un user est déjà connecté
+    if (user && typeof window !== 'undefined') {
+      import('./favorites.store').then(({ useFavoritesStore }) => {
+        const setCurrentUser = useFavoritesStore.getState().setCurrentUser;
+        setCurrentUser(user.id);
+        console.log('🔄 Favoris initialisés pour utilisateur existant:', user.first_name);
+      });
+    }
+  }, [user]);
+};

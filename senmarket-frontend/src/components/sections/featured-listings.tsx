@@ -600,6 +600,7 @@ export function FeaturedListings() {
                 Publier mon annonce
               </Button>
             </div>
+
             {/* Trust indicators */}
             <div className="flex items-center justify-center space-x-6 mt-8 text-sm text-slate-500">
               <div className="flex items-center space-x-1">

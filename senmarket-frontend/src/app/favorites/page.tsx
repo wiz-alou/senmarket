@@ -70,6 +70,30 @@ interface Listing {
   };
 }
 
+export function useFavoritesAuth() {
+  const { user, isAuthenticated } = useAuthStore();
+  const { currentUserId, debugFavorites } = useFavoritesStore();
+
+  useEffect(() => {
+    if (isAuthenticated && user && currentUserId !== user.id) {
+      console.log('🔄 Correction sync favoris:', currentUserId, '→', user.id);
+      const setCurrentUser = useFavoritesStore.getState().setCurrentUser;
+      setCurrentUser(user.id);
+    }
+  }, [user, isAuthenticated, currentUserId]);
+
+  // Debug button (temporaire)
+  const debugUserFavorites = () => {
+    console.log('🔍 === DEBUG USER FAVORIS ===');
+    console.log('- User connecté:', user?.first_name, '(', user?.id, ')');
+    console.log('- Is authenticated:', isAuthenticated);
+    console.log('- Current user ID dans favoris:', currentUserId);
+    debugFavorites();
+  };
+
+  return { debugUserFavorites };
+}
+
 export default function FavoritesPage() {
   const router = useRouter();
   const { user, isAuthenticated } = useAuthStore();

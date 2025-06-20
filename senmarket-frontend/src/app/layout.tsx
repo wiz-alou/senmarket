@@ -4,7 +4,7 @@ import './globals.css'
 import { AppProviders } from '@/components/providers/app-providers'
 import { ErrorBoundary } from '@/components/ui/error-boundary'
 import { OfflineBanner } from '@/components/ui/offline-banner'
-
+import { FavoritesInitializer } from '@/components/providers/favorites-initializer'
 const inter = Inter({ 
   subsets: ['latin'],
   display: 'swap',
@@ -139,6 +139,11 @@ export default function RootLayout({
               {children}
             </div>
           </AppProviders>
+
+          <FavoritesInitializer>
+          {children}
+        </FavoritesInitializer>
+
         </ErrorBoundary>
       </body>
     </html>
