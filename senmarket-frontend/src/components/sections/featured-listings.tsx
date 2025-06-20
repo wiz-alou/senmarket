@@ -183,6 +183,12 @@ export function FeaturedListings() {
     }
   }
 
+  // Fonction utilitaire pour tronquer le texte
+  const truncateText = (text: string, maxLength: number) => {
+    if (text.length <= maxLength) return text
+    return text.substring(0, maxLength) + '...'
+  }
+
   // Loading state
   if (loading) {
     return (
@@ -199,8 +205,8 @@ export function FeaturedListings() {
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {[...Array(6)].map((_, i) => (
-              <Card key={i} className="overflow-hidden">
-                <div className="h-56 bg-slate-200 animate-pulse"></div>
+              <Card key={i} className="overflow-hidden h-[480px]">
+                <div className="h-48 bg-slate-200 animate-pulse"></div>
                 <CardContent className="p-6 space-y-4">
                   <div className="h-4 bg-slate-200 rounded animate-pulse"></div>
                   <div className="h-6 bg-slate-200 rounded animate-pulse"></div>
@@ -312,8 +318,8 @@ export function FeaturedListings() {
           </div>
         </motion.div>
 
-        {/* Grille des annonces premium */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-16">
+        {/* 🎯 GRILLE UNIFORME - HAUTEUR FIXE */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-16">
           {listings.map((listing, index) => {
             const imageUrl = listing.images && listing.images.length > 0 
               ? getImageUrl(listing.images[0]) 
@@ -330,10 +336,11 @@ export function FeaturedListings() {
                 transition={{ duration: 0.5, delay: index * 0.1 }}
                 className="group"
               >
-                <Card className="overflow-hidden bg-white/80 backdrop-blur-sm border-0 shadow-lg hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2">
+                {/* 🎯 CARD AVEC HAUTEUR FIXE ET FLEX LAYOUT - TAILLE RÉDUITE */}
+                <Card className="overflow-hidden bg-white/80 backdrop-blur-sm border-0 shadow-lg hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 h-[480px] flex flex-col">
                   
-                  {/* Image container avec overlay moderne */}
-                  <div className="relative h-64 overflow-hidden">
+                  {/* Image container - HAUTEUR FIXE RÉDUITE */}
+                  <div className="relative h-48 overflow-hidden flex-shrink-0">
                     
                     {/* Background gradient */}
                     <div className={`absolute inset-0 bg-gradient-to-br ${getCategoryColor(listing.category.name)} opacity-20`}></div>
@@ -430,88 +437,97 @@ export function FeaturedListings() {
                     </div>
                   </div>
                   
-                  <CardContent className="p-6 space-y-4">
+                  {/* 🎯 CONTENU AVEC FLEX ET OVERFLOW GÉRÉ - PADDING RÉDUIT */}
+                  <CardContent className="p-4 flex-1 flex flex-col justify-between">
                     
-                    {/* Titre et prix */}
-                    <div className="space-y-3">
-                      <h3 className="font-bold text-slate-900 text-xl leading-tight line-clamp-2 group-hover:text-blue-600 transition-colors">
-                        {listing.title}
-                      </h3>
+                    {/* Section principale - flex-1 */}
+                    <div className="space-y-3 flex-1">
                       
-                      <div className="flex items-center justify-between">
-                        <div className="text-3xl font-bold text-slate-900">
-                          {formatPrice(listing.price)}
+                      {/* Titre et prix - TAILLE CONTRÔLÉE RÉDUITE */}
+                      <div className="space-y-2">
+                        <h3 className="font-bold text-slate-900 text-base leading-tight h-[2.5rem] overflow-hidden">
+                          {/* 🎯 TITRE TRONQUÉ À 2 LIGNES MAX */}
+                          {truncateText(listing.title, 50)}
+                        </h3>
+                        
+                        <div className="flex items-center justify-between">
+                          <div className="text-xl font-bold text-slate-900">
+                            {formatPrice(listing.price)}
+                          </div>
+                          <Badge variant="outline" className="text-xs font-medium border-green-200 text-green-700 bg-green-50">
+                            {listing.status === 'active' ? 'Disponible' : listing.status}
+                          </Badge>
                         </div>
-                        <Badge variant="outline" className="text-xs font-medium border-green-200 text-green-700 bg-green-50">
-                          {listing.status === 'active' ? 'Disponible' : listing.status}
-                        </Badge>
+                      </div>
+
+                      {/* Description - HAUTEUR CONTRÔLÉE RÉDUITE */}
+                      <p className="text-slate-600 text-sm leading-relaxed h-[2.5rem] overflow-hidden">
+                        {/* 🎯 DESCRIPTION TRONQUÉE */}
+                        {truncateText(listing.description, 60)}
+                      </p>
+
+                      {/* Localisation */}
+                      <div className="flex items-center space-x-2 text-slate-500">
+                        <MapPin className="h-4 w-4 text-blue-500" />
+                        <span className="font-medium text-sm">{listing.region}</span>
+                      </div>
+
+                      {/* Vendeur premium - HAUTEUR CONTRÔLÉE RÉDUITE */}
+                      <div className="pt-3 border-t border-gray-100">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-2">
+                            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                              {listing.user.first_name?.charAt(0) || 'U'}
+                            </div>
+                            <div>
+                              <div className="flex items-center space-x-1">
+                                <span className="font-semibold text-slate-900 text-sm">
+                                  {/* 🎯 NOM TRONQUÉ SI TROP LONG */}
+                                  {truncateText(`${listing.user.first_name} ${listing.user.last_name}`, 18)}
+                                </span>
+                                {listing.user.is_verified && (
+                                  <CheckCircle className="h-3 w-3 text-blue-500" />
+                                )}
+                              </div>
+                              <div className="text-xs text-slate-500">
+                                Membre vérifié
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-1">
+                            {[...Array(5)].map((_, i) => (
+                              <Star key={i} className="h-2.5 w-2.5 text-yellow-400 fill-current" />
+                            ))}
+                          </div>
+                        </div>
                       </div>
                     </div>
 
-                    {/* Description */}
-                    <p className="text-slate-600 line-clamp-2 leading-relaxed">
-                      {listing.description}
-                    </p>
-
-                    {/* Localisation */}
-                    <div className="flex items-center space-x-2 text-slate-500">
-                      <MapPin className="h-4 w-4 text-blue-500" />
-                      <span className="font-medium">{listing.region}</span>
-                    </div>
-
-                    {/* Vendeur premium */}
-                    <div className="pt-4 border-t border-gray-100">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold">
-                            {listing.user.first_name?.charAt(0) || 'U'}
-                          </div>
-                          <div>
-                            <div className="flex items-center space-x-2">
-                              <span className="font-semibold text-slate-900">
-                                {listing.user.first_name} {listing.user.last_name}
-                              </span>
-                              {listing.user.is_verified && (
-                                <CheckCircle className="h-4 w-4 text-blue-500" />
-                              )}
-                            </div>
-                            <div className="text-sm text-slate-500">
-                              {listing.user.region} • Membre vérifié
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center space-x-1">
-                          {[...Array(5)].map((_, i) => (
-                            <Star key={i} className="h-3 w-3 text-yellow-400 fill-current" />
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Actions premium */}
-                    <div className="flex space-x-2 pt-4">
+                    {/* 🎯 ACTIONS FIXES EN BAS - TAILLE RÉDUITE */}
+                    <div className="flex space-x-2 pt-3 flex-shrink-0">
                       <Button 
-                        className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg"
+                        size="sm"
+                        className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg text-xs"
                         onClick={() => router.push(`/listings/${listing.id}`)}
                       >
-                        <Eye className="h-4 w-4 mr-2" />
-                        Voir l'annonce
+                        <Eye className="h-3 w-3 mr-1" />
+                        Voir
                       </Button>
                       <Button 
                         variant="outline" 
-                        size="icon" 
-                        className="border-blue-200 hover:bg-blue-50"
+                        size="sm"
+                        className="border-blue-200 hover:bg-blue-50 px-2"
                         onClick={() => window.open(`tel:${listing.user.phone}`, '_self')}
                       >
-                        <Phone className="h-4 w-4 text-blue-600" />
+                        <Phone className="h-3 w-3 text-blue-600" />
                       </Button>
                       <Button 
                         variant="outline" 
-                        size="icon" 
-                        className="border-blue-200 hover:bg-blue-50"
+                        size="sm"
+                        className="border-blue-200 hover:bg-blue-50 px-2"
                         onClick={() => router.push(`/listings/${listing.id}?contact=true`)}
                       >
-                        <MessageCircle className="h-4 w-4 text-blue-600" />
+                        <MessageCircle className="h-3 w-3 text-blue-600" />
                       </Button>
                     </div>
                   </CardContent>
