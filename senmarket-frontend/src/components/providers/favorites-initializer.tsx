@@ -31,5 +31,3 @@ export function FavoritesInitializer({ children }: { children: React.ReactNode }
 
   return <>{children}</>;
 }
-
-

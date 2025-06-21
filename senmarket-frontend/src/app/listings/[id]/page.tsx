@@ -52,6 +52,9 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { useFavoritesStore } from '@/stores/favorites.store'
+import { useAuthStore } from '@/stores/auth.store'
+import { toast } from 'sonner'
 
 // Types
 interface Listing {
@@ -97,6 +100,15 @@ export default function ListingDetailPage() {
   const searchParams = useSearchParams()
   const listingId = params.id as string
 
+  // Stores
+  const { isAuthenticated, user } = useAuthStore()
+  const { 
+    isFavorite, 
+    addFavorite, 
+    removeFavorite,
+    getFavorites 
+  } = useFavoritesStore()
+
   // États
   const [listing, setListing] = useState<Listing | null>(null)
   const [relatedListings, setRelatedListings] = useState<Listing[]>([])
@@ -107,7 +119,6 @@ export default function ListingDetailPage() {
   const [showContactForm, setShowContactForm] = useState(false)
   const [contactSuccess, setContactSuccess] = useState(false)
   const [isSubmittingContact, setIsSubmittingContact] = useState(false)
-  const [isFavorite, setIsFavorite] = useState(false)
   const [copied, setCopied] = useState(false)
 
   const [contactForm, setContactForm] = useState<ContactForm>({
@@ -124,6 +135,17 @@ export default function ListingDetailPage() {
     rating: 0,
     loading: true
   })
+
+  // État local pour les favoris (pour la réactivité UI)
+  const [localIsFavorite, setLocalIsFavorite] = useState(false)
+
+  // Synchroniser avec le store de favoris
+  useEffect(() => {
+    if (listing) {
+      const favoriteStatus = isFavorite(listing.id)
+      setLocalIsFavorite(favoriteStatus)
+    }
+  }, [listing, isFavorite, getFavorites()]) // Re-sync quand les favoris changent
 
   // Fonctions utilitaires
   const getImageUrl = (imagePath: string) => {
@@ -159,6 +181,62 @@ export default function ListingDetailPage() {
     return `il y a ${days} jour${days > 1 ? 's' : ''}`
   }
 
+  // Gestion des favoris améliorée
+  const handleToggleFavorite = () => {
+    if (!listing) return
+
+    // Vérifier l'authentification
+    if (!isAuthenticated || !user) {
+      toast.error('Connectez-vous pour sauvegarder des annonces', {
+        action: {
+          label: 'Se connecter',
+          onClick: () => router.push('/auth/login?redirect=' + encodeURIComponent(window.location.pathname))
+        }
+      })
+      return
+    }
+
+    try {
+      if (localIsFavorite) {
+        // Retirer des favoris
+        removeFavorite(listing.id)
+        setLocalIsFavorite(false)
+        toast.success('Annonce retirée des favoris', {
+          icon: '💔'
+        })
+        console.log('💔 Favori retiré:', listing.id)
+      } else {
+        // Ajouter aux favoris
+        addFavorite(listing.id, {
+          id: listing.id,
+          title: listing.title,
+          price: listing.price,
+          currency: listing.currency,
+          images: listing.images,
+          region: listing.region,
+          addedAt: new Date().toISOString(),
+          category: listing.category,
+          user: {
+            first_name: listing.user.first_name,
+            last_name: listing.user.last_name
+          }
+        })
+        setLocalIsFavorite(true)
+        toast.success('Annonce sauvegardée dans vos favoris !', {
+          icon: '❤️',
+          action: {
+            label: 'Voir mes favoris',
+            onClick: () => router.push('/favorites')
+          }
+        })
+        console.log('❤️ Favori ajouté:', listing.id)
+      }
+    } catch (error) {
+      console.error('Erreur gestion favoris:', error)
+      toast.error('Erreur lors de la sauvegarde')
+    }
+  }
+
   // Chargement des données
   useEffect(() => {
     fetchListing()
@@ -167,7 +245,7 @@ export default function ListingDetailPage() {
   useEffect(() => {
     if (listing) {
       fetchRelatedListings()
-      fetchVendorStats(listing.user.id) // Charger les stats du vendeur
+      fetchVendorStats(listing.user.id)
       incrementViews()
       
       // Ouvrir le formulaire de contact si paramètre URL
@@ -282,6 +360,9 @@ export default function ListingDetailPage() {
 
       setContactSuccess(true)
       setShowContactForm(false)
+      toast.success('Message envoyé avec succès !', {
+        description: 'Le vendeur vous contactera bientôt.'
+      })
 
       // Reset form
       setContactForm({
@@ -293,7 +374,7 @@ export default function ListingDetailPage() {
 
     } catch (error) {
       console.error('Erreur envoi contact:', error)
-      alert('Erreur lors de l\'envoi du message. Veuillez réessayer.')
+      toast.error('Erreur lors de l\'envoi du message. Veuillez réessayer.')
     } finally {
       setIsSubmittingContact(false)
     }
@@ -314,6 +395,7 @@ export default function ListingDetailPage() {
       // Fallback: copier le lien
       navigator.clipboard.writeText(window.location.href)
       setCopied(true)
+      toast.success('Lien copié dans le presse-papier !')
       setTimeout(() => setCopied(false), 2000)
     }
   }
@@ -504,15 +586,15 @@ export default function ListingDetailPage() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => setIsFavorite(!isFavorite)}
+                  onClick={handleToggleFavorite}
                   className={`${
-                    isFavorite 
+                    localIsFavorite 
                       ? 'text-red-500 hover:text-red-600' 
                       : 'text-slate-600 hover:text-slate-900'
-                  } hover:bg-slate-100`}
+                  } hover:bg-slate-100 transition-colors`}
                 >
-                  <Heart className={`h-4 w-4 mr-1 ${isFavorite ? 'fill-current' : ''}`} />
-                  {isFavorite ? 'Sauvé' : 'Sauvegarder'}
+                  <Heart className={`h-4 w-4 mr-1 transition-all ${localIsFavorite ? 'fill-current scale-110' : ''}`} />
+                  {localIsFavorite ? 'Sauvé' : 'Sauvegarder'}
                 </Button>
                 <Button
                   variant="ghost"
@@ -937,7 +1019,7 @@ export default function ListingDetailPage() {
                 </Alert>
               </motion.div>
 
-              {/* ✅ ACTIONS RAPIDES */}
+              {/* ✅ ACTIONS RAPIDES AVEC FAVORIS CORRIGÉ */}
               <motion.div
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
@@ -948,11 +1030,17 @@ export default function ListingDetailPage() {
                 <div className="space-y-3">
                   <Button
                     variant="outline"
-                    className="w-full justify-start text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-                    onClick={() => setIsFavorite(!isFavorite)}
+                    className={`w-full justify-start transition-all ${
+                      localIsFavorite 
+                        ? 'text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200' 
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    }`}
+                    onClick={handleToggleFavorite}
                   >
-                    <Heart className={`h-4 w-4 mr-3 ${isFavorite ? 'fill-current text-red-500' : ''}`} />
-                    {isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+                    <Heart className={`h-4 w-4 mr-3 transition-all ${
+                      localIsFavorite ? 'fill-current text-red-500' : ''
+                    }`} />
+                    {localIsFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
                   </Button>
                   <Button
                     variant="outline"
@@ -1144,7 +1232,7 @@ export default function ListingDetailPage() {
           )}
         </div>
 
-        {/* ✅ BARRE D'ACTIONS FLOTTANTE MOBILE */}
+        {/* ✅ BARRE D'ACTIONS FLOTTANTE MOBILE AVEC FAVORIS CORRIGÉ */}
         <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-sm border-t border-slate-200 p-4 shadow-2xl z-50">
           <div className="flex gap-3 max-w-md mx-auto">
             <Button 
@@ -1165,14 +1253,14 @@ export default function ListingDetailPage() {
             <Button
               variant="outline"
               size="icon"
-              onClick={() => setIsFavorite(!isFavorite)}
-              className={`h-14 w-14 rounded-xl border-2 ${
-                isFavorite 
-                  ? 'border-red-200 bg-red-50 text-red-500' 
+              onClick={handleToggleFavorite}
+              className={`h-14 w-14 rounded-xl border-2 transition-all ${
+                localIsFavorite 
+                  ? 'border-red-200 bg-red-50 text-red-500 hover:bg-red-100' 
                   : 'border-slate-200 text-slate-600 hover:bg-slate-50'
               }`}
             >
-              <Heart className={`h-6 w-6 ${isFavorite ? 'fill-current' : ''}`} />
+              <Heart className={`h-6 w-6 transition-all ${localIsFavorite ? 'fill-current scale-110' : ''}`} />
             </Button>
           </div>
         </div>
