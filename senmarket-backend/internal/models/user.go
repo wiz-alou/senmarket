@@ -10,8 +10,8 @@ import (
 
 type User struct {
 	ID          uuid.UUID      `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
-	Phone       string         `json:"phone" gorm:"uniqueIndex;not null" validate:"required,e164"`
-	Email       string         `json:"email" gorm:"uniqueIndex" validate:"email"`
+Phone       string         `json:"phone" gorm:"unique;not null" validate:"required,e164"`
+Email       string         `json:"email" gorm:"unique" validate:"email"`
 	PasswordHash string        `json:"-" gorm:"not null"`
 	FirstName   string         `json:"first_name" gorm:"not null" validate:"required,min=2,max=50"`
 	LastName    string         `json:"last_name" gorm:"not null" validate:"required,min=2,max=50"`

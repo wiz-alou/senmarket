@@ -1,72 +1,91 @@
-// internal/app/server.go - VERSION AVEC REDIS INTÉGRÉ
+// internal/app/server.go
 package app
 
 import (
 	"context"
+	// "errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
-	"os/signal"
-	"syscall"
+	// "strconv"
 	"time"
 
 	"senmarket/internal/auth"
 	"senmarket/internal/config"
 	"senmarket/internal/handlers"
 	"senmarket/internal/middleware"
-	"senmarket/internal/models"
+	// "senmarket/internal/models"
 	"senmarket/internal/repository/redis"
 	"senmarket/internal/services"
 
 	"github.com/gin-gonic/gin"
-	redisClient "github.com/redis/go-redis/v9"
+	redislib "github.com/redis/go-redis/v9"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 type Application struct {
-	config             *config.Config
-	db                 *gorm.DB
-	redis              *redisClient.Client
-	router             *gin.Engine
-	
-	// Services
-	authService        *auth.Service
-	jwtService         *auth.JWTService
-	listingService     *services.ListingService
-	categoryService    *services.CategoryService
-	paymentService     *services.PaymentService
-	imageService       *services.ImageService
-	contactService     *services.ContactService
-	twilioSMSService   *services.TwilioSMSService
-	cacheService       *services.CacheService
-	
-	// Middleware
-	authMiddleware     *auth.Middleware
-	cacheMiddleware    *middleware.CacheMiddleware
-	
-	// Handlers
-	authHandler        *handlers.AuthHandler
-	listingHandler     *handlers.ListingHandler
-	categoryHandler    *handlers.CategoryHandler
-	paymentHandler     *handlers.PaymentHandler
-	imageHandler       *handlers.ImageHandler
-	contactHandler     *handlers.ContactHandler
-	cacheHandler       *handlers.CacheHandler
-	monitoringHandler  *handlers.MonitoringHandler
+	config            *config.Config
+	db                *gorm.DB
+	redis             *redislib.Client
+	router            *gin.Engine
+	authService       *auth.Service
+	jwtService        *auth.JWTService
+	listingService    *services.ListingService
+	categoryService   *services.CategoryService
+	paymentService    *services.PaymentService
+	imageService      *services.ImageService
+	contactService    *services.ContactService
+	twilioSMSService  *services.TwilioSMSService
+	cacheService      *services.CacheService
+	authMiddleware    *auth.Middleware
+	cacheMiddleware   *middleware.CacheMiddleware
+	authHandler       *handlers.AuthHandler
+	listingHandler    *handlers.ListingHandler
+	categoryHandler   *handlers.CategoryHandler
+	paymentHandler    *handlers.PaymentHandler
+	imageHandler      *handlers.ImageHandler
+	contactHandler    *handlers.ContactHandler
+	cacheHandler      *handlers.CacheHandler
+	monitoringHandler *handlers.MonitoringHandler
 }
 
 func New(cfg *config.Config) *Application {
-	// Initialiser la base de données
-	db, err := config.NewDatabase(cfg.Database)
-	if err != nil {
-		log.Fatalf("Erreur initialisation base de données: %v", err)
+	// Configuration de la base de données PostgreSQL
+	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=%s TimeZone=UTC",
+		cfg.Database.Host,
+		cfg.Database.User,
+		cfg.Database.Password,
+		cfg.Database.Name,
+		cfg.Database.Port,
+		cfg.Database.SSLMode,
+	)
+
+	// Configurer le logger GORM selon l'environnement
+	var gormLogger logger.Interface
+	if cfg.Env == "development" {
+		gormLogger = logger.Default.LogMode(logger.Info)
+	} else {
+		gormLogger = logger.Default.LogMode(logger.Error)
 	}
 
-	// 🔴 Initialiser Redis
-	redisClient, err := config.NewRedis(cfg.Redis)
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
+		Logger: gormLogger,
+	})
 	if err != nil {
-		log.Fatalf("Erreur initialisation Redis: %v", err)
+		log.Fatalf("Erreur connexion base de données: %v", err)
 	}
+
+	log.Println("✅ Connexion PostgreSQL établie")
+
+	// Configuration Redis
+	redisClient := redislib.NewClient(&redislib.Options{
+		Addr:     fmt.Sprintf("%s:%s", cfg.Redis.Host, cfg.Redis.Port),
+		Password: cfg.Redis.Password,
+		DB:       cfg.Redis.DB,
+	})
 
 	// Test de connexion Redis
 	ctx := context.Background()
@@ -132,7 +151,35 @@ func New(cfg *config.Config) *Application {
 	cacheHandler := handlers.NewCacheHandler(cacheService)
 	monitoringHandler := handlers.NewMonitoringHandler(cacheService, redisClient)
 
-	// Migrer la base de données
+	// ============================================
+	// 🔴 MIGRATIONS DÉSACTIVÉES
+	// ============================================
+	// AutoMigrate désactivé à cause de problèmes de contraintes GORM
+	// Les tables existent déjà via les migrations SQL dans /migrations/
+	// La base de données est opérationnelle et toutes les tables sont créées
+	
+	log.Println("✅ Migrations GORM désactivées - utilisation de la DB existante")
+	
+	// Vérifier juste que la DB fonctionne correctement
+	sqlDB, err := db.DB()
+	if err != nil {
+		log.Fatalf("Erreur récupération DB connection: %v", err)
+	}
+	
+	if err := sqlDB.Ping(); err != nil {
+		log.Fatalf("Erreur ping base de données: %v", err)
+	}
+	
+	log.Println("📊 Base de données PostgreSQL opérationnelle")
+	log.Println("📋 Tables créées via migrations SQL (/migrations/*.sql)")
+	
+	/*
+	// ============================================
+	// ANCIEN CODE AUTOMIGRATE (DÉSACTIVÉ)
+	// ============================================
+	// Cette section cause des erreurs de contraintes avec GORM
+	// Les tables sont déjà créées via les fichiers de migration SQL
+	
 	if err := db.AutoMigrate(
 		&models.User{},
 		&models.Category{},
@@ -143,6 +190,7 @@ func New(cfg *config.Config) *Application {
 	); err != nil {
 		log.Fatalf("Erreur migration base de données: %v", err)
 	}
+	*/
 
 	app := &Application{
 		config:            cfg,
@@ -283,9 +331,9 @@ func (a *Application) setupRoutes() {
 			})
 		})
 
-		// 🔴 Endpoints avec cache optimisé
-		api.GET("/categories", a.cacheMiddleware.CacheResponse(24*time.Hour), a.categoryHandler.GetCategories)
-		api.GET("/categories/stats", a.cacheMiddleware.CacheResponse(30*time.Minute), a.categoryHandler.GetCategoriesWithStats)
+		// 🔴 ENDPOINTS CATEGORIES (SANS MIDDLEWARE POUR L'INSTANT)
+		api.GET("/categories", a.categoryHandler.GetCategories)
+		api.GET("/categories/stats", a.categoryHandler.GetCategoriesWithStats)
 
 		// 🔴 Rate limiting spécifique pour auth
 		auth := api.Group("/auth")
@@ -311,7 +359,7 @@ func (a *Application) setupRoutes() {
 			categories.GET("/:id", a.categoryHandler.GetCategory)
 			categories.GET("/slug/:slug", a.categoryHandler.GetCategoryBySlug)
 			categories.GET("/:id/listings", a.categoryHandler.GetListingsByCategory)
-			categories.GET("/:id/stats", a.cacheMiddleware.CacheResponse(30*time.Minute), a.categoryHandler.GetCategoryStats)
+			categories.GET("/:id/stats", a.categoryHandler.GetCategoryStats)
 		}
 
 		// Routes annonces (publiques avec auth optionnelle)
@@ -323,8 +371,8 @@ func (a *Application) setupRoutes() {
 			listings.GET("/:id", a.listingHandler.GetListing)        // Cache géré dans le service
 		}
 
-		// 🔴 Endpoint listings featured avec cache
-		api.GET("/listings/featured", a.cacheMiddleware.CacheResponse(30*time.Minute), func(c *gin.Context) {
+		// 🔴 Endpoint listings featured (SANS MIDDLEWARE POUR L'INSTANT)
+		api.GET("/listings/featured", func(c *gin.Context) {
 			// Appeler directement le service pour les featured
 			featured, err := a.listingService.GetFeaturedListings(6)
 			if err != nil {
@@ -397,239 +445,91 @@ func (a *Application) setupRoutes() {
 			cache := api.Group("/cache")
 			{
 				cache.GET("/stats", a.cacheHandler.GetCacheStats)
-				cache.POST("/clear", a.cacheHandler.ClearCache)
+				cache.DELETE("/clear", a.cacheHandler.ClearCache)
 				cache.POST("/warmup", a.cacheHandler.WarmupCache)
 			}
 		}
 
 		// 🔴 Monitoring endpoints
-		monitoring := api.Group("/monitoring")
-		{
-			monitoring.GET("/redis", a.monitoringHandler.GetRedisMetrics)
-			monitoring.GET("/hit-ratio", a.monitoringHandler.GetCacheHitRatio)
-			monitoring.GET("/top-keys", a.monitoringHandler.GetTopKeys)
-			monitoring.GET("/memory", a.monitoringHandler.GetMemoryUsage)
-		}
-
-		// Dashboard avec cache utilisateur
-		dashboard := api.Group("/dashboard")
-		dashboard.Use(a.authMiddleware.RequireVerifiedUser())
-		{
-dashboard.GET("", func(c *gin.Context) {
-    user, _ := c.Get("user")
-    userID := c.GetString("user_id")
-    
-    // 🔴 Essayer de récupérer les stats depuis le cache
-    ctx := context.Background()
-    
-    var stats struct {
-        TotalListings     int64   `json:"total_listings"`
-        ActiveListings    int64   `json:"active_listings"`
-        SoldListings      int64   `json:"sold_listings"`
-        DraftListings     int64   `json:"draft_listings"`
-        TotalViews        int64   `json:"total_views"`
-        TotalPayments     int64   `json:"total_payments"`
-        CompletedPayments int64   `json:"completed_payments"`
-        TotalRevenue      float64 `json:"total_revenue"`
-        TotalContacts     int64   `json:"total_contacts"`
-        UnreadContacts    int64   `json:"unread_contacts"`
-    }
-    
-    // Essayer le cache d'abord (correction du retour double)
-    cachedStats, err := a.cacheService.GetCachedUserStats(ctx, userID)
-    if err == nil {
-        // Convertir les stats du cache
-        if totalListings, ok := cachedStats["total_listings"].(int64); ok {
-            stats.TotalListings = totalListings
-        }
-        if activeListings, ok := cachedStats["active_listings"].(int64); ok {
-            stats.ActiveListings = activeListings
-        }
-        // ... etc pour les autres champs
-        
-        c.JSON(http.StatusOK, gin.H{
-            "message": "Bienvenue sur votre dashboard !",
-            "user":    user,
-            "stats":   stats,
-        })
-        return
-    }
-    
-    // Cache miss, calculer depuis la DB
-    
-    // Statistiques annonces
-    a.db.Model(&models.Listing{}).Where("user_id = ?", userID).Count(&stats.TotalListings)
-    a.db.Model(&models.Listing{}).Where("user_id = ? AND status = ?", userID, "active").Count(&stats.ActiveListings)
-    a.db.Model(&models.Listing{}).Where("user_id = ? AND status = ?", userID, "sold").Count(&stats.SoldListings)
-    a.db.Model(&models.Listing{}).Where("user_id = ? AND status = ?", userID, "draft").Count(&stats.DraftListings)
-    
-    // Total des vues
-    a.db.Model(&models.Listing{}).Select("COALESCE(SUM(views_count), 0)").
-        Where("user_id = ?", userID).Scan(&stats.TotalViews)
-    
-    // Statistiques paiements
-    a.db.Model(&models.Payment{}).Where("user_id = ?", userID).Count(&stats.TotalPayments)
-    a.db.Model(&models.Payment{}).Where("user_id = ? AND status = ?", userID, "completed").Count(&stats.CompletedPayments)
-    a.db.Model(&models.Payment{}).Select("COALESCE(SUM(amount), 0)").
-        Where("user_id = ? AND status = ?", userID, "completed").Scan(&stats.TotalRevenue)
-    
-    // Statistiques contacts
-    a.db.Model(&models.Contact{}).
-        Joins("JOIN listings ON contacts.listing_id = listings.id").
-        Where("listings.user_id = ?", userID).Count(&stats.TotalContacts)
-    a.db.Model(&models.Contact{}).
-        Joins("JOIN listings ON contacts.listing_id = listings.id").
-        Where("listings.user_id = ? AND contacts.is_read = ?", userID, false).Count(&stats.UnreadContacts)
-    
-    // Mettre en cache pour 10 minutes
-    go func() {
-        statsMap := map[string]interface{}{
-            "total_listings":     stats.TotalListings,
-            "active_listings":    stats.ActiveListings,
-            "sold_listings":      stats.SoldListings,
-            "draft_listings":     stats.DraftListings,
-            "total_views":        stats.TotalViews,
-            "total_payments":     stats.TotalPayments,
-            "completed_payments": stats.CompletedPayments,
-            "total_revenue":      stats.TotalRevenue,
-            "total_contacts":     stats.TotalContacts,
-            "unread_contacts":    stats.UnreadContacts,
-        }
-        a.cacheService.CacheUserStats(ctx, userID, statsMap)
-    }()
-    
-    c.JSON(http.StatusOK, gin.H{
-        "message": "Bienvenue sur votre dashboard !",
-        "user":    user,
-        "stats":   stats,
-    })
-})
-		}
-
-		// Route régions avec cache très long
-		api.GET("/regions", a.cacheMiddleware.CacheResponse(24*time.Hour), func(c *gin.Context) {
-			regions := []string{
-				"Dakar - Plateau", "Dakar - Almadies", "Dakar - Parcelles Assainies",
-				"Dakar - Ouakam", "Dakar - Point E", "Dakar - Pikine", "Dakar - Guédiawaye",
-				"Thiès", "Saint-Louis", "Kaolack", "Ziguinchor", "Diourbel",
-				"Louga", "Fatick", "Kolda", "Tambacounda",
+		if a.config.Env != "production" {
+			monitoring := api.Group("/monitoring")
+			{
+				monitoring.GET("/redis", a.monitoringHandler.GetRedisMetrics)
+				monitoring.GET("/cache/hit-ratio", a.monitoringHandler.GetCacheHitRatio)
+				monitoring.GET("/cache/top-keys", a.monitoringHandler.GetTopKeys)
+				monitoring.GET("/memory", a.monitoringHandler.GetMemoryUsage)
 			}
-			c.JSON(http.StatusOK, gin.H{
-				"data": regions,
-			})
-		})
+		}
 	}
+
+	// Routes pour les régions sénégalaises
+	a.router.GET("/api/v1/regions", func(c *gin.Context) {
+		regions := []map[string]interface{}{
+			{"id": "dakar", "name": "Dakar", "code": "DK"},
+			{"id": "thies", "name": "Thiès", "code": "TH"},
+			{"id": "saint-louis", "name": "Saint-Louis", "code": "SL"},
+			{"id": "diourbel", "name": "Diourbel", "code": "DB"},
+			{"id": "louga", "name": "Louga", "code": "LG"},
+			{"id": "tambacounda", "name": "Tambacounda", "code": "TC"},
+			{"id": "kaolack", "name": "Kaolack", "code": "KL"},
+			{"id": "kolda", "name": "Kolda", "code": "KD"},
+			{"id": "ziguinchor", "name": "Ziguinchor", "code": "ZG"},
+			{"id": "fatick", "name": "Fatick", "code": "FK"},
+			{"id": "kaffrine", "name": "Kaffrine", "code": "KF"},
+			{"id": "kedougou", "name": "Kédougou", "code": "KE"},
+			{"id": "matam", "name": "Matam", "code": "MT"},
+			{"id": "sedhiou", "name": "Sédhiou", "code": "SE"},
+		}
+		c.JSON(http.StatusOK, gin.H{"data": regions})
+	})
 }
 
 func (a *Application) checkDatabase() string {
 	sqlDB, err := a.db.DB()
 	if err != nil {
-		return "ERROR"
+		return "DOWN"
 	}
 	
 	if err := sqlDB.Ping(); err != nil {
-		return "ERROR"
+		return "DOWN"
 	}
 	
-	return "OK"
+	return "UP"
+}
+
+// warmupCache préchauffe le cache au démarrage
+func (a *Application) warmupCache() {
+	log.Println("🔴 Préchauffage du cache...")
+	
+	ctx := context.Background()
+	
+	// Préchauffer les catégories
+	if categories, err := a.categoryService.GetCategories(); err == nil {
+		log.Printf("✅ Cache categories: %d éléments", len(categories))
+	}
+	
+	// Préchauffer les catégories avec stats
+	if categoriesStats, err := a.categoryService.GetCategoriesWithStats(); err == nil {
+		log.Printf("✅ Cache categories stats: %d éléments", len(categoriesStats))
+	}
+	
+	// Préchauffer quelques listings
+	if featured, err := a.listingService.GetFeaturedListings(6); err == nil {
+		log.Printf("✅ Cache featured listings: %d éléments", len(featured))
+	}
+	
+	// Vérifier le total des clés en cache
+	if totalKeys, err := a.redis.DBSize(ctx).Result(); err == nil {
+		log.Printf("🔴 Cache préchauffé: %d clés totales", totalKeys)
+	}
 }
 
 func (a *Application) Run() error {
-	srv := &http.Server{
-		Addr:    ":" + a.config.Port,
-		Handler: a.router,
-	}
-
-	go func() {
-		log.Printf("🚀 Serveur démarré sur http://localhost:%s", a.config.Port)
-		log.Printf("🔍 Health check: http://localhost:%s/health", a.config.Port)
-		log.Printf("🧪 Test endpoint: http://localhost:%s/api/v1/test", a.config.Port)
-		log.Printf("📱 SMS Status: http://localhost:%s/api/v1/sms/status", a.config.Port)
-		log.Printf("🔴 Redis Monitor: http://localhost:%s/api/v1/monitoring/redis", a.config.Port)
-		log.Printf("📊 Cache Stats: http://localhost:%s/api/v1/cache/stats", a.config.Port)
-		log.Printf("🔐 Auth endpoints:")
-		log.Printf("   POST /api/v1/auth/register")
-		log.Printf("   POST /api/v1/auth/login") 
-		log.Printf("   POST /api/v1/auth/verify")
-		log.Printf("   POST /api/v1/auth/send-code")
-		log.Printf("   GET  /api/v1/auth/profile (protected)")
-		
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Erreur démarrage serveur: %v", err)
-		}
-	}()
-
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-	
-	log.Println("🛑 Arrêt du serveur...")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	
-	// Fermer Redis proprement
-	if err := a.redis.Close(); err != nil {
-		log.Printf("Erreur fermeture Redis: %v", err)
+	port := a.config.Port
+	if port == "" {
+		port = "8080"
 	}
 	
-	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatal("Erreur arrêt forcé du serveur:", err)
-	}
-	
-	log.Println("✅ Serveur arrêté proprement")
-	return nil
-}
-
-// 🔴 Préchauffage du cache au démarrage
-func (a *Application) warmupCache() {
-    ctx := context.Background()
-    log.Println("🔥 Préchauffage du cache Redis...")
-    
-    // Préchauffer les catégories (correction du nom de méthode)
-    if _, err := a.categoryService.GetCategories(); err != nil {
-        log.Printf("Erreur warmup categories: %v", err)
-    } else {
-        log.Println("✅ Categories préchauffées")
-    }
-    
-    // Préchauffer les catégories avec stats
-    if _, err := a.categoryService.GetCategoriesWithCounts(); err != nil {
-        log.Printf("Erreur warmup categories stats: %v", err)
-    } else {
-        log.Println("✅ Categories stats préchauffées")
-    }
-    
-    // Préchauffer les listings featured
-    if _, err := a.listingService.GetFeaturedListings(6); err != nil {
-        log.Printf("Erreur warmup featured: %v", err)
-    } else {
-        log.Println("✅ Featured listings préchauffés")
-    }
-    
-    // Préchauffer les stats globales
-    if err := a.warmupGlobalStats(ctx); err != nil {
-        log.Printf("Erreur warmup stats: %v", err)
-    } else {
-        log.Println("✅ Stats globales préchauffées")
-    }
-    
-    log.Println("🔥 Préchauffage terminé !")
-}
-
-func (a *Application) warmupGlobalStats(ctx context.Context) error {
-	var totalListings, activeListings, totalUsers int64
-	
-	a.db.Model(&models.Listing{}).Count(&totalListings)
-	a.db.Model(&models.Listing{}).Where("status = ? AND expires_at > NOW()", "published").Count(&activeListings)
-	a.db.Model(&models.User{}).Count(&totalUsers)
-	
-	stats := map[string]interface{}{
-		"total_listings":  totalListings,
-		"active_listings": activeListings,
-		"total_users":     totalUsers,
-		"updated_at":      time.Now().Unix(),
-	}
-	
-	return a.cacheService.CacheGlobalStats(ctx, stats)
+	log.Printf("🚀 Serveur démarré sur le port %s", port)
+	return a.router.Run(":" + port)
 }
