@@ -1,0 +1,30 @@
+# ==================================================
+# Dockerfile.dev - VERSION CORRIGÉE FINALE
+# ==================================================
+FROM golang:1.24-alpine
+
+# Installer les dépendances système
+RUN apk add --no-cache git curl make
+
+WORKDIR /app
+
+# Installer air pour hot reload (nouveau package name)
+RUN go install github.com/air-verse/air@latest
+
+# Installer migrate pour les migrations
+RUN go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+
+# Copier go.mod et go.sum
+COPY go.mod go.sum ./
+
+# Télécharger les dépendances
+RUN go mod download
+
+# Copier le code source
+COPY . .
+
+# Exposer le port
+EXPOSE 8080
+
+# Commande par défaut
+CMD ["air", "-c", ".air.toml"]
