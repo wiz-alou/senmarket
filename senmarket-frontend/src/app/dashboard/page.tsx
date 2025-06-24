@@ -214,39 +214,12 @@ export default function DashboardPage() {
         'Content-Type': 'application/json'
       }
 
-      // ✅ APPELS API INDIVIDUELS AVEC GESTION D'ERREURS SÉPARÉE
-      let dashboardData = null
+      // ✅ RÉCUPÉRATION AVEC LES ENDPOINTS EXISTANTS
       let listingsData = null
       let contactsData = null
       let paymentsData = null
 
-      // 1. Dashboard Stats - PRIORITÉ CRITIQUE
-      try {
-        console.log('📊 Chargement stats dashboard...')
-        const dashboardRes = await fetch('http://localhost:8080/api/v1/dashboard', { headers })
-        console.log('📊 Réponse dashboard status:', dashboardRes.status)
-        
-        if (dashboardRes.ok) {
-          dashboardData = await dashboardRes.json()
-          console.log('✅ Stats dashboard reçues:', dashboardData)
-          
-          if (dashboardData.stats) {
-            setStats(dashboardData.stats)
-          } else if (dashboardData) {
-            // Si les stats sont directement dans data
-            setStats(dashboardData)
-          }
-        } else {
-          const errorText = await dashboardRes.text()
-          console.error('❌ Erreur dashboard API:', dashboardRes.status, errorText)
-          throw new Error(`Erreur API dashboard: ${dashboardRes.status}`)
-        }
-      } catch (dashError) {
-        console.error('❌ Erreur critique dashboard:', dashError)
-        throw dashError // Propager l'erreur critique
-      }
-
-      // 2. Mes annonces - NON CRITIQUE
+      // 1. Mes annonces - CRITIQUE POUR STATS
       try {
         console.log('📝 Chargement mes annonces...')
         const listingsRes = await fetch('http://localhost:8080/api/v1/listings/my', { headers })
@@ -254,9 +227,13 @@ export default function DashboardPage() {
         
         if (listingsRes.ok) {
           listingsData = await listingsRes.json()
-          const userListings = listingsData.data?.listings || listingsData.listings || []
+          const userListings = listingsData.data?.listings || listingsData.listings || listingsData.data || []
           console.log('✅ Annonces reçues:', userListings.length, 'pour user:', user.first_name)
           setListings(userListings)
+          
+          // ✅ CALCULER LES STATS À PARTIR DES ANNONCES
+          calculateStatsFromData(userListings, [], [])
+          
         } else {
           console.warn('⚠️ Erreur chargement annonces:', listingsRes.status)
           setListings([])
@@ -266,7 +243,7 @@ export default function DashboardPage() {
         setListings([])
       }
 
-      // 3. Mes contacts - NON CRITIQUE
+      // 2. Mes contacts - NON CRITIQUE
       try {
         console.log('💬 Chargement mes contacts...')
         const contactsRes = await fetch('http://localhost:8080/api/v1/contacts/my', { headers })
@@ -286,7 +263,7 @@ export default function DashboardPage() {
         setContacts([])
       }
 
-      // 4. Mes paiements - NON CRITIQUE
+      // 3. Mes paiements - NON CRITIQUE
       try {
         console.log('💳 Chargement mes paiements...')
         const paymentsRes = await fetch('http://localhost:8080/api/v1/payments/my', { headers })
@@ -294,7 +271,7 @@ export default function DashboardPage() {
         
         if (paymentsRes.ok) {
           paymentsData = await paymentsRes.json()
-          const userPayments = paymentsData.data?.payments || paymentsData.payments || []
+          const userPayments = paymentsData.data?.payments || paymentsData.payments || paymentsData.data || []
           console.log('✅ Paiements reçus:', userPayments.length)
           setPayments(userPayments)
         } else {
@@ -326,6 +303,38 @@ export default function DashboardPage() {
       setLoading(false)
     }
   }
+
+  // ✅ CALCULER LES STATS À PARTIR DES DONNÉES RÉCUPÉRÉES
+  const calculateStatsFromData = (userListings: Listing[], userContacts: Contact[], userPayments: Payment[]) => {
+    console.log('📊 Calcul des stats à partir des données:', {
+      listings: userListings.length,
+      contacts: userContacts.length,
+      payments: userPayments.length
+    })
+
+    const calculatedStats: DashboardStats = {
+      total_listings: userListings.length,
+      active_listings: userListings.filter(l => l.status === 'active').length,
+      sold_listings: userListings.filter(l => l.status === 'sold').length,
+      draft_listings: userListings.filter(l => l.status === 'draft').length,
+      total_views: userListings.reduce((sum, l) => sum + (l.views_count || 0), 0),
+      total_payments: userPayments.length,
+      completed_payments: userPayments.filter(p => p.status === 'completed').length,
+      total_revenue: userPayments
+        .filter(p => p.status === 'completed')
+        .reduce((sum, p) => sum + p.amount, 0),
+      total_contacts: userContacts.length,
+      unread_contacts: userContacts.filter(c => !c.is_read).length
+    }
+
+    console.log('✅ Stats calculées:', calculatedStats)
+    setStats(calculatedStats)
+  }
+
+  // ✅ Recalculer les stats quand les données changent
+  useEffect(() => {
+    calculateStatsFromData(listings, contacts, payments)
+  }, [listings, contacts, payments])
 
   // ✅ FONCTIONS D'ACTION POUR LES ANNONCES
   const handlePublishListing = async (listingId: string) => {
@@ -647,11 +656,11 @@ export default function DashboardPage() {
             transition={{ delay: 0.2 }}
           >
             {/* Message informatif si données partielles */}
-            {(listings.length === 0 && stats.total_listings > 0) && (
-              <Alert className="mb-6 border-yellow-200 bg-yellow-50">
-                <AlertCircle className="h-4 w-4 text-yellow-600" />
-                <AlertDescription className="text-yellow-800">
-                  Certaines données sont en cours de chargement. Les statistiques peuvent être incomplètes.
+            {(listings.length === 0 && stats.total_listings === 0) && (
+              <Alert className="mb-6 border-blue-200 bg-blue-50">
+                <AlertCircle className="h-4 w-4 text-blue-600" />
+                <AlertDescription className="text-blue-800">
+                  Bienvenue ! Commencez par publier votre première annonce pour voir vos statistiques.
                 </AlertDescription>
               </Alert>
             )}
