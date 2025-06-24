@@ -131,7 +131,7 @@ func getWhatsAppConfig(env string) WhatsAppConfig {
 			Environment:    env,
 			BusinessNumber: getEnv("TWILIO_PHONE_NUMBER", "+14788278859"),
 			AccountSID:     getEnv("TWILIO_ACCOUNT_SID", "AC0c98c786688083e31752129e3af4bfb8"),
-			AuthToken:      getEnv("TWILIO_AUTH_TOKEN", "d66afdcdf1576fc92b5e79d1e0e9f95c"),
+			AuthToken:      getEnv("TWILIO_AUTH_TOKEN", "9a4b257e333d107c54cc50da43e44868"),
 			APIURL:         getEnv("TWILIO_API_URL", "https://api.twilio.com/2010-04-01/Accounts/AC0c98c786688083e31752129e3af4bfb8"),
 		}
 	case "staging":

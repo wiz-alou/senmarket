@@ -1,4 +1,3 @@
-// internal/handlers/category_handler.go
 package handlers
 
 import (

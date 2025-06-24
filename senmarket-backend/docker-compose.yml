@@ -1,9 +1,12 @@
 # ============================================
-# docker-compose.yml
+# docker-compose.yml - SENMARKET AVEC REDIS
 # ============================================
 version: '3.8'
 
 services:
+  # ============================================
+  # 📊 PostgreSQL - Base de données principale
+  # ============================================
   postgres:
     image: postgres:15-alpine
     container_name: senmarket_postgres
@@ -11,31 +14,86 @@ services:
       POSTGRES_DB: senmarket
       POSTGRES_USER: senmarket
       POSTGRES_PASSWORD: senmarket123
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./migrations:/docker-entrypoint-initdb.d
+      - ./migrations:/docker-entrypoint-initdb.d:ro
     networks:
       - senmarket
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U senmarket -d senmarket"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
+  # ============================================
+  # 🔴 Redis - Cache principal
+  # ============================================
   redis:
     image: redis:7-alpine
     container_name: senmarket_redis
     ports:
       - "6379:6379"
-    command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
+      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
+    command: redis-server /usr/local/etc/redis/redis.conf
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
     networks:
       - senmarket
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # Optimisations mémoire
+    mem_limit: 512m
+    memswap_limit: 512m
 
+  # ============================================
+  # 🔴 Redis Commander - Interface web Redis (dev only)
+  # ============================================
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: senmarket_redis_commander
+    hostname: redis-commander
+    ports:
+      - "8081:8081"
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+      - HTTP_USER=admin
+      - HTTP_PASSWORD=senmarket123
+    depends_on:
+      - redis
+    networks:
+      - senmarket
+    profiles:
+      - monitoring
+    restart: unless-stopped
+
+  # ============================================
+  # 📁 MinIO - Stockage fichiers
+  # ============================================
   minio:
     image: minio/minio:latest
     container_name: senmarket_minio
     environment:
       MINIO_ROOT_USER: senmarket
       MINIO_ROOT_PASSWORD: senmarket123
+      MINIO_BROWSER_REDIRECT_URL: http://localhost:9001
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -44,31 +102,165 @@ services:
     command: server /data --console-address ":9001"
     networks:
       - senmarket
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
 
+  # ============================================
+  # 🚀 SenMarket API - Application principale
+  # ============================================
   app:
     build:
       context: .
       dockerfile: docker/Dockerfile.dev
+      args:
+        - GO_VERSION=1.23
     container_name: senmarket_app
     ports:
       - "8080:8080"
     environment:
+      # Application
       - ENV=development
+      - PORT=8080
+      
+      # Database
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=senmarket
+      - DB_PASSWORD=senmarket123
+      - DB_NAME=senmarket
+      - DB_SSL_MODE=disable
+      
+      # 🔴 Redis
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
+      - REDIS_DB=0
+      
+      # 🔴 Cache TTL (en secondes)
+      - CACHE_TTL_SHORT=300      # 5 minutes
+      - CACHE_TTL_MEDIUM=1800    # 30 minutes
+      - CACHE_TTL_LONG=7200      # 2 heures
+      - CACHE_TTL_VERY_LONG=86400 # 24 heures
+      
+      # 🔴 Rate Limiting
+      - RATE_LIMIT_REQUESTS=100
+      - RATE_LIMIT_WINDOW=60
+      
+      # MinIO
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=senmarket
+      - MINIO_SECRET_KEY=senmarket123
+      - MINIO_BUCKET=senmarket-images
+      - MINIO_SSL=false
+      
+      # JWT
+      - JWT_SECRET=super-secret-jwt-key-for-development-only
+      - JWT_EXPIRY=24h
+      
+      # Twilio (optionnel en dev)
+      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID:-}
+      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN:-}
+      - TWILIO_PHONE_NUMBER=${TWILIO_PHONE_NUMBER:-}
+      
     volumes:
       - .:/app
       - /app/tmp
+      - uploads_data:/app/uploads
     depends_on:
-      - postgres
-      - redis
-      - minio
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
     networks:
       - senmarket
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
 
+  # ============================================
+  # 📊 Monitoring - Prometheus (optionnel)
+  # ============================================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: senmarket_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - senmarket
+    profiles:
+      - monitoring
+    restart: unless-stopped
+
+  # ============================================
+  # 📈 Grafana - Dashboards (optionnel)
+  # ============================================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: senmarket_grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=senmarket123
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    depends_on:
+      - prometheus
+    networks:
+      - senmarket
+    profiles:
+      - monitoring
+    restart: unless-stopped
+
+# ============================================
+# 💾 Volumes persistants
+# ============================================
 volumes:
   postgres_data:
+    driver: local
   redis_data:
+    driver: local
   minio_data:
+    driver: local
+  uploads_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
 
+# ============================================
+# 🌐 Réseaux
+# ============================================
 networks:
   senmarket:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

@@ -1,8 +1,9 @@
-// internal/handlers/listing_handler.go
+// internal/handlers/listing_handler.go - MISE À JOUR COMPATIBLE
 package handlers
 
 import (
 	"net/http"
+	"strconv"
 
 	"senmarket/internal/services"
 	"github.com/google/uuid"
@@ -106,7 +107,8 @@ func (h *ListingHandler) GetListings(c *gin.Context) {
 		return
 	}
 
-	response, err := h.listingService.GetListings(&query)
+	// 🔴 Utiliser la nouvelle méthode GetListings2 qui retourne ListingResponse
+	response, err := h.listingService.GetListings2(&query)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": err.Error(),
@@ -294,7 +296,7 @@ func (h *ListingHandler) DeleteListing(c *gin.Context) {
 
 // PublishListing godoc
 // @Summary Publier une annonce
-// @Description Change le statut d'une annonce vers "active"
+// @Description Change le statut d'une annonce vers "published"
 // @Tags listings
 // @Security BearerAuth
 // @Param id path string true "ID de l'annonce"
@@ -322,7 +324,12 @@ func (h *ListingHandler) PublishListing(c *gin.Context) {
 		return
 	}
 	
-	listing, err := h.listingService.PublishListing(id, userID.(string))
+	// 🔴 Utiliser UpdateListing pour changer le statut
+	req := services.UpdateListingRequest{
+		Status: stringPtr("published"),
+	}
+	
+	listing, err := h.listingService.UpdateListing(id, userID.(string), &req)
 	if err != nil {
 		status := http.StatusInternalServerError
 		switch err {
@@ -368,16 +375,30 @@ func (h *ListingHandler) SearchListings(c *gin.Context) {
 		return
 	}
 
-	var query services.ListingQuery
-	if err := c.ShouldBindQuery(&query); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Paramètres invalides",
-			"details": err.Error(),
-		})
-		return
+	// 🔴 Construire les filtres à partir des query params
+	filters := make(map[string]interface{})
+	if categoryID := c.Query("category_id"); categoryID != "" {
+		filters["category_id"] = categoryID
+	}
+	if region := c.Query("region"); region != "" {
+		filters["region"] = region
+	}
+	if minPriceStr := c.Query("min_price"); minPriceStr != "" {
+		if minPrice, err := strconv.ParseFloat(minPriceStr, 64); err == nil {
+			filters["min_price"] = minPrice
+		}
+	}
+	if maxPriceStr := c.Query("max_price"); maxPriceStr != "" {
+		if maxPrice, err := strconv.ParseFloat(maxPriceStr, 64); err == nil {
+			filters["max_price"] = maxPrice
+		}
+	}
+	if sort := c.Query("sort"); sort != "" {
+		filters["sort_by"] = sort
 	}
 
-	response, err := h.listingService.SearchListings(searchTerm, &query)
+	// 🔴 Utiliser la méthode SearchListings existante
+	listings, err := h.listingService.SearchListings(searchTerm, filters)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": err.Error(),
@@ -385,10 +406,14 @@ func (h *ListingHandler) SearchListings(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": response,
+	// 🔴 Construire une réponse similaire à ListingResponse
+	response := map[string]interface{}{
+		"data": listings,
 		"search_term": searchTerm,
-	})
+		"count": len(listings),
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
 // GetMyListings godoc
@@ -397,7 +422,7 @@ func (h *ListingHandler) SearchListings(c *gin.Context) {
 // @Tags listings
 // @Security BearerAuth
 // @Produce json
-// @Param status query string false "Statut" Enums(draft, active, sold, expired)
+// @Param status query string false "Statut" Enums(draft, published, sold, expired)
 // @Param page query int false "Page" default(1)
 // @Param limit query int false "Limite par page" default(20)
 // @Success 200 {object} services.ListingResponse
@@ -411,23 +436,20 @@ func (h *ListingHandler) GetMyListings(c *gin.Context) {
 		return
 	}
 
-	var query services.ListingQuery
-	if err := c.ShouldBindQuery(&query); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Paramètres invalides",
-			"details": err.Error(),
-		})
-		return
+	// 🔴 Paramètres de pagination
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	
+	// 🔴 Construire les filtres
+	filters := make(map[string]interface{})
+	filters["user_id"] = userID.(string)
+	
+	if status := c.Query("status"); status != "" {
+		filters["status"] = status
 	}
-
-	// Forcer le filtre sur l'utilisateur connecté
-	query.UserID = userID.(string)
-	// Permettre tous les statuts pour ses propres annonces
-	if query.Status == "" {
-		query.Status = "all"
-	}
-
-	response, err := h.listingService.GetListings(&query)
+	
+	// 🔴 Utiliser la méthode GetListings existante
+	listings, total, err := h.listingService.GetListings(page, limit, filters)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": err.Error(),
@@ -435,13 +457,63 @@ func (h *ListingHandler) GetMyListings(c *gin.Context) {
 		return
 	}
 
+	// 🔴 Construire la réponse
+	totalPages := int((total + int64(limit) - 1) / int64(limit))
+	
+	response := services.ListingResponse{
+		Data: listings,
+		Pagination: services.PaginationInfo{
+			Page:       page,
+			Limit:      limit,
+			Total:      total,
+			TotalPages: totalPages,
+		},
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"data": response,
 	})
+}
+
+// GetUserStats récupère les statistiques utilisateur
+func (h *ListingHandler) GetUserStats(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "Utilisateur non authentifié",
+		})
+		return
+	}
+
+	// 🔴 Placeholder pour les stats utilisateur
+	// TODO: Implémenter la logique de récupération des stats
+	stats := map[string]interface{}{
+		"total_listings":     0,
+		"active_listings":    0,
+		"sold_listings":      0,
+		"draft_listings":     0,
+		"total_views":        0,
+		"total_contacts":     0,
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data": stats,
+		"user_id": userID,
+	})
+}
+
+// GetUserListings alias pour GetMyListings
+func (h *ListingHandler) GetUserListings(c *gin.Context) {
+	h.GetMyListings(c)
 }
 
 // Fonction utilitaire pour valider UUID
 func isValidUUID(u string) bool {
 	_, err := uuid.Parse(u)
 	return err == nil
+}
+
+// Fonction utilitaire pour créer un pointeur vers string
+func stringPtr(s string) *string {
+	return &s
 }
