@@ -1,4 +1,4 @@
-// internal/app/server.go
+// internal/app/server.go - VERSION CORRIGÉE
 package app
 
 import (
@@ -15,7 +15,6 @@ import (
 	"senmarket/internal/handlers"
 	"senmarket/internal/models"
 	"senmarket/internal/services"
-	"senmarket/internal/utils"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
@@ -35,7 +34,7 @@ type Application struct {
 	paymentService  *services.PaymentService
 	imageService    *services.ImageService
 	contactService  *services.ContactService
-	whatsappService *services.WhatsAppService  // ✨ NOUVEAU SERVICE WHATSAPP
+	twilioSMSService *services.TwilioSMSService
 }
 
 func New(cfg *config.Config) *Application {
@@ -56,21 +55,25 @@ func New(cfg *config.Config) *Application {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
+	// ✅ CORRECTION : Initialiser Twilio SMS
+	twilioSMSService := services.NewTwilioSMSService()
+	
+	// Log de la configuration Twilio
+	if twilioSMSService.IsConfigured() {
+		log.Printf("✅ Twilio SMS configuré et prêt")
+		info, _ := twilioSMSService.GetAccountInfo()
+		log.Printf("📱 Account SID: %s", info["account_sid"])
+		log.Printf("📞 Phone Number: %s", info["phone"])
+		log.Printf("🆓 Free Tier: %s", info["free_tier"])
+	} else {
+		log.Printf("⚠️  Twilio SMS en mode développement (variables manquantes)")
+	}
+
 	// Initialiser les services
 	jwtService := auth.NewJWTService(cfg.JWT.Secret, cfg.JWT.Expiry)
-	smsService := utils.NewMockSMSService()
 	
-	// ✨ NOUVEAU : Service WhatsApp
-	whatsappService := services.NewWhatsAppService(
-		db,
-		cfg.WhatsApp.APIToken,
-		cfg.WhatsApp.APIURL,
-		cfg.WhatsApp.BusinessNumber,
-		cfg.WhatsApp.Environment,
-		cfg.WhatsApp.Provider,
-	)
-	
-	authService := auth.NewService(db, jwtService, smsService)
+	// ✅ CORRECTION : Passer twilioSMSService comme SMSService à auth
+	authService := auth.NewService(db, jwtService, twilioSMSService)
 	authMiddleware := auth.NewMiddleware(jwtService, authService)
 	listingService := services.NewListingService(db)
 	categoryService := services.NewCategoryService(db)
@@ -86,19 +89,19 @@ func New(cfg *config.Config) *Application {
 	imageService := services.NewImageService("uploads", "http://localhost:8080")
 
 	app := &Application{
-		config:          cfg,
-		db:              db,
-		redis:           redisClient,
-		router:          gin.New(),
-		authService:     authService,
-		jwtService:      jwtService,
-		middleware:      authMiddleware,
-		listingService:  listingService,
-		categoryService: categoryService,
-		paymentService:  paymentService,
-		imageService:    imageService,
-		contactService:  contactService,
-		whatsappService: whatsappService,  // ✨ AJOUTER AU STRUCT
+		config:           cfg,
+		db:               db,
+		redis:            redisClient,
+		router:           gin.New(),
+		authService:      authService,
+		jwtService:       jwtService,
+		middleware:       authMiddleware,
+		listingService:   listingService,
+		categoryService:  categoryService,
+		paymentService:   paymentService,
+		imageService:     imageService,
+		contactService:   contactService,
+		twilioSMSService: twilioSMSService,
 	}
 
 	// Configurer les middlewares et routes
@@ -129,27 +132,33 @@ func (a *Application) setupMiddleware() {
 		c.Next()
 	})
 
-	// Servir les fichiers PWA
+	// Servir les fichiers statiques
 	a.router.Static("/public", "./public")
 	a.router.StaticFile("/manifest.json", "./public/manifest.json")
 	a.router.StaticFile("/sw.js", "./public/sw.js")
 	a.router.StaticFile("/offline.html", "./public/offline.html")
-	
-	// Servir les fichiers statiques (images)
 	a.router.Static("/uploads", "./uploads")
 }
 
 func (a *Application) setupRoutes() {
-	// Health check
+	// Health check avec info Twilio
 	a.router.GET("/health", func(c *gin.Context) {
+		twilioInfo, _ := a.twilioSMSService.GetAccountInfo()
+		
 		c.JSON(http.StatusOK, gin.H{
 			"status":    "UP",
 			"service":   "SenMarket API",
-			"version":   "1.0.0",
+			"version":   "2.1.0",
 			"timestamp": time.Now().Format(time.RFC3339),
 			"checks": gin.H{
-				"database": a.checkDatabase(),
-				"redis":    a.checkRedis(),
+				"database":   a.checkDatabase(),
+				"redis":      a.checkRedis(),
+				"twilio_sms": twilioInfo["status"],
+			},
+			"features": gin.H{
+				"twilio_sms_free":  true,
+				"sms_verification": true,
+				"free_tier":        "250 SMS/mois",
 			},
 		})
 	})
@@ -157,11 +166,31 @@ func (a *Application) setupRoutes() {
 	// API routes group
 	api := a.router.Group("/api/v1")
 	{
-		// Test endpoint
+		// Test endpoint avec info Twilio
 		api.GET("/test", func(c *gin.Context) {
+			twilioStats := a.twilioSMSService.GetUsageStats()
+			
 			c.JSON(http.StatusOK, gin.H{
 				"message": "🇸🇳 SenMarket API fonctionne !",
 				"env":     a.config.Env,
+				"version": "2.1.0",
+				"sms": gin.H{
+					"provider":                "twilio_free",
+					"configured":              a.twilioSMSService.IsConfigured(),
+					"free_messages_remaining": twilioStats["free_messages_remaining"],
+				},
+			})
+		})
+
+		// ✅ ENDPOINT TWILIO INFO
+		api.GET("/sms/status", func(c *gin.Context) {
+			info, _ := a.twilioSMSService.GetAccountInfo()
+			stats := a.twilioSMSService.GetUsageStats()
+			
+			c.JSON(http.StatusOK, gin.H{
+				"success": true,
+				"twilio":  info,
+				"usage":   stats,
 			})
 		})
 
@@ -172,7 +201,6 @@ func (a *Application) setupRoutes() {
 		paymentHandler := handlers.NewPaymentHandler(a.paymentService)
 		imageHandler := handlers.NewImageHandler(a.imageService)
 		contactHandler := handlers.NewContactHandler(a.contactService)
-		whatsappHandler := handlers.NewWhatsAppHandler(a.whatsappService)  // ✨ NOUVEAU HANDLER
 
 		// Routes d'authentification (publiques)
 		auth := api.Group("/auth")
@@ -181,22 +209,6 @@ func (a *Application) setupRoutes() {
 			auth.POST("/login", authHandler.Login)
 			auth.POST("/verify", authHandler.VerifyPhone)
 			auth.POST("/send-code", authHandler.SendVerificationCode)
-		}
-
-		// ✨ NOUVELLES ROUTES WHATSAPP
-		whatsapp := api.Group("/whatsapp")
-		{
-			whatsapp.POST("/send-code", whatsappHandler.SendVerificationCode)
-			whatsapp.POST("/resend-code", whatsappHandler.ResendVerificationCode)
-			whatsapp.POST("/verify-code", whatsappHandler.VerifyCode)
-			whatsapp.POST("/webhook/:provider", whatsappHandler.WebhookReceiver)
-
-			// Routes protégées WhatsApp
-			protected := whatsapp.Group("/")
-			protected.Use(a.middleware.RequireAuth())
-			{
-				protected.POST("/welcome", whatsappHandler.SendWelcomeMessage)
-			}
 		}
 
 		// Routes protégées (authentification requise)
@@ -222,15 +234,13 @@ func (a *Application) setupRoutes() {
 		listings := api.Group("/listings")
 		listings.Use(a.middleware.OptionalAuth())
 		{
-			// Routes publiques
 			listings.GET("", listingHandler.GetListings)
 			listings.GET("/search", listingHandler.SearchListings)
 			listings.GET("/:id", listingHandler.GetListing)
 		}
 
-		// Routes annonces protégées (utilisateur vérifié)
+		// Routes annonces protégées
 		listingsProtected := api.Group("/listings")
-		// listingsProtected.Use(a.middleware.RequireVerifiedUser())
 		listingsProtected.Use(a.middleware.RequireAuth())
 		{
 			listingsProtected.POST("", listingHandler.CreateListing)
@@ -241,14 +251,13 @@ func (a *Application) setupRoutes() {
 			listingsProtected.POST("/:id/pay", paymentHandler.PayForListing)
 		}
 
-		// Routes contact (publiques avec auth optionnelle)
+		// Routes contact
 		contacts := api.Group("/contacts")
 		contacts.Use(a.middleware.OptionalAuth())
 		{
 			contacts.POST("", contactHandler.ContactSeller)
 		}
 
-		// Routes contact protégées
 		contactsProtected := api.Group("/contacts")
 		contactsProtected.Use(a.middleware.RequireAuth())
 		{
@@ -260,13 +269,11 @@ func (a *Application) setupRoutes() {
 		// Routes paiements
 		payments := api.Group("/payments")
 		{
-			// Webhooks publics
 			payments.POST("/webhook/orange-money", paymentHandler.OrangeMoneyWebhook)
 			payments.POST("/webhook/wave", paymentHandler.WaveWebhook)
 			payments.POST("/webhook/free-money", paymentHandler.FreeMoneyWebhook)
 		}
 
-		// Routes paiements protégées
 		paymentsProtected := api.Group("/payments")
 		paymentsProtected.Use(a.middleware.RequireVerifiedUser())
 		{
@@ -278,11 +285,9 @@ func (a *Application) setupRoutes() {
 		// Routes images
 		images := api.Group("/images")
 		{
-			// Route publique pour validation
 			images.POST("/validate", imageHandler.ValidateImage)
 		}
 
-		// Routes images protégées
 		imagesProtected := api.Group("/images")
 		imagesProtected.Use(a.middleware.RequireAuth())
 		{
@@ -292,14 +297,12 @@ func (a *Application) setupRoutes() {
 			imagesProtected.GET("/info", imageHandler.GetImageInfo)
 		}
 
-		// Dashboard (utilisateur vérifié)
+		// Dashboard
 		dashboard := api.Group("/dashboard")
 		dashboard.Use(a.middleware.RequireVerifiedUser())
 		{
 			dashboard.GET("", func(c *gin.Context) {
 				user, _ := c.Get("user")
-				
-				// Statistiques utilisateur
 				userID := c.GetString("user_id")
 				
 				var stats struct {
@@ -315,7 +318,7 @@ func (a *Application) setupRoutes() {
 					UnreadContacts    int64   `json:"unread_contacts"`
 				}
 				
-				// Comptage des annonces
+				// Statistiques annonces
 				a.db.Model(&models.Listing{}).Where("user_id = ?", userID).Count(&stats.TotalListings)
 				a.db.Model(&models.Listing{}).Where("user_id = ? AND status = ?", userID, "active").Count(&stats.ActiveListings)
 				a.db.Model(&models.Listing{}).Where("user_id = ? AND status = ?", userID, "sold").Count(&stats.SoldListings)
@@ -347,7 +350,7 @@ func (a *Application) setupRoutes() {
 			})
 		}
 
-		// Route pour lister les régions
+		// Route régions
 		api.GET("/regions", func(c *gin.Context) {
 			regions := []string{
 				"Dakar - Plateau", "Dakar - Almadies", "Dakar - Parcelles Assainies",
@@ -384,65 +387,34 @@ func (a *Application) checkRedis() string {
 }
 
 func (a *Application) Run() error {
-	// Configuration du serveur HTTP
 	srv := &http.Server{
 		Addr:    ":" + a.config.Port,
 		Handler: a.router,
 	}
 
-	// Goroutine pour démarrer le serveur
 	go func() {
 		log.Printf("🚀 Serveur démarré sur http://localhost:%s", a.config.Port)
 		log.Printf("🔍 Health check: http://localhost:%s/health", a.config.Port)
 		log.Printf("🧪 Test endpoint: http://localhost:%s/api/v1/test", a.config.Port)
+		log.Printf("📱 SMS Status: http://localhost:%s/api/v1/sms/status", a.config.Port)
 		log.Printf("🔐 Auth endpoints:")
 		log.Printf("   POST /api/v1/auth/register")
 		log.Printf("   POST /api/v1/auth/login") 
 		log.Printf("   POST /api/v1/auth/verify")
+		log.Printf("   POST /api/v1/auth/send-code")
 		log.Printf("   GET  /api/v1/auth/profile (protected)")
-		log.Printf("📱 WhatsApp endpoints:")  // ✨ NOUVELLES ROUTES LOGGÉES
-		log.Printf("   POST /api/v1/whatsapp/send-code")
-		log.Printf("   POST /api/v1/whatsapp/resend-code")
-		log.Printf("   POST /api/v1/whatsapp/verify-code")
-		log.Printf("   POST /api/v1/whatsapp/welcome (protected)")
-		log.Printf("   POST /api/v1/whatsapp/webhook/:provider")
-		log.Printf("📊 Category endpoints:")
-		log.Printf("   GET  /api/v1/categories")
-		log.Printf("   GET  /api/v1/categories/stats")
-		log.Printf("📝 Listing endpoints:")
-		log.Printf("   GET  /api/v1/listings")
-		log.Printf("   GET  /api/v1/listings/search")
-		log.Printf("   POST /api/v1/listings (protected)")
-		log.Printf("   GET  /api/v1/listings/my (protected)")
-		log.Printf("💰 Payment endpoints:")
-		log.Printf("   POST /api/v1/payments/initiate (protected)")
-		log.Printf("   POST /api/v1/listings/:id/pay (protected)")
-		log.Printf("   GET  /api/v1/payments/my (protected)")
-		log.Printf("📷 Image endpoints:")
-		log.Printf("   POST /api/v1/images/upload (protected)")
-		log.Printf("   POST /api/v1/images/upload-multiple (protected)")
-		log.Printf("💬 Contact endpoints:")
-		log.Printf("   POST /api/v1/contacts (public)")
-		log.Printf("   GET  /api/v1/contacts/my (protected)")
-		log.Printf("   GET  /api/v1/contacts/stats (protected)")
-		log.Printf("🏠 Dashboard:")
-		log.Printf("   GET  /api/v1/dashboard (protected)")
-		log.Printf("📁 Static files:")
-		log.Printf("   GET  /uploads/* (images)")
 		
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Erreur démarrage serveur: %v", err)
 		}
 	}()
 
-	// Canal pour écouter les signaux d'arrêt
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	
 	log.Println("🛑 Arrêt du serveur...")
 
-	// Arrêt gracieux avec timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	

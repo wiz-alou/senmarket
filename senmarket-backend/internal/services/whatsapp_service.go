@@ -2,7 +2,6 @@
 package services
 
 import (
-	// "bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -20,7 +19,8 @@ import (
 
 type WhatsAppService struct {
 	db              *gorm.DB
-	apiToken        string
+	accountSID      string
+	authToken       string
 	apiURL          string
 	businessNumber  string
 	environment     string
@@ -34,11 +34,10 @@ type WhatsAppResponse struct {
 	Error     string `json:"error,omitempty"`
 }
 
-// Structure pour Twilio Response (corrigée)
 type TwilioWhatsAppResponse struct {
 	SID          string      `json:"sid"`
-	Status       interface{} `json:"status"`        // Peut être string ou number
-	ErrorCode    interface{} `json:"error_code"`    // Peut être null
+	Status       interface{} `json:"status"`
+	ErrorCode    interface{} `json:"error_code"`
 	ErrorMessage string      `json:"error_message,omitempty"`
 	Body         string      `json:"body"`
 	AccountSid   string      `json:"account_sid"`
@@ -46,10 +45,11 @@ type TwilioWhatsAppResponse struct {
 	To           string      `json:"to"`
 }
 
-func NewWhatsAppService(db *gorm.DB, apiToken, apiURL, businessNumber, environment, provider string) *WhatsAppService {
+func NewWhatsAppService(db *gorm.DB, accountSID, authToken, apiURL, businessNumber, environment, provider string) *WhatsAppService {
 	return &WhatsAppService{
 		db:             db,
-		apiToken:       apiToken,
+		accountSID:     accountSID,
+		authToken:      authToken,
 		apiURL:         apiURL,
 		businessNumber: businessNumber,
 		environment:    environment,
@@ -183,30 +183,56 @@ func (s *WhatsAppService) canResendCode(phone string) bool {
 }
 
 func (s *WhatsAppService) sendWhatsAppMessage(phone, message string) (*WhatsAppResponse, error) {
-	// Mode développement
-	if s.environment == "development" && s.provider == "mock" {
-		log.Printf("📱 WhatsApp MOCK - Vers %s: %s", phone, message)
-		return &WhatsAppResponse{
-			Success:   true,
-			Message:   "Message WhatsApp envoyé (mode développement)",
-			Reference: fmt.Sprintf("mock_%d", time.Now().Unix()),
-		}, nil
+	// ✅ CORRECTION 1: Vérifier d'abord si on est en mode développement
+	if s.environment == "development" {
+		// ✅ CORRECTION 2: Vérifier si les credentials sont vides
+		if s.accountSID == "" || s.authToken == "" || s.apiURL == "" {
+			log.Printf("📱 WhatsApp DEV MODE - Credentials manquants, simulation activée")
+			log.Printf("📱 Message simulé vers %s: %s", phone, message)
+			return &WhatsAppResponse{
+				Success:   true,
+				Message:   "Message WhatsApp envoyé (mode développement - simulation)",
+				Reference: fmt.Sprintf("dev_mock_%d", time.Now().Unix()),
+			}, nil
+		}
 	}
 
-	// Production - Router selon le provider
+	// Router selon le provider
 	switch s.provider {
 	case "twilio":
 		return s.sendTwilioMessage(phone, message)
+	case "mock":
+		log.Printf("📱 WhatsApp MOCK - Vers %s: %s", phone, message)
+		return &WhatsAppResponse{
+			Success:   true,
+			Message:   "Message WhatsApp envoyé (mode mock)",
+			Reference: fmt.Sprintf("mock_%d", time.Now().Unix()),
+		}, nil
 	default:
 		return nil, fmt.Errorf("provider non supporté: %s", s.provider)
 	}
 }
 
-// ✅ CORRECTION : Implémentation Twilio qui fonctionne (basée sur votre curl)
 func (s *WhatsAppService) sendTwilioMessage(phone, message string) (*WhatsAppResponse, error) {
-	log.Printf("🚀 Envoi Twilio vers %s", phone)
+	// ✅ CORRECTION 3: Vérifications préalables
+	if s.accountSID == "" {
+		return nil, fmt.Errorf("TWILIO_ACCOUNT_SID non configuré")
+	}
+	if s.authToken == "" {
+		return nil, fmt.Errorf("TWILIO_AUTH_TOKEN non configuré")
+	}
+	if s.apiURL == "" {
+		return nil, fmt.Errorf("TWILIO_API_URL non configuré")
+	}
+	if s.businessNumber == "" {
+		return nil, fmt.Errorf("WHATSAPP_BUSINESS_NUMBER non configuré")
+	}
 
-	// Préparer les données comme votre curl qui fonctionne
+	log.Printf("🚀 Envoi Twilio vers %s", phone)
+	log.Printf("🔑 Account SID: %s", s.accountSID)
+	log.Printf("🔗 URL: %s", s.apiURL)
+
+	// Préparer les données
 	data := url.Values{}
 	data.Set("To", "whatsapp:"+phone)
 	data.Set("From", "whatsapp:"+s.businessNumber)
@@ -219,12 +245,20 @@ func (s *WhatsAppService) sendTwilioMessage(phone, message string) (*WhatsAppRes
 		return nil, fmt.Errorf("erreur création requête: %w", err)
 	}
 
-	// Headers comme votre curl
+	// Headers
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	
-	// Authentification Basic Auth (comme votre curl)
-	auth := s.apiToken + ":"
-	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(auth)))
+	// ✅ CORRECTION 4: Authentification Basic Auth sécurisée
+	credentials := s.accountSID + ":" + s.authToken
+	encodedAuth := base64.StdEncoding.EncodeToString([]byte(credentials))
+	req.Header.Set("Authorization", "Basic "+encodedAuth)
+	
+	// ✅ CORRECTION 5: Log sécurisé (éviter le slice bounds error)
+	logAuth := encodedAuth
+	if len(logAuth) > 20 {
+		logAuth = logAuth[:20] + "..."
+	}
+	log.Printf("🔐 Auth header: Basic %s", logAuth)
 
 	// Envoyer la requête
 	resp, err := client.Do(req)
@@ -233,15 +267,16 @@ func (s *WhatsAppService) sendTwilioMessage(phone, message string) (*WhatsAppRes
 	}
 	defer resp.Body.Close()
 
-	// Lire la réponse brute pour debug
+	// Lire la réponse
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("erreur lecture réponse: %w", err)
 	}
 	
+	log.Printf("🔍 Twilio Status: %d", resp.StatusCode)
 	log.Printf("🔍 Twilio Response: %s", string(bodyBytes))
 	
-	// Vérifier le statut HTTP d'abord
+	// Vérifier le statut HTTP
 	if resp.StatusCode != 200 && resp.StatusCode != 201 {
 		return nil, fmt.Errorf("erreur Twilio HTTP %d: %s", resp.StatusCode, string(bodyBytes))
 	}

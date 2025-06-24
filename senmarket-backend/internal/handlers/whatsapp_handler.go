@@ -1,4 +1,4 @@
-// internal/handlers/whatsapp_handler.go
+// internal/handlers/whatsapp_handler.go - VERSION CORRIGÉE
 package handlers
 
 import (
@@ -31,6 +31,22 @@ func NewWhatsAppHandler(whatsappService *services.WhatsAppService) *WhatsAppHand
 		whatsappService: whatsappService,
 		validator:       validator.New(),
 	}
+}
+
+// ✅ NOUVELLE MÉTHODE : GetStatus pour le health check WhatsApp
+func (h *WhatsAppHandler) GetStatus(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"service": "WhatsApp Service",
+		"status":  "active",
+		"provider": "twilio",
+		"features": gin.H{
+			"verification_codes": true,
+			"welcome_messages":   true,
+			"webhook_support":    true,
+		},
+		"timestamp": time.Now(),
+	})
 }
 
 // SendVerificationCode envoie un code via WhatsApp
