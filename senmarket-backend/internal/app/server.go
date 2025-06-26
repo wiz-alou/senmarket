@@ -40,6 +40,10 @@ type Application struct {
 	contactService    *services.ContactService
 	twilioSMSService  *services.TwilioSMSService
 	cacheService      *services.CacheService
+	
+	// 🆕 NOUVEAUX SERVICES POUR LA MONÉTISATION
+	quotaService      *services.QuotaService
+	
 	authMiddleware    *auth.Middleware
 	cacheMiddleware   *middleware.CacheMiddleware
 	authHandler       *handlers.AuthHandler
@@ -50,6 +54,9 @@ type Application struct {
 	contactHandler    *handlers.ContactHandler
 	cacheHandler      *handlers.CacheHandler
 	monitoringHandler *handlers.MonitoringHandler
+	
+	// 🆕 NOUVEAUX HANDLERS POUR LA MONÉTISATION
+	quotaHandler      *handlers.QuotaHandler
 }
 
 func New(cfg *config.Config) *Application {
@@ -99,10 +106,10 @@ func New(cfg *config.Config) *Application {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	// 🔴 Initialiser le repository Redis
+	// Initialiser le repository Redis
 	redisRepo := redis.NewCacheRepository(redisClient)
 
-	// 🔴 Initialiser le service de cache
+	// Initialiser le service de cache
 	cacheService := services.NewCacheService(redisRepo)
 
 	// Initialiser Twilio SMS
@@ -123,7 +130,10 @@ func New(cfg *config.Config) *Application {
 	jwtService := auth.NewJWTService(cfg.JWT.Secret, cfg.JWT.Expiry)
 	authService := auth.NewService(db, jwtService, twilioSMSService)
 	
-	// 🔴 Services avec cache intégré
+	// 🆕 NOUVEAU SERVICE QUOTA
+	quotaService := services.NewQuotaService(db)
+	
+	// Services avec cache intégré
 	listingService := services.NewListingService(db, redisRepo)
 	categoryService := services.NewCategoryService(db, redisRepo)
 	contactService := services.NewContactService(db)
@@ -141,7 +151,7 @@ func New(cfg *config.Config) *Application {
 	authMiddleware := auth.NewMiddleware(jwtService, authService)
 	cacheMiddleware := middleware.NewCacheMiddleware(cacheService)
 
-	// Initialiser les handlers
+	// Initialiser les handlers existants
 	authHandler := handlers.NewAuthHandler(authService)
 	listingHandler := handlers.NewListingHandler(listingService)
 	categoryHandler := handlers.NewCategoryHandler(categoryService)
@@ -151,8 +161,11 @@ func New(cfg *config.Config) *Application {
 	cacheHandler := handlers.NewCacheHandler(cacheService)
 	monitoringHandler := handlers.NewMonitoringHandler(cacheService, redisClient)
 
+	// 🆕 NOUVEAU HANDLER QUOTA
+	quotaHandler := handlers.NewQuotaHandler(quotaService)
+
 	// ============================================
-	// 🔴 MIGRATIONS DÉSACTIVÉES
+	// MIGRATIONS DÉSACTIVÉES
 	// ============================================
 	// AutoMigrate désactivé à cause de problèmes de contraintes GORM
 	// Les tables existent déjà via les migrations SQL dans /migrations/
@@ -172,25 +185,26 @@ func New(cfg *config.Config) *Application {
 	
 	log.Println("📊 Base de données PostgreSQL opérationnelle")
 	log.Println("📋 Tables créées via migrations SQL (/migrations/*.sql)")
-	
-	/*
-	// ============================================
-	// ANCIEN CODE AUTOMIGRATE (DÉSACTIVÉ)
-	// ============================================
-	// Cette section cause des erreurs de contraintes avec GORM
-	// Les tables sont déjà créées via les fichiers de migration SQL
-	
-	if err := db.AutoMigrate(
-		&models.User{},
-		&models.Category{},
-		&models.Listing{},
-		&models.Payment{},
-		&models.SMSVerification{},
-		&models.Contact{},
-	); err != nil {
-		log.Fatalf("Erreur migration base de données: %v", err)
-	}
-	*/
+
+	// 🆕 VÉRIFIER LA CONFIGURATION DE MONÉTISATION AU DÉMARRAGE
+	go func() {
+		time.Sleep(2 * time.Second) // Attendre que tout soit initialisé
+		
+		config, err := quotaService.GetGlobalConfig()
+		if err != nil {
+			log.Printf("⚠️  Erreur récupération config monétisation: %v", err)
+		} else {
+			phase := config.GetCurrentPhase()
+			log.Printf("🎯 Phase de monétisation actuelle: %s", phase)
+			
+			if config.IsFreeLaunchActive() {
+				days := config.GetDaysUntilLaunchEnd()
+				log.Printf("🎉 Phase de lancement ACTIVE - %d jours restants", days)
+			} else {
+				log.Printf("💳 Phase payante active - Prix: %.0f %s", config.StandardListingPrice, config.Currency)
+			}
+		}
+	}()
 
 	app := &Application{
 		config:            cfg,
@@ -206,6 +220,10 @@ func New(cfg *config.Config) *Application {
 		contactService:    contactService,
 		twilioSMSService:  twilioSMSService,
 		cacheService:      cacheService,
+		
+		// 🆕 NOUVEAU SERVICE
+		quotaService:      quotaService,
+		
 		authMiddleware:    authMiddleware,
 		cacheMiddleware:   cacheMiddleware,
 		authHandler:       authHandler,
@@ -216,13 +234,16 @@ func New(cfg *config.Config) *Application {
 		contactHandler:    contactHandler,
 		cacheHandler:      cacheHandler,
 		monitoringHandler: monitoringHandler,
+		
+		// 🆕 NOUVEAU HANDLER
+		quotaHandler:      quotaHandler,
 	}
 
 	// Configurer les middlewares et routes
 	app.setupMiddleware()
 	app.setupRoutes()
 
-	// 🔴 Préchauffer le cache au démarrage
+	// Préchauffer le cache au démarrage
 	go app.warmupCache()
 
 	return app
@@ -249,7 +270,7 @@ func (a *Application) setupMiddleware() {
 		c.Next()
 	})
 
-	// 🔴 Rate limiting global
+	// Rate limiting global
 	a.router.Use(a.cacheMiddleware.RateLimit(100, time.Minute))
 
 	// Servir les fichiers statiques
@@ -261,26 +282,42 @@ func (a *Application) setupMiddleware() {
 }
 
 func (a *Application) setupRoutes() {
-	// Health check avec info Redis + Twilio
+	// Health check avec info Redis + Twilio + Monétisation
 	a.router.GET("/health", func(c *gin.Context) {
 		twilioInfo, _ := a.twilioSMSService.GetAccountInfo()
 		
-		// 🔴 Test Redis
+		// Test Redis
 		ctx := context.Background()
 		redisStatus := "DOWN"
 		if err := a.redis.Ping(ctx).Err(); err == nil {
 			redisStatus = "UP"
 		}
 		
+		// 🆕 Info monétisation
+		monetizationInfo := gin.H{
+			"status": "unknown",
+			"phase":  "unknown",
+		}
+		
+		if config, err := a.quotaService.GetGlobalConfig(); err == nil {
+			monetizationInfo["status"] = "configured"
+			monetizationInfo["phase"] = config.GetCurrentPhase()
+			monetizationInfo["launch_active"] = config.IsFreeLaunchActive()
+			if config.IsFreeLaunchActive() {
+				monetizationInfo["days_until_launch_end"] = config.GetDaysUntilLaunchEnd()
+			}
+		}
+		
 		c.JSON(http.StatusOK, gin.H{
 			"status":    "UP",
 			"service":   "SenMarket API",
-			"version":   "2.2.0",
+			"version":   "3.0.0", // 🆕 Version avec monétisation
 			"timestamp": time.Now().Format(time.RFC3339),
 			"checks": gin.H{
-				"database":   a.checkDatabase(),
-				"redis":      redisStatus,
-				"twilio_sms": twilioInfo["status"],
+				"database":      a.checkDatabase(),
+				"redis":         redisStatus,
+				"twilio_sms":    twilioInfo["status"],
+				"monetization":  monetizationInfo["status"],
 			},
 			"features": gin.H{
 				"redis_cache":        true,
@@ -288,14 +325,18 @@ func (a *Application) setupRoutes() {
 				"response_caching":   true,
 				"twilio_sms_free":    true,
 				"sms_verification":   true,
+				"quota_management":   true, // 🆕
+				"phase_monetization": true, // 🆕
+				"pricing_config":     true, // 🆕
 			},
+			"monetization": monetizationInfo,
 		})
 	})
 
 	// API routes group
 	api := a.router.Group("/api/v1")
 	{
-		// Test endpoint avec info Twilio + Redis
+		// Test endpoint avec info complète
 		api.GET("/test", func(c *gin.Context) {
 			twilioStats := a.twilioSMSService.GetUsageStats()
 			
@@ -303,10 +344,16 @@ func (a *Application) setupRoutes() {
 			ctx := context.Background()
 			totalKeys, _ := a.redis.DBSize(ctx).Result()
 			
+			// 🆕 Stats monétisation
+			monetizationStats := gin.H{}
+			if stats, err := a.quotaService.GetPlatformStats(); err == nil {
+				monetizationStats = stats
+			}
+			
 			c.JSON(http.StatusOK, gin.H{
-				"message": "🇸🇳 SenMarket API fonctionne !",
+				"message": "🇸🇳 SenMarket API v3.0 avec monétisation !",
 				"env":     a.config.Env,
-				"version": "2.2.0",
+				"version": "3.0.0",
 				"redis": gin.H{
 					"connected":  true,
 					"total_keys": totalKeys,
@@ -316,6 +363,7 @@ func (a *Application) setupRoutes() {
 					"configured":              a.twilioSMSService.IsConfigured(),
 					"free_messages_remaining": twilioStats["free_messages_remaining"],
 				},
+				"monetization": monetizationStats, // 🆕
 			})
 		})
 
@@ -331,11 +379,11 @@ func (a *Application) setupRoutes() {
 			})
 		})
 
-		// 🔴 ENDPOINTS CATEGORIES (SANS MIDDLEWARE POUR L'INSTANT)
+		// ENDPOINTS CATEGORIES (SANS MIDDLEWARE POUR L'INSTANT)
 		api.GET("/categories", a.categoryHandler.GetCategories)
 		api.GET("/categories/stats", a.categoryHandler.GetCategoriesWithStats)
 
-		// 🔴 Rate limiting spécifique pour auth
+		// Rate limiting spécifique pour auth
 		auth := api.Group("/auth")
 		auth.Use(a.cacheMiddleware.RateLimit(10, time.Minute))
 		{
@@ -362,6 +410,27 @@ func (a *Application) setupRoutes() {
 			categories.GET("/:id/stats", a.categoryHandler.GetCategoryStats)
 		}
 
+		// 🆕 ROUTES QUOTA (NOUVELLES)
+		quota := api.Group("/quota")
+		{
+			// Routes publiques pour info générale
+			quota.GET("/current-phase", a.quotaHandler.GetCurrentPhase)
+			quota.GET("/pricing", a.quotaHandler.GetPricingInfo)
+		}
+
+		// Routes quota protégées (authentification requise)
+		quotaProtected := api.Group("/quota")
+		quotaProtected.Use(a.authMiddleware.RequireAuth())
+		{
+			quotaProtected.GET("/status", a.quotaHandler.GetQuotaStatus)
+			quotaProtected.GET("/check", a.quotaHandler.CheckEligibility)
+			quotaProtected.GET("/summary", a.quotaHandler.GetQuotaSummary)
+			quotaProtected.GET("/history", a.quotaHandler.GetQuotaHistory)
+			quotaProtected.GET("/platform-stats", a.quotaHandler.GetPlatformStats)
+			quotaProtected.POST("/update-phase", a.quotaHandler.UpdateUserPhase)
+			quotaProtected.POST("/cleanup", a.quotaHandler.CleanupQuotas)
+		}
+
 		// Routes annonces (publiques avec auth optionnelle)
 		listings := api.Group("/listings")
 		listings.Use(a.authMiddleware.OptionalAuth())
@@ -371,7 +440,7 @@ func (a *Application) setupRoutes() {
 			listings.GET("/:id", a.listingHandler.GetListing)        // Cache géré dans le service
 		}
 
-		// 🔴 Endpoint listings featured (SANS MIDDLEWARE POUR L'INSTANT)
+		// Endpoint listings featured (SANS MIDDLEWARE POUR L'INSTANT)
 		api.GET("/listings/featured", func(c *gin.Context) {
 			// Appeler directement le service pour les featured
 			featured, err := a.listingService.GetFeaturedListings(6)
@@ -382,15 +451,16 @@ func (a *Application) setupRoutes() {
 			c.JSON(http.StatusOK, gin.H{"data": featured})
 		})
 
-		// Routes annonces protégées
+		// Routes annonces protégées (MISES À JOUR AVEC QUOTAS)
 		listingsProtected := api.Group("/listings")
 		listingsProtected.Use(a.authMiddleware.RequireAuth())
 		{
-			listingsProtected.POST("", a.listingHandler.CreateListing)
+			listingsProtected.GET("/check-eligibility", a.listingHandler.CheckEligibility) // 🆕
+			listingsProtected.POST("", a.listingHandler.CreateListing)                     // 🆕 Modifié avec quotas
 			listingsProtected.PUT("/:id", a.listingHandler.UpdateListing)
 			listingsProtected.DELETE("/:id", a.listingHandler.DeleteListing)
-			listingsProtected.POST("/:id/publish", a.listingHandler.PublishListing)
-			listingsProtected.GET("/my", a.listingHandler.GetMyListings)
+			listingsProtected.POST("/:id/publish", a.listingHandler.PublishListing)       // 🆕 Nouveau
+			listingsProtected.GET("/my", a.listingHandler.GetMyListings)                  // 🆕 Modifié avec quotas
 			listingsProtected.POST("/:id/pay", a.paymentHandler.PayForListing)
 		}
 
@@ -440,7 +510,7 @@ func (a *Application) setupRoutes() {
 			imagesProtected.GET("/info", a.imageHandler.GetImageInfo)
 		}
 
-		// 🔴 Cache management (admin endpoints)
+		// Cache management (admin endpoints)
 		if a.config.Env != "production" {
 			cache := api.Group("/cache")
 			{
@@ -450,7 +520,7 @@ func (a *Application) setupRoutes() {
 			}
 		}
 
-		// 🔴 Monitoring endpoints
+		// Monitoring endpoints
 		if a.config.Env != "production" {
 			monitoring := api.Group("/monitoring")
 			{
@@ -518,6 +588,11 @@ func (a *Application) warmupCache() {
 		log.Printf("✅ Cache featured listings: %d éléments", len(featured))
 	}
 	
+	// 🆕 Préchauffer la configuration de monétisation
+	if config, err := a.quotaService.GetGlobalConfig(); err == nil {
+		log.Printf("🎯 Config monétisation chargée: phase %s", config.GetCurrentPhase())
+	}
+	
 	// Vérifier le total des clés en cache
 	if totalKeys, err := a.redis.DBSize(ctx).Result(); err == nil {
 		log.Printf("🔴 Cache préchauffé: %d clés totales", totalKeys)
@@ -530,6 +605,9 @@ func (a *Application) Run() error {
 		port = "8080"
 	}
 	
-	log.Printf("🚀 Serveur démarré sur le port %s", port)
+	log.Printf("🚀 SenMarket API v3.0 avec monétisation démarré sur le port %s", port)
+	log.Printf("🌐 Health check: http://localhost:%s/health", port)
+	log.Printf("🎯 Phase monétisation: http://localhost:%s/api/v1/quota/current-phase", port)
+	
 	return a.router.Run(":" + port)
 }

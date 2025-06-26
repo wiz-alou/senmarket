@@ -1,4 +1,4 @@
-// internal/services/listing_service.go - VERSION CORRIGÉE
+// internal/services/listing_service.go - VERSION MISE À JOUR AVEC QUOTAS
 package services
 
 import (
@@ -16,7 +16,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// Erreurs
+// Erreurs existantes
 var (
 	ErrListingNotFound   = errors.New("annonce non trouvée")
 	ErrInvalidCategory   = errors.New("catégorie invalide")
@@ -27,17 +27,24 @@ var (
 type ListingService struct {
 	db           *gorm.DB
 	cacheService *CacheService
+	quotaService *QuotaService
 }
 
 func NewListingService(db *gorm.DB, cacheRepo *redis.CacheRepository) *ListingService {
 	return &ListingService{
 		db:           db,
 		cacheService: NewCacheService(cacheRepo),
+		quotaService: NewQuotaService(db),
 	}
 }
 
-// CreateListing crée une nouvelle annonce
-func (s *ListingService) CreateListing(userID string, req *CreateListingRequest) (*models.Listing, error) {
+// 🆕 CheckListingEligibility vérifie si l'utilisateur peut créer une annonce
+func (s *ListingService) CheckListingEligibility(userID uuid.UUID) (map[string]interface{}, error) {
+	return s.quotaService.CheckListingEligibility(userID)
+}
+
+// 🆕 CreateListingWithQuota crée une annonce en respectant les quotas
+func (s *ListingService) CreateListingWithQuota(userID uuid.UUID, req *CreateListingRequest) (*models.Listing, error) {
 	// Validation de base
 	if req.CategoryID == "" {
 		return nil, ErrInvalidCategory
@@ -46,15 +53,15 @@ func (s *ListingService) CreateListing(userID string, req *CreateListingRequest)
 		return nil, ErrInvalidRegion
 	}
 
-	// Convertir les IDs en UUID
-	userUUID, err := uuid.Parse(userID)
-	if err != nil {
-		return nil, fmt.Errorf("ID utilisateur invalide: %w", err)
-	}
-
 	categoryUUID, err := uuid.Parse(req.CategoryID)
 	if err != nil {
 		return nil, ErrInvalidCategory
+	}
+
+	// 🔍 Vérifier l'éligibilité pour une annonce gratuite
+	canCreateFree, _, err := s.quotaService.CanCreateFreeListing(userID)
+	if err != nil {
+		return nil, fmt.Errorf("erreur vérification quota: %w", err)
 	}
 
 	// Définir l'expiration
@@ -67,16 +74,39 @@ func (s *ListingService) CreateListing(userID string, req *CreateListingRequest)
 		Price:       req.Price,
 		CategoryID:  categoryUUID,
 		Region:      req.Region,
-		UserID:      userUUID,
-		Status:      "draft", // Draft par défaut
-		IsFeatured:  false,   // Utiliser IsFeatured au lieu de Featured
-		Images:      pq.StringArray(req.Images), // Convertir en pq.StringArray
-		ExpiresAt:   &expiresAt, // Pointeur vers time.Time
-		Currency:    "XOF", // Devise par défaut
+		UserID:      userID,
+		IsFeatured:  false,
+		Images:      pq.StringArray(req.Images),
+		ExpiresAt:   &expiresAt,
+		Currency:    "XOF",
 	}
 
-	if err := s.db.Create(listing).Error; err != nil {
-		return nil, fmt.Errorf("erreur création annonce: %w", err)
+	// 🎯 Logique selon les quotas
+	if canCreateFree {
+		// Publication gratuite directe
+		listing.Status = "active"
+		
+		if err := s.db.Create(listing).Error; err != nil {
+			return nil, fmt.Errorf("erreur création annonce: %w", err)
+		}
+		
+		// Consommer le quota (si en phase 2+)
+		if err := s.quotaService.ConsumeFreeListing(userID); err != nil {
+			// Log l'erreur mais ne pas échouer la création
+			log.Printf("⚠️ Erreur consommation quota (non bloquant): %v", err)
+		}
+		
+		log.Printf("✅ Annonce %s publiée GRATUITEMENT pour utilisateur %s", listing.ID, userID)
+		
+	} else {
+		// Création en draft (nécessite paiement)
+		listing.Status = "draft"
+		
+		if err := s.db.Create(listing).Error; err != nil {
+			return nil, fmt.Errorf("erreur création annonce: %w", err)
+		}
+		
+		log.Printf("📝 Annonce %s créée en DRAFT pour utilisateur %s (paiement requis)", listing.ID, userID)
 	}
 
 	// Invalider les caches liés
@@ -90,11 +120,61 @@ func (s *ListingService) CreateListing(userID string, req *CreateListingRequest)
 	return listing, nil
 }
 
+// 🆕 PublishListingAfterPayment publie une annonce après paiement
+func (s *ListingService) PublishListingAfterPayment(listingID uuid.UUID, userID uuid.UUID) error {
+	// Vérifier que l'annonce existe et appartient à l'utilisateur
+	var listing models.Listing
+	if err := s.db.Where("id = ? AND user_id = ? AND status = ?", listingID, userID, "draft").
+		First(&listing).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrListingNotFound
+		}
+		return fmt.Errorf("erreur récupération annonce: %w", err)
+	}
+
+	// Publier l'annonce
+	if err := s.db.Model(&listing).Update("status", "active").Error; err != nil {
+		return fmt.Errorf("erreur publication annonce: %w", err)
+	}
+
+	// Compter l'annonce payée
+	if err := s.quotaService.AddPaidListing(userID); err != nil {
+		log.Printf("⚠️ Erreur comptage annonce payée: %v", err)
+	}
+
+	log.Printf("💳 Annonce %s publiée après PAIEMENT pour utilisateur %s", listingID, userID)
+
+	// Invalider les caches
+	ctx := context.Background()
+	go func() {
+		if err := s.cacheService.InvalidateListingCache(ctx, listingID.String()); err != nil {
+			log.Printf("Erreur invalidation cache: %v", err)
+		}
+	}()
+
+	return nil
+}
+
+// 🆕 GetUserQuotaStatus retourne le statut du quota d'un utilisateur
+func (s *ListingService) GetUserQuotaStatus(userID uuid.UUID) (map[string]interface{}, error) {
+	return s.quotaService.GetUserQuotaStatus(userID)
+}
+
+// CreateListing méthode originale (maintenant wrapper)
+func (s *ListingService) CreateListing(userID string, req *CreateListingRequest) (*models.Listing, error) {
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		return nil, fmt.Errorf("ID utilisateur invalide: %w", err)
+	}
+	
+	return s.CreateListingWithQuota(userUUID, req)
+}
+
 // GetListings récupère les annonces avec pagination et cache
 func (s *ListingService) GetListings(page, limit int, filters map[string]interface{}) ([]models.Listing, int64, error) {
 	ctx := context.Background()
 	
-	// 🔴 1. Essayer le cache d'abord
+	// Essayer le cache d'abord
 	cachedListings, err := s.cacheService.GetCachedListingsPage(ctx, page, limit, filters)
 	if err == nil && len(cachedListings) > 0 {
 		log.Printf("🔴 Cache HIT - Listings page %d", page)
@@ -108,111 +188,84 @@ func (s *ListingService) GetListings(page, limit int, filters map[string]interfa
 	
 	log.Printf("🔴 Cache MISS - Récupération depuis DB page %d", page)
 	
-	// 🔴 2. Récupérer depuis la base de données
-	var listings []models.Listing
-	var totalCount int64
-	
-	// Construire la requête - Utiliser "active" au lieu de "published"
+	// Construire la requête
 	query := s.db.Model(&models.Listing{}).
-		Where("status = ? AND expires_at > ?", "active", time.Now())
-	
+		Preload("User", func(db *gorm.DB) *gorm.DB {
+			return db.Select("id", "first_name", "last_name", "phone", "region", "is_verified")
+		}).
+		Preload("Category").
+		Where("status = ?", "active")
+
 	// Appliquer les filtres
-	query = s.applyFilters(query, filters)
+	if categoryID, ok := filters["category_id"].(string); ok && categoryID != "" {
+		query = query.Where("category_id = ?", categoryID)
+	}
 	
+	if region, ok := filters["region"].(string); ok && region != "" {
+		query = query.Where("region = ?", region)
+	}
+	
+	if minPrice, ok := filters["min_price"].(float64); ok && minPrice > 0 {
+		query = query.Where("price >= ?", minPrice)
+	}
+	
+	if maxPrice, ok := filters["max_price"].(float64); ok && maxPrice > 0 {
+		query = query.Where("price <= ?", maxPrice)
+	}
+	
+	if search, ok := filters["search"].(string); ok && search != "" {
+		query = query.Where("title ILIKE ? OR description ILIKE ?", "%"+search+"%", "%"+search+"%")
+	}
+
 	// Compter le total
-	if err := query.Count(&totalCount).Error; err != nil {
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, fmt.Errorf("erreur comptage annonces: %w", err)
 	}
-	
-	// Récupérer les annonces avec pagination
+
+	// Tri par défaut
+	sort := "created_at DESC"
+	if sortParam, ok := filters["sort"].(string); ok && sortParam != "" {
+		switch sortParam {
+		case "price_asc":
+			sort = "price ASC"
+		case "price_desc":
+			sort = "price DESC"
+		case "newest":
+			sort = "created_at DESC"
+		case "oldest":
+			sort = "created_at ASC"
+		case "views":
+			sort = "views_count DESC"
+		}
+	}
+
+	// Pagination
 	offset := (page - 1) * limit
-	if err := query.
-		Preload("User").
-		Preload("Category").
-		Order(s.buildOrderClause(filters)).
-		Offset(offset).
-		Limit(limit).
-		Find(&listings).Error; err != nil {
+	var listings []models.Listing
+	
+	if err := query.Order(sort).Offset(offset).Limit(limit).Find(&listings).Error; err != nil {
 		return nil, 0, fmt.Errorf("erreur récupération annonces: %w", err)
 	}
-	
-	// 🔴 3. Mettre en cache les résultats
+
+	// Mettre en cache
 	go func() {
 		if err := s.cacheService.CacheListingsPage(ctx, page, limit, filters, listings); err != nil {
-			log.Printf("Erreur cache listings page: %v", err)
+			log.Printf("Erreur cache listings: %v", err)
 		}
-		
-		// Cache le total count
-		if err := s.cacheService.cache.Set(ctx, CACHE_LISTINGS_COUNT, totalCount, TTL_MEDIUM); err != nil {
-			log.Printf("Erreur cache total count: %v", err)
+		if err := s.cacheService.cache.Set(ctx, CACHE_LISTINGS_COUNT, total, time.Hour); err != nil {
+			log.Printf("Erreur cache count: %v", err)
 		}
 	}()
-	
-	return listings, totalCount, nil
+
+	return listings, total, nil
 }
 
-// Méthode alternative pour compatibilité avec les handlers existants
-func (s *ListingService) GetListings2(query *ListingQuery) (*ListingResponse, error) {
-	// Convertir ListingQuery en paramètres
-	filters := make(map[string]interface{})
-	if query.CategoryID != "" {
-		filters["category_id"] = query.CategoryID
-	}
-	if query.Region != "" {
-		filters["region"] = query.Region
-	}
-	if query.MinPrice > 0 {
-		filters["min_price"] = query.MinPrice
-	}
-	if query.MaxPrice > 0 {
-		filters["max_price"] = query.MaxPrice
-	}
-	if query.Search != "" {
-		filters["search"] = query.Search
-	}
-	if query.Sort != "" {
-		filters["sort_by"] = query.Sort
-	}
-	if query.UserID != "" {
-		filters["user_id"] = query.UserID
-	}
-	if query.Status != "" {
-		filters["status"] = query.Status
-	}
-
-	// Valeurs par défaut
-	if query.Page <= 0 {
-		query.Page = 1
-	}
-	if query.Limit <= 0 {
-		query.Limit = 20
-	}
-
-	// Utiliser la méthode existante
-	listings, total, err := s.GetListings(query.Page, query.Limit, filters)
-	if err != nil {
-		return nil, err
-	}
-
-	// Construire la réponse
-	response := &ListingResponse{
-		Data: listings,
-		Pagination: PaginationInfo{
-			Page:       query.Page,
-			Limit:      query.Limit,
-			Total:      total,
-			TotalPages: int((total + int64(query.Limit) - 1) / int64(query.Limit)),
-		},
-	}
-
-	return response, nil
-}
-
-// GetListingByID récupère une annonce par ID avec cache
-func (s *ListingService) GetListingByID(id string) (*models.Listing, error) {
+// GetListing récupère une annonce par ID avec cache
+func (s *ListingService) GetListing(id string) (*models.Listing, error) {
 	ctx := context.Background()
 	
-	// 🔴 1. Essayer le cache d'abord
+	// Essayer le cache d'abord
 	cachedListing, err := s.cacheService.GetCachedListing(ctx, id)
 	if err == nil {
 		log.Printf("🔴 Cache HIT - Listing %s", id)
@@ -221,7 +274,7 @@ func (s *ListingService) GetListingByID(id string) (*models.Listing, error) {
 	
 	log.Printf("🔴 Cache MISS - Récupération depuis DB listing %s", id)
 	
-	// 🔴 2. Récupérer depuis la base de données
+	// Récupérer depuis la base de données
 	var listing models.Listing
 	if err := s.db.
 		Preload("User").
@@ -234,7 +287,7 @@ func (s *ListingService) GetListingByID(id string) (*models.Listing, error) {
 		return nil, fmt.Errorf("erreur récupération annonce: %w", err)
 	}
 	
-	// 🔴 3. Mettre en cache
+	// Mettre en cache
 	go func() {
 		if err := s.cacheService.CacheListing(ctx, &listing); err != nil {
 			log.Printf("Erreur cache listing: %v", err)
@@ -242,6 +295,32 @@ func (s *ListingService) GetListingByID(id string) (*models.Listing, error) {
 	}()
 	
 	return &listing, nil
+}
+
+// GetMyListings récupère les annonces d'un utilisateur (toutes, y compris drafts)
+func (s *ListingService) GetMyListings(userID string, page, limit int) ([]models.Listing, int64, error) {
+	if page <= 0 {
+		page = 1
+	}
+	if limit <= 0 || limit > 50 {
+		limit = 20
+	}
+
+	var listings []models.Listing
+	var total int64
+
+	// Compter le total
+	s.db.Model(&models.Listing{}).Where("user_id = ?", userID).Count(&total)
+
+	// Récupérer avec pagination (TOUTES les annonces, y compris drafts)
+	offset := (page - 1) * limit
+	err := s.db.Preload("Category").
+		Where("user_id = ?", userID).
+		Order("created_at DESC").
+		Offset(offset).Limit(limit).
+		Find(&listings).Error
+
+	return listings, total, err
 }
 
 // UpdateListing met à jour une annonce
@@ -324,140 +403,74 @@ func (s *ListingService) DeleteListing(listingID string, userID string) error {
 	return nil
 }
 
-// SearchListings recherche avec cache
-func (s *ListingService) SearchListings(query string, filters map[string]interface{}) ([]models.Listing, error) {
-	ctx := context.Background()
-	
-	// 🔴 1. Essayer le cache de recherche
-	cachedResults, err := s.cacheService.GetCachedSearchResults(ctx, query)
-	if err == nil && len(cachedResults) > 0 {
-		log.Printf("🔴 Cache HIT - Search '%s'", query)
-		return cachedResults, nil
-	}
-	
-	log.Printf("🔴 Cache MISS - Search depuis DB '%s'", query)
-	
-	// 🔴 2. Rechercher en base
-	var listings []models.Listing
-	dbQuery := s.db.Model(&models.Listing{}).
-		Where("status = ? AND expires_at > ?", "active", time.Now()).
-		Where("(title ILIKE ? OR description ILIKE ?)", "%"+query+"%", "%"+query+"%")
-	
-	// Appliquer les filtres
-	dbQuery = s.applyFilters(dbQuery, filters)
-	
-	if err := dbQuery.
-		Preload("User").
-		Preload("Category").
-		Order("created_at DESC").
-		Limit(50).
-		Find(&listings).Error; err != nil {
-		return nil, fmt.Errorf("erreur recherche annonces: %w", err)
-	}
-	
-	// 🔴 3. Mettre en cache les résultats
-	go func() {
-		if err := s.cacheService.CacheSearchResults(ctx, query, listings); err != nil {
-			log.Printf("Erreur cache search results: %v", err)
-		}
-		
-		// Incrémenter le compteur de recherche
-		if err := s.cacheService.IncrementSearchCount(ctx, query); err != nil {
-			log.Printf("Erreur increment search count: %v", err)
-		}
-	}()
-	
-	return listings, nil
-}
-
-// GetFeaturedListings récupère les annonces à la une avec cache
+// GetFeaturedListings récupère les annonces mises en avant
 func (s *ListingService) GetFeaturedListings(limit int) ([]models.Listing, error) {
-	ctx := context.Background()
-	
-	// 🔴 1. Essayer le cache d'abord
-	cachedFeatured, err := s.cacheService.GetCachedFeaturedListings(ctx)
-	if err == nil && len(cachedFeatured) > 0 {
-		log.Printf("🔴 Cache HIT - Featured listings")
-		if len(cachedFeatured) > limit {
-			return cachedFeatured[:limit], nil
-		}
-		return cachedFeatured, nil
+	if limit <= 0 {
+		limit = 6
 	}
-	
-	log.Printf("🔴 Cache MISS - Featured depuis DB")
-	
-	// 🔴 2. Récupérer depuis la base
+
 	var listings []models.Listing
-	if err := s.db.
-		Preload("User").
+	err := s.db.Preload("User", func(db *gorm.DB) *gorm.DB {
+		return db.Select("id", "first_name", "last_name", "phone", "region", "is_verified")
+	}).
 		Preload("Category").
-		Where("status = ? AND expires_at > ? AND is_featured = ?", "active", time.Now(), true).
+		Where("status = ? AND is_featured = ?", "active", true).
 		Order("created_at DESC").
 		Limit(limit).
-		Find(&listings).Error; err != nil {
+		Find(&listings).Error
+
+	if err != nil {
 		return nil, fmt.Errorf("erreur récupération annonces featured: %w", err)
 	}
-	
-	// 🔴 3. Mettre en cache
-	go func() {
-		if err := s.cacheService.CacheFeaturedListings(ctx, listings); err != nil {
-			log.Printf("Erreur cache featured listings: %v", err)
-		}
-	}()
-	
+
 	return listings, nil
 }
 
-// Fonctions utilitaires
-func (s *ListingService) applyFilters(query *gorm.DB, filters map[string]interface{}) *gorm.DB {
-	if categoryID, ok := filters["category_id"].(string); ok && categoryID != "" {
-		query = query.Where("category_id = ?", categoryID)
+// IncrementViews augmente le compteur de vues d'une annonce
+func (s *ListingService) IncrementViews(listingID string) error {
+	if err := s.db.Model(&models.Listing{}).
+		Where("id = ?", listingID).
+		Update("views_count", gorm.Expr("views_count + 1")).Error; err != nil {
+		return fmt.Errorf("erreur incrémentation vues: %w", err)
 	}
-	
-	if region, ok := filters["region"].(string); ok && region != "" {
-		query = query.Where("region = ?", region)
-	}
-	
-	if minPrice, ok := filters["min_price"].(float64); ok && minPrice > 0 {
-		query = query.Where("price >= ?", minPrice)
-	}
-	
-	if maxPrice, ok := filters["max_price"].(float64); ok && maxPrice > 0 {
-		query = query.Where("price <= ?", maxPrice)
-	}
-	
-	if search, ok := filters["search"].(string); ok && search != "" {
-		query = query.Where("(title ILIKE ? OR description ILIKE ?)", "%"+search+"%", "%"+search+"%")
-	}
-	
-	// 🔴 NOUVEAUX FILTRES
-	if userID, ok := filters["user_id"].(string); ok && userID != "" {
-		query = query.Where("user_id = ?", userID)
-	}
-	
-	if status, ok := filters["status"].(string); ok && status != "" && status != "all" {
-		query = query.Where("status = ?", status)
-	}
-	
-	return query
+
+	// Invalider le cache pour cette annonce
+	ctx := context.Background()
+	go func() {
+		if err := s.cacheService.InvalidateListingCache(ctx, listingID); err != nil {
+			log.Printf("Erreur invalidation cache après vue: %v", err)
+		}
+	}()
+
+	return nil
 }
 
-func (s *ListingService) buildOrderClause(filters map[string]interface{}) string {
-	if sortBy, ok := filters["sort_by"].(string); ok {
-		switch sortBy {
-		case "price_asc":
-			return "price ASC"
-		case "price_desc":
-			return "price DESC"
-		case "date_asc":
-			return "created_at ASC"
-		case "date_desc":
-			return "created_at DESC"
-		case "title":
-			return "title ASC"
-		case "views":
-			return "views_count DESC"
-		}
+// SearchListings recherche dans les annonces
+func (s *ListingService) SearchListings(query string, page, limit int) ([]models.Listing, int64, error) {
+	if page <= 0 {
+		page = 1
 	}
-	return "created_at DESC"
+	if limit <= 0 || limit > 50 {
+		limit = 20
+	}
+
+	var listings []models.Listing
+	var total int64
+
+	// Construire la requête de recherche
+	searchQuery := s.db.Model(&models.Listing{}).
+		Preload("User", func(db *gorm.DB) *gorm.DB {
+			return db.Select("id", "first_name", "last_name", "phone", "region", "is_verified")
+		}).
+		Preload("Category").
+		Where("status = ? AND (title ILIKE ? OR description ILIKE ?)", "active", "%"+query+"%", "%"+query+"%")
+
+	// Compter le total
+	searchQuery.Count(&total)
+
+	// Récupérer avec pagination
+	offset := (page - 1) * limit
+	err := searchQuery.Order("created_at DESC").Offset(offset).Limit(limit).Find(&listings).Error
+
+	return listings, total, err
 }
