@@ -4,36 +4,9 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import {
-  BarChart3,
-  Eye,
-  MessageSquare,
-  CreditCard,
-  Settings,
-  Plus,
-  TrendingUp,
-  Users,
-  Package,
-  Calendar,
-  Phone,
-  Mail,
-  Edit3,
-  Trash2,
-  Share2,
-  Star,
-  MapPin,
-  Clock,
-  CheckCircle,
-  XCircle,
-  AlertCircle,
-  Loader2,
-  User,
-  Shield,
-  Download,
-  Camera,
-  Flag,
-  Search,
-  Filter,
-  Tag
+  Eye, MessageSquare, CreditCard, Settings, Plus, Package,
+  Phone, Mail, Edit3, Trash2, MapPin, Clock, CheckCircle,
+  AlertCircle, Loader2, User, Download, Camera, Search, Tag
 } from 'lucide-react'
 
 import { Header } from '@/components/layout/header'
@@ -48,13 +21,12 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Separator } from '@/components/ui/separator'
-import { Progress } from '@/components/ui/progress'
 import { toast } from 'sonner'
 
-// ✅ Utiliser le store auth corrigé
+// ✅ Auth store et hook
 import { useAuthStore } from '@/stores/auth.store'
 
-// Types basés sur votre API
+// Types
 interface DashboardStats {
   total_listings: number
   active_listings: number
@@ -118,21 +90,14 @@ interface Payment {
 export default function DashboardPage() {
   const router = useRouter()
   
-  // ✅ Store auth avec hydratation
-  const { user, token, isAuthenticated, isHydrated } = useAuthStore()
+  // ✅ Auth state
+  const { user, token, isAuthenticated, isHydrated, logout, syncWithLocalStorage } = useAuthStore()
 
   // États
   const [stats, setStats] = useState<DashboardStats>({
-    total_listings: 0,
-    active_listings: 0,
-    sold_listings: 0,
-    draft_listings: 0,
-    total_views: 0,
-    total_payments: 0,
-    completed_payments: 0,
-    total_revenue: 0,
-    total_contacts: 0,
-    unread_contacts: 0
+    total_listings: 0, active_listings: 0, sold_listings: 0, draft_listings: 0,
+    total_views: 0, total_payments: 0, completed_payments: 0, total_revenue: 0,
+    total_contacts: 0, unread_contacts: 0
   })
 
   const [listings, setListings] = useState<Listing[]>([])
@@ -146,157 +111,131 @@ export default function DashboardPage() {
   const [listingFilter, setListingFilter] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
 
-  // ✅ VÉRIFICATION AUTH AVEC HYDRATATION
+  // ✅ VÉRIFICATION AUTH
   useEffect(() => {
     console.log('🔍 Dashboard - État auth:', {
-      isHydrated,
-      isAuthenticated,
-      userId: user?.id,
-      userName: user?.first_name,
-      hasToken: !!token
+      isHydrated, isAuthenticated, userId: user?.id, userName: user?.first_name, hasToken: !!token
     })
 
-    // Attendre l'hydratation
     if (!isHydrated) {
       console.log('⏳ En attente de l\'hydratation...')
       return
     }
 
-    // Vérifier l'authentification après hydratation
     if (!isAuthenticated || !user || !token) {
-      console.log('❌ Non authentifié après hydratation, redirection...')
+      console.log('❌ Non authentifié, redirection...')
       router.push('/auth/login?redirect=/dashboard')
       return
     }
 
-    console.log('✅ Utilisateur authentifié, chargement données dashboard pour:', user.first_name)
+    console.log('✅ Utilisateur authentifié:', user.first_name)
     fetchDashboardData()
   }, [isHydrated, isAuthenticated, user, token, router])
 
-  // ✅ RECHARGER LES DONNÉES QUAND L'UTILISATEUR CHANGE
-  useEffect(() => {
-    if (isHydrated && isAuthenticated && user && token) {
-      console.log('🔄 Rechargement des données pour user:', user.first_name, '(ID:', user.id, ')')
-      fetchDashboardData()
-    }
-  }, [user?.id]) // Recharger quand l'ID utilisateur change
-
-  // Fonction utilitaire pour obtenir l'URL des images
-  const getImageUrl = (imagePath: string) => {
-    if (!imagePath) return null
-    
-    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
-      return imagePath
-    }
-    
-    if (imagePath.startsWith('/')) {
-      return `http://localhost:8080${imagePath}`
-    }
-    
-    return `http://localhost:8080/uploads/${imagePath}`
-  }
-
-  // ✅ FONCTION DE RÉCUPÉRATION DES DONNÉES CORRIGÉE
+  // ✅ RÉCUPÉRATION DES DONNÉES
   const fetchDashboardData = async () => {
     if (!token || !user) {
-      console.error('❌ Pas de token ou d\'utilisateur pour charger les données')
-      return
+      console.error('❌ Pas de token ou d\'utilisateur')
+      syncWithLocalStorage()
+      
+      const currentState = useAuthStore.getState()
+      if (!currentState.token || !currentState.user) {
+        logout()
+        router.push('/auth/login?redirect=/dashboard')
+        return
+      }
     }
 
     setLoading(true)
     setError(null)
 
     try {
-      console.log('📡 Appel API dashboard avec token pour user:', user.first_name)
+      const currentToken = token || localStorage.getItem('senmarket_token')
+      if (!currentToken) throw new Error('Token manquant')
       
       const headers = {
-        'Authorization': `Bearer ${token}`,
+        'Authorization': `Bearer ${currentToken}`,
         'Content-Type': 'application/json'
       }
 
-      // ✅ RÉCUPÉRATION AVEC LES ENDPOINTS EXISTANTS
-      let listingsData = null
-      let contactsData = null
-      let paymentsData = null
-
-      // 1. Mes annonces - CRITIQUE POUR STATS
+      // 1. Mes annonces
+      let userListings: Listing[] = []
       try {
-        console.log('📝 Chargement mes annonces...')
+        console.log('📝 Chargement des annonces...')
         const listingsRes = await fetch('http://localhost:8080/api/v1/listings/my', { headers })
         console.log('📝 Réponse listings status:', listingsRes.status)
         
         if (listingsRes.ok) {
-          listingsData = await listingsRes.json()
-          const userListings = listingsData.data?.listings || listingsData.listings || listingsData.data || []
-          console.log('✅ Annonces reçues:', userListings.length, 'pour user:', user.first_name)
+          const listingsData = await listingsRes.json()
+          console.log('📝 Données brutes reçues:', listingsData)
+          
+          // ✅ VÉRIFICATIONS MULTIPLES POUR TROUVER LE TABLEAU
+          userListings = listingsData.data?.listings || 
+                        listingsData.listings || 
+                        listingsData.data || 
+                        listingsData || 
+                        []
+          
+          // ✅ VÉRIFICATION FINALE QUE C'EST UN TABLEAU
+          if (!Array.isArray(userListings)) {
+            console.warn('⚠️ userListings n\'est pas un tableau:', typeof userListings, userListings)
+            userListings = []
+          }
+          
+          console.log('✅ Annonces traitées:', userListings.length)
           setListings(userListings)
-          
-          // ✅ CALCULER LES STATS À PARTIR DES ANNONCES
-          calculateStatsFromData(userListings, [], [])
-          
+        } else if (listingsRes.status === 401) {
+          logout()
+          router.push('/auth/login?redirect=/dashboard')
+          return
         } else {
           console.warn('⚠️ Erreur chargement annonces:', listingsRes.status)
           setListings([])
         }
-      } catch (listError) {
-        console.warn('⚠️ Erreur non critique listings:', listError)
+      } catch (error) {
+        console.warn('⚠️ Erreur listings:', error)
         setListings([])
       }
 
-      // 2. Mes contacts - NON CRITIQUE
+      // 2. Mes contacts
+      let userContacts: Contact[] = []
       try {
-        console.log('💬 Chargement mes contacts...')
         const contactsRes = await fetch('http://localhost:8080/api/v1/contacts/my', { headers })
-        console.log('💬 Réponse contacts status:', contactsRes.status)
-        
         if (contactsRes.ok) {
-          contactsData = await contactsRes.json()
-          const userContacts = contactsData.data || contactsData || []
-          console.log('✅ Contacts reçus:', userContacts.length)
+          const contactsData = await contactsRes.json()
+          userContacts = contactsData.data || contactsData || []
           setContacts(userContacts)
-        } else {
-          console.warn('⚠️ Erreur chargement contacts:', contactsRes.status)
-          setContacts([])
         }
-      } catch (contactError) {
-        console.warn('⚠️ Erreur non critique contacts:', contactError)
+      } catch (error) {
+        console.warn('⚠️ Erreur contacts:', error)
         setContacts([])
       }
 
-      // 3. Mes paiements - NON CRITIQUE
+      // 3. Mes paiements
+      let userPayments: Payment[] = []
       try {
-        console.log('💳 Chargement mes paiements...')
         const paymentsRes = await fetch('http://localhost:8080/api/v1/payments/my', { headers })
-        console.log('💳 Réponse payments status:', paymentsRes.status)
-        
         if (paymentsRes.ok) {
-          paymentsData = await paymentsRes.json()
-          const userPayments = paymentsData.data?.payments || paymentsData.payments || paymentsData.data || []
-          console.log('✅ Paiements reçus:', userPayments.length)
+          const paymentsData = await paymentsRes.json()
+          userPayments = paymentsData.data?.payments || paymentsData.payments || paymentsData.data || []
           setPayments(userPayments)
-        } else {
-          console.warn('⚠️ Erreur chargement paiements:', paymentsRes.status)
-          setPayments([])
         }
-      } catch (paymentError) {
-        console.warn('⚠️ Erreur non critique paiements:', paymentError)
+      } catch (error) {
+        console.warn('⚠️ Erreur paiements:', error)
         setPayments([])
       }
 
-      console.log('🎉 Chargement dashboard terminé avec succès')
+      // Calculer les stats
+      calculateStatsFromData(userListings, userContacts, userPayments)
 
     } catch (error) {
       console.error('❌ Erreur chargement dashboard:', error)
       setError(error instanceof Error ? error.message : 'Erreur de chargement')
       
-      // Si erreur d'authentification, rediriger vers login
       if (error instanceof Error && (
-        error.message.includes('401') || 
-        error.message.includes('Unauthorized') ||
-        error.message.includes('403')
+        error.message.includes('401') || error.message.includes('Token')
       )) {
-        console.log('🔑 Token expiré, redirection vers login...')
-        useAuthStore.getState().logout()
+        logout()
         router.push('/auth/login?redirect=/dashboard')
       }
     } finally {
@@ -304,152 +243,123 @@ export default function DashboardPage() {
     }
   }
 
-  // ✅ CALCULER LES STATS À PARTIR DES DONNÉES RÉCUPÉRÉES
+  // ✅ CALCULER LES STATS AVEC VÉRIFICATIONS
   const calculateStatsFromData = (userListings: Listing[], userContacts: Contact[], userPayments: Payment[]) => {
-    console.log('📊 Calcul des stats à partir des données:', {
-      listings: userListings.length,
-      contacts: userContacts.length,
-      payments: userPayments.length
+    // Vérifier que ce sont des tableaux
+    const safeListings = Array.isArray(userListings) ? userListings : []
+    const safeContacts = Array.isArray(userContacts) ? userContacts : []
+    const safePayments = Array.isArray(userPayments) ? userPayments : []
+    
+    console.log('📊 Calcul stats avec:', {
+      listings: safeListings.length,
+      contacts: safeContacts.length,
+      payments: safePayments.length
     })
 
     const calculatedStats: DashboardStats = {
-      total_listings: userListings.length,
-      active_listings: userListings.filter(l => l.status === 'active').length,
-      sold_listings: userListings.filter(l => l.status === 'sold').length,
-      draft_listings: userListings.filter(l => l.status === 'draft').length,
-      total_views: userListings.reduce((sum, l) => sum + (l.views_count || 0), 0),
-      total_payments: userPayments.length,
-      completed_payments: userPayments.filter(p => p.status === 'completed').length,
-      total_revenue: userPayments
-        .filter(p => p.status === 'completed')
-        .reduce((sum, p) => sum + p.amount, 0),
-      total_contacts: userContacts.length,
-      unread_contacts: userContacts.filter(c => !c.is_read).length
+      total_listings: safeListings.length,
+      active_listings: safeListings.filter(l => l?.status === 'active').length,
+      sold_listings: safeListings.filter(l => l?.status === 'sold').length,
+      draft_listings: safeListings.filter(l => l?.status === 'draft').length,
+      total_views: safeListings.reduce((sum, l) => sum + (l?.views_count || 0), 0),
+      total_payments: safePayments.length,
+      completed_payments: safePayments.filter(p => p?.status === 'completed').length,
+      total_revenue: safePayments.filter(p => p?.status === 'completed').reduce((sum, p) => sum + (p?.amount || 0), 0),
+      total_contacts: safeContacts.length,
+      unread_contacts: safeContacts.filter(c => !c?.is_read).length
     }
-
+    
     console.log('✅ Stats calculées:', calculatedStats)
     setStats(calculatedStats)
   }
 
-  // ✅ Recalculer les stats quand les données changent
-  useEffect(() => {
-    calculateStatsFromData(listings, contacts, payments)
-  }, [listings, contacts, payments])
-
-  // ✅ FONCTIONS D'ACTION POUR LES ANNONCES
+  // ✅ FONCTIONS D'ACTION
   const handlePublishListing = async (listingId: string) => {
-    if (publishingListing || !token) return
+    if (publishingListing) return
     
-    const confirmed = window.confirm(
-      'Publier cette annonce coûte 200 FCFA. Voulez-vous continuer ?'
-    )
+    const currentToken = token || localStorage.getItem('senmarket_token')
+    if (!currentToken) {
+      logout()
+      router.push('/auth/login?redirect=/dashboard')
+      return
+    }
     
-    if (!confirmed) return
+    if (!window.confirm('Publier cette annonce coûte 200 FCFA. Continuer ?')) return
 
     setPublishingListing(listingId)
-
     try {
       const response = await fetch(`http://localhost:8080/api/v1/listings/${listingId}/pay`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${currentToken}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          payment_method: 'orange_money' // ou autre méthode
-        })
+        body: JSON.stringify({ payment_method: 'orange_money' })
       })
 
-      if (!response.ok) {
-        throw new Error('Erreur lors de la publication')
-      }
-
-      const data = await response.json()
-      toast.success('Annonce publiée avec succès !')
+      if (!response.ok) throw new Error('Erreur lors de la publication')
       
-      // Recharger les données
+      toast.success('Annonce publiée avec succès !')
       fetchDashboardData()
-
     } catch (error) {
-      console.error('Erreur publication:', error)
       toast.error('Erreur lors de la publication')
     } finally {
       setPublishingListing(null)
     }
   }
 
-  const handleEditListing = (listingId: string) => {
-    router.push(`/sell?edit=${listingId}`)
-  }
-
   const handleDeleteListing = async (listingId: string) => {
-    if (!token) return
-
-    const confirmed = window.confirm(
-      'Êtes-vous sûr de vouloir supprimer cette annonce ?'
-    )
-    
-    if (!confirmed) return
+    const currentToken = token || localStorage.getItem('senmarket_token')
+    if (!currentToken || !window.confirm('Supprimer cette annonce ?')) return
 
     try {
       const response = await fetch(`http://localhost:8080/api/v1/listings/${listingId}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        headers: { 'Authorization': `Bearer ${currentToken}` }
       })
 
-      if (!response.ok) {
-        throw new Error('Erreur lors de la suppression')
-      }
-
+      if (!response.ok) throw new Error('Erreur lors de la suppression')
+      
       toast.success('Annonce supprimée avec succès')
       fetchDashboardData()
-
     } catch (error) {
-      console.error('Erreur suppression:', error)
       toast.error('Erreur lors de la suppression')
     }
   }
 
-  const handleViewListing = (listingId: string) => {
-    router.push(`/listings/${listingId}`)
+  // Fonctions utilitaires
+  const getImageUrl = (imagePath: string) => {
+    if (!imagePath) return null
+    if (imagePath.startsWith('http')) return imagePath
+    if (imagePath.startsWith('/')) return `http://localhost:8080${imagePath}`
+    return `http://localhost:8080/uploads/${imagePath}`
   }
 
-  // Fonctions utilitaires
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('fr-SN', {
-      style: 'currency',
-      currency: 'XOF',
-      minimumFractionDigits: 0
+      style: 'currency', currency: 'XOF', minimumFractionDigits: 0
     }).format(price)
   }
 
   const formatTimeAgo = (dateString: string) => {
-    const date = new Date(dateString)
-    const now = new Date()
-    const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60))
-    
+    const diffInHours = Math.floor((new Date().getTime() - new Date(dateString).getTime()) / (1000 * 60 * 60))
     if (diffInHours < 1) return 'À l\'instant'
     if (diffInHours < 24) return `Il y a ${diffInHours}h`
     const diffInDays = Math.floor(diffInHours / 24)
     if (diffInDays < 7) return `Il y a ${diffInDays}j`
-    const diffInWeeks = Math.floor(diffInDays / 7)
-    return `Il y a ${diffInWeeks}sem`
+    return `Il y a ${Math.floor(diffInDays / 7)}sem`
   }
 
   const getStatusBadge = (status: string) => {
     const statusConfig = {
-      draft: { label: 'Brouillon', variant: 'secondary' as const, color: 'bg-gray-100 text-gray-700' },
-      active: { label: 'Actif', variant: 'default' as const, color: 'bg-green-100 text-green-700' },
-      sold: { label: 'Vendu', variant: 'destructive' as const, color: 'bg-blue-100 text-blue-700' },
-      expired: { label: 'Expiré', variant: 'outline' as const, color: 'bg-red-100 text-red-700' }
+      draft: { label: 'Brouillon', color: 'bg-gray-100 text-gray-700' },
+      active: { label: 'Actif', color: 'bg-green-100 text-green-700' },
+      sold: { label: 'Vendu', color: 'bg-blue-100 text-blue-700' },
+      expired: { label: 'Expiré', color: 'bg-red-100 text-red-700' }
     }
-    
     return statusConfig[status as keyof typeof statusConfig] || statusConfig.draft
   }
 
-  // Filtrer les annonces
   const filteredListings = listings.filter(listing => {
     const matchesFilter = listingFilter === 'all' || listing.status === listingFilter
     const matchesSearch = listing.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -457,7 +367,7 @@ export default function DashboardPage() {
     return matchesFilter && matchesSearch
   })
 
-  // ✅ LOADING STATE PENDANT L'HYDRATATION
+  // ✅ LOADING STATE
   if (!isHydrated || loading) {
     return (
       <>
@@ -473,11 +383,6 @@ export default function DashboardPage() {
             <p className="text-slate-700 text-xl font-medium">
               {!isHydrated ? 'Initialisation...' : 'Chargement de votre dashboard...'}
             </p>
-            {loading && isHydrated && (
-              <p className="text-slate-500 text-sm mt-2">
-                Récupération de vos données...
-              </p>
-            )}
           </div>
         </main>
         <Footer />
@@ -485,7 +390,7 @@ export default function DashboardPage() {
     )
   }
 
-  // Error state
+  // ✅ ERROR STATE
   if (error) {
     return (
       <>
@@ -498,18 +403,11 @@ export default function DashboardPage() {
             <h1 className="text-3xl font-bold text-slate-900 mb-4">Erreur de chargement</h1>
             <p className="text-slate-600 mb-8 text-lg">{error}</p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button 
-                onClick={fetchDashboardData}
-                className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-3 rounded-xl shadow-lg hover:shadow-xl"
-              >
+              <Button onClick={fetchDashboardData} className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-3 rounded-xl shadow-lg hover:shadow-xl">
                 <Download className="h-4 w-4 mr-2" />
                 Réessayer
               </Button>
-              <Button 
-                onClick={() => router.push('/')}
-                variant="outline"
-                className="bg-white/80 border-white/50 shadow-lg rounded-xl px-8 py-3"
-              >
+              <Button onClick={() => router.push('/')} variant="outline" className="bg-white/80 border-white/50 shadow-lg rounded-xl px-8 py-3">
                 Retour à l'accueil
               </Button>
             </div>
@@ -527,12 +425,8 @@ export default function DashboardPage() {
       <main className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/30">
         <div className="container mx-auto px-6 py-8">
           
-          {/* ✅ HEADER DASHBOARD AVEC INFO UTILISATEUR */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-8"
-          >
+          {/* Header Dashboard */}
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
             <div className="bg-white rounded-2xl shadow-xl border border-slate-200 p-8">
               <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
                 <div className="flex items-center gap-6">
@@ -547,9 +441,7 @@ export default function DashboardPage() {
                     <h1 className="text-3xl font-bold text-slate-900 mb-2">
                       Bonjour, {user?.first_name} ! 👋
                     </h1>
-                    <p className="text-slate-600 mb-3">
-                      Gérez vos annonces et suivez vos performances
-                    </p>
+                    <p className="text-slate-600 mb-3">Gérez vos annonces et suivez vos performances</p>
                     <div className="flex items-center gap-4 text-sm text-slate-500">
                       <div className="flex items-center gap-1">
                         <User className="h-4 w-4" />
@@ -570,18 +462,11 @@ export default function DashboardPage() {
                 </div>
                 
                 <div className="flex gap-3">
-                  <Button 
-                    onClick={() => router.push('/sell')}
-                    className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-6 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all"
-                  >
+                  <Button onClick={() => router.push('/sell')} className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-6 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all">
                     <Plus className="h-5 w-5 mr-2" />
                     Nouvelle annonce
                   </Button>
-                  <Button 
-                    variant="outline"
-                    onClick={fetchDashboardData}
-                    className="border-blue-200 text-blue-600 hover:bg-blue-50 px-4 py-3 rounded-xl"
-                  >
+                  <Button variant="outline" onClick={() => { syncWithLocalStorage(); fetchDashboardData() }} className="border-blue-200 text-blue-600 hover:bg-blue-50 px-4 py-3 rounded-xl">
                     <Download className="h-5 w-5" />
                   </Button>
                 </div>
@@ -589,13 +474,8 @@ export default function DashboardPage() {
             </div>
           </motion.div>
 
-          {/* ✅ STATISTIQUES DASHBOARD */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8"
-          >
+          {/* Statistiques */}
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
@@ -649,13 +529,8 @@ export default function DashboardPage() {
             </Card>
           </motion.div>
 
-          {/* ✅ ONGLETS DASHBOARD */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-          >
-            {/* Message informatif si données partielles */}
+          {/* Onglets */}
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
             {(listings.length === 0 && stats.total_listings === 0) && (
               <Alert className="mb-6 border-blue-200 bg-blue-50">
                 <AlertCircle className="h-4 w-4 text-blue-600" />
@@ -685,7 +560,7 @@ export default function DashboardPage() {
                 </TabsTrigger>
               </TabsList>
 
-              {/* ONGLET ANNONCES */}
+              {/* Onglet Annonces */}
               <TabsContent value="listings" className="space-y-6">
                 <Card className="bg-white rounded-2xl shadow-xl border border-slate-200">
                   <CardHeader className="pb-4">
@@ -695,12 +570,7 @@ export default function DashboardPage() {
                       <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
                         <div className="relative">
                           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                          <Input
-                            placeholder="Rechercher..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="pl-10 w-full sm:w-64"
-                          />
+                          <Input placeholder="Rechercher..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10 w-full sm:w-64" />
                         </div>
                         
                         <Select value={listingFilter} onValueChange={setListingFilter}>
@@ -727,16 +597,10 @@ export default function DashboardPage() {
                           {listings.length === 0 ? 'Aucune annonce' : 'Aucun résultat'}
                         </h3>
                         <p className="text-slate-500 mb-6">
-                          {listings.length === 0 
-                            ? 'Commencez par publier votre première annonce'
-                            : 'Essayez de modifier vos filtres de recherche'
-                          }
+                          {listings.length === 0 ? 'Commencez par publier votre première annonce' : 'Essayez de modifier vos filtres de recherche'}
                         </p>
                         {listings.length === 0 && (
-                          <Button 
-                            onClick={() => router.push('/sell')}
-                            className="bg-gradient-to-r from-blue-600 to-purple-600 text-white"
-                          >
+                          <Button onClick={() => router.push('/sell')} className="bg-gradient-to-r from-blue-600 to-purple-600 text-white">
                             <Plus className="h-4 w-4 mr-2" />
                             Créer une annonce
                           </Button>
@@ -746,28 +610,15 @@ export default function DashboardPage() {
                       <div className="space-y-4">
                         {filteredListings.map((listing, index) => {
                           const statusConfig = getStatusBadge(listing.status)
-                          const imageUrl = listing.images && listing.images.length > 0 
-                            ? getImageUrl(listing.images[0]) 
-                            : null
+                          const imageUrl = listing.images && listing.images.length > 0 ? getImageUrl(listing.images[0]) : null
 
                           return (
-                            <motion.div
-                              key={listing.id}
-                              initial={{ opacity: 0, y: 20 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              transition={{ delay: index * 0.1 }}
-                              className="bg-slate-50 rounded-xl p-6 border border-slate-200 hover:shadow-md transition-shadow"
-                            >
+                            <motion.div key={listing.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.1 }} className="bg-slate-50 rounded-xl p-6 border border-slate-200 hover:shadow-md transition-shadow">
                               <div className="flex flex-col lg:flex-row gap-6">
                                 {/* Image */}
                                 <div className="w-full lg:w-32 h-32 bg-slate-200 rounded-lg overflow-hidden flex-shrink-0">
                                   {imageUrl ? (
-                                    <img
-                                      src={imageUrl}
-                                      alt={listing.title}
-                                      className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform"
-                                      onClick={() => handleViewListing(listing.id)}
-                                    />
+                                    <img src={imageUrl} alt={listing.title} className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform" onClick={() => router.push(`/listings/${listing.id}`)} />
                                   ) : (
                                     <div className="w-full h-full flex items-center justify-center">
                                       <Camera className="h-8 w-8 text-slate-400" />
@@ -780,10 +631,7 @@ export default function DashboardPage() {
                                   <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-4">
                                     <div className="flex-1 min-w-0">
                                       <div className="flex items-center gap-3 mb-2">
-                                        <h3 
-                                          className="text-lg font-semibold text-slate-900 truncate cursor-pointer hover:text-blue-600 transition-colors"
-                                          onClick={() => handleViewListing(listing.id)}
-                                        >
+                                        <h3 className="text-lg font-semibold text-slate-900 truncate cursor-pointer hover:text-blue-600 transition-colors" onClick={() => router.push(`/listings/${listing.id}`)}>
                                           {listing.title}
                                         </h3>
                                         <Badge className={statusConfig.color}>
@@ -791,9 +639,7 @@ export default function DashboardPage() {
                                         </Badge>
                                       </div>
                                       
-                                      <p className="text-slate-600 text-sm line-clamp-2 mb-3">
-                                        {listing.description}
-                                      </p>
+                                      <p className="text-slate-600 text-sm line-clamp-2 mb-3">{listing.description}</p>
                                       
                                       <div className="flex flex-wrap items-center gap-4 text-sm text-slate-500">
                                         <div className="flex items-center gap-1">
@@ -826,33 +672,18 @@ export default function DashboardPage() {
                                   
                                   {/* Actions */}
                                   <div className="flex flex-wrap gap-2">
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => handleViewListing(listing.id)}
-                                      className="text-blue-600 border-blue-200 hover:bg-blue-50"
-                                    >
+                                    <Button variant="outline" size="sm" onClick={() => router.push(`/listings/${listing.id}`)} className="text-blue-600 border-blue-200 hover:bg-blue-50">
                                       <Eye className="h-4 w-4 mr-1" />
                                       Voir
                                     </Button>
                                     
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => handleEditListing(listing.id)}
-                                      className="text-slate-600 hover:bg-slate-50"
-                                    >
+                                    <Button variant="outline" size="sm" onClick={() => router.push(`/sell?edit=${listing.id}`)} className="text-slate-600 hover:bg-slate-50">
                                       <Edit3 className="h-4 w-4 mr-1" />
                                       Modifier
                                     </Button>
                                     
                                     {listing.status === 'draft' && (
-                                      <Button
-                                        size="sm"
-                                        onClick={() => handlePublishListing(listing.id)}
-                                        disabled={publishingListing === listing.id}
-                                        className="bg-green-600 hover:bg-green-700 text-white"
-                                      >
+                                      <Button size="sm" onClick={() => handlePublishListing(listing.id)} disabled={publishingListing === listing.id} className="bg-green-600 hover:bg-green-700 text-white">
                                         {publishingListing === listing.id ? (
                                           <Loader2 className="h-4 w-4 mr-1 animate-spin" />
                                         ) : (
@@ -862,12 +693,7 @@ export default function DashboardPage() {
                                       </Button>
                                     )}
                                     
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => handleDeleteListing(listing.id)}
-                                      className="text-red-600 border-red-200 hover:bg-red-50"
-                                    >
+                                    <Button variant="outline" size="sm" onClick={() => handleDeleteListing(listing.id)} className="text-red-600 border-red-200 hover:bg-red-50">
                                       <Trash2 className="h-4 w-4 mr-1" />
                                       Supprimer
                                     </Button>
@@ -883,7 +709,7 @@ export default function DashboardPage() {
                 </Card>
               </TabsContent>
 
-              {/* ONGLET MESSAGES */}
+              {/* Onglet Messages */}
               <TabsContent value="messages" className="space-y-6">
                 <Card className="bg-white rounded-2xl shadow-xl border border-slate-200">
                   <CardHeader>
@@ -899,17 +725,7 @@ export default function DashboardPage() {
                     ) : (
                       <div className="space-y-4">
                         {contacts.map((contact, index) => (
-                          <motion.div
-                            key={contact.id}
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: index * 0.1 }}
-                            className={`p-6 rounded-xl border transition-all hover:shadow-md ${
-                              contact.is_read 
-                                ? 'bg-slate-50 border-slate-200' 
-                                : 'bg-blue-50 border-blue-200'
-                            }`}
-                          >
+                          <motion.div key={contact.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.1 }} className={`p-6 rounded-xl border transition-all hover:shadow-md ${contact.is_read ? 'bg-slate-50 border-slate-200' : 'bg-blue-50 border-blue-200'}`}>
                             <div className="flex items-start justify-between gap-4 mb-4">
                               <div className="flex items-center gap-3">
                                 <div className={`w-3 h-3 rounded-full ${contact.is_read ? 'bg-slate-300' : 'bg-blue-500'}`} />
@@ -922,34 +738,21 @@ export default function DashboardPage() {
                                 <div>{formatTimeAgo(contact.created_at)}</div>
                                 <div className="flex items-center gap-1 mt-1">
                                   <Phone className="h-3 w-3" />
-                                  <a href={`tel:${contact.phone}`} className="hover:text-blue-600">
-                                    {contact.phone}
-                                  </a>
+                                  <a href={`tel:${contact.phone}`} className="hover:text-blue-600">{contact.phone}</a>
                                 </div>
                               </div>
                             </div>
                             
-                            <p className="text-slate-700 bg-white p-4 rounded-lg border border-slate-200">
-                              {contact.message}
-                            </p>
+                            <p className="text-slate-700 bg-white p-4 rounded-lg border border-slate-200">{contact.message}</p>
                             
                             <div className="flex gap-2 mt-4">
-                              <Button
-                                size="sm"
-                                onClick={() => window.open(`tel:${contact.phone}`)}
-                                className="bg-green-600 hover:bg-green-700 text-white"
-                              >
+                              <Button size="sm" onClick={() => window.open(`tel:${contact.phone}`)} className="bg-green-600 hover:bg-green-700 text-white">
                                 <Phone className="h-4 w-4 mr-1" />
                                 Appeler
                               </Button>
                               
                               {contact.email && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => window.open(`mailto:${contact.email}`)}
-                                  className="text-blue-600 border-blue-200 hover:bg-blue-50"
-                                >
+                                <Button size="sm" variant="outline" onClick={() => window.open(`mailto:${contact.email}`)} className="text-blue-600 border-blue-200 hover:bg-blue-50">
                                   <Mail className="h-4 w-4 mr-1" />
                                   Email
                                 </Button>
@@ -963,7 +766,7 @@ export default function DashboardPage() {
                 </Card>
               </TabsContent>
 
-              {/* ONGLET PAIEMENTS */}
+              {/* Onglet Paiements */}
               <TabsContent value="payments" className="space-y-6">
                 <Card className="bg-white rounded-2xl shadow-xl border border-slate-200">
                   <CardHeader>
@@ -979,55 +782,26 @@ export default function DashboardPage() {
                     ) : (
                       <div className="space-y-4">
                         {payments.map((payment, index) => (
-                          <motion.div
-                            key={payment.id}
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: index * 0.1 }}
-                            className="p-6 bg-slate-50 rounded-xl border border-slate-200"
-                          >
+                          <motion.div key={payment.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.1 }} className="p-6 bg-slate-50 rounded-xl border border-slate-200">
                             <div className="flex items-center justify-between gap-4">
                               <div className="flex items-center gap-4">
-                                <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
-                                  payment.status === 'completed' 
-                                    ? 'bg-green-100 text-green-600' 
-                                    : payment.status === 'pending'
-                                    ? 'bg-yellow-100 text-yellow-600'
-                                    : 'bg-red-100 text-red-600'
-                                }`}>
+                                <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${payment.status === 'completed' ? 'bg-green-100 text-green-600' : payment.status === 'pending' ? 'bg-yellow-100 text-yellow-600' : 'bg-red-100 text-red-600'}`}>
                                   <CreditCard className="h-6 w-6" />
                                 </div>
                                 
                                 <div>
-                                  <h4 className="font-semibold text-slate-900">
-                                    {payment.listing?.title || 'Publication d\'annonce'}
-                                  </h4>
-                                  <p className="text-sm text-slate-600">
-                                    {payment.payment_method} • {formatTimeAgo(payment.created_at)}
-                                  </p>
+                                  <h4 className="font-semibold text-slate-900">{payment.listing?.title || 'Publication d\'annonce'}</h4>
+                                  <p className="text-sm text-slate-600">{payment.payment_method} • {formatTimeAgo(payment.created_at)}</p>
                                   {payment.transaction_id && (
-                                    <p className="text-xs text-slate-500 mt-1">
-                                      ID: {payment.transaction_id}
-                                    </p>
+                                    <p className="text-xs text-slate-500 mt-1">ID: {payment.transaction_id}</p>
                                   )}
                                 </div>
                               </div>
                               
                               <div className="text-right">
-                                <div className="text-lg font-bold text-slate-900">
-                                  {formatPrice(payment.amount)}
-                                </div>
-                                <Badge 
-                                  className={
-                                    payment.status === 'completed' 
-                                      ? 'bg-green-100 text-green-700' 
-                                      : payment.status === 'pending'
-                                      ? 'bg-yellow-100 text-yellow-700'
-                                      : 'bg-red-100 text-red-700'
-                                  }
-                                >
-                                  {payment.status === 'completed' ? 'Complété' :
-                                   payment.status === 'pending' ? 'En attente' : 'Échoué'}
+                                <div className="text-lg font-bold text-slate-900">{formatPrice(payment.amount)}</div>
+                                <Badge className={payment.status === 'completed' ? 'bg-green-100 text-green-700' : payment.status === 'pending' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}>
+                                  {payment.status === 'completed' ? 'Complété' : payment.status === 'pending' ? 'En attente' : 'Échoué'}
                                 </Badge>
                               </div>
                             </div>
@@ -1039,7 +813,7 @@ export default function DashboardPage() {
                 </Card>
               </TabsContent>
 
-              {/* ONGLET PARAMÈTRES */}
+              {/* Onglet Paramètres */}
               <TabsContent value="settings" className="space-y-6">
                 <Card className="bg-white rounded-2xl shadow-xl border border-slate-200">
                   <CardHeader>
@@ -1054,42 +828,19 @@ export default function DashboardPage() {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                           <Label htmlFor="first_name">Prénom</Label>
-                          <Input
-                            id="first_name"
-                            value={user?.first_name || ''}
-                            readOnly
-                            className="bg-slate-50"
-                          />
+                          <Input id="first_name" value={user?.first_name || ''} readOnly className="bg-slate-50" />
                         </div>
-                        
                         <div>
                           <Label htmlFor="last_name">Nom</Label>
-                          <Input
-                            id="last_name"
-                            value={user?.last_name || ''}
-                            readOnly
-                            className="bg-slate-50"
-                          />
+                          <Input id="last_name" value={user?.last_name || ''} readOnly className="bg-slate-50" />
                         </div>
-                        
                         <div>
                           <Label htmlFor="phone">Téléphone</Label>
-                          <Input
-                            id="phone"
-                            value={user?.phone || ''}
-                            readOnly
-                            className="bg-slate-50"
-                          />
+                          <Input id="phone" value={user?.phone || ''} readOnly className="bg-slate-50" />
                         </div>
-                        
                         <div>
                           <Label htmlFor="region">Région</Label>
-                          <Input
-                            id="region"
-                            value={user?.region || ''}
-                            readOnly
-                            className="bg-slate-50"
-                          />
+                          <Input id="region" value={user?.region || ''} readOnly className="bg-slate-50" />
                         </div>
                       </div>
                       
@@ -1113,9 +864,7 @@ export default function DashboardPage() {
                             <div className={`w-4 h-4 rounded-full ${user?.is_verified ? 'bg-green-500' : 'bg-gray-300'}`} />
                             <div>
                               <p className="font-medium text-slate-900">Compte vérifié</p>
-                              <p className="text-sm text-slate-600">
-                                {user?.is_verified ? 'Votre compte est vérifié' : 'Compte non vérifié'}
-                              </p>
+                              <p className="text-sm text-slate-600">{user?.is_verified ? 'Votre compte est vérifié' : 'Compte non vérifié'}</p>
                             </div>
                           </div>
                         </Card>
@@ -1125,9 +874,7 @@ export default function DashboardPage() {
                             <div className={`w-4 h-4 rounded-full ${user?.is_premium ? 'bg-yellow-500' : 'bg-gray-300'}`} />
                             <div>
                               <p className="font-medium text-slate-900">Compte Premium</p>
-                              <p className="text-sm text-slate-600">
-                                {user?.is_premium ? 'Profitez des fonctionnalités premium' : 'Compte standard'}
-                              </p>
+                              <p className="text-sm text-slate-600">{user?.is_premium ? 'Profitez des fonctionnalités premium' : 'Compte standard'}</p>
                             </div>
                           </div>
                         </Card>
@@ -1141,23 +888,12 @@ export default function DashboardPage() {
                       <h3 className="text-lg font-semibold text-slate-900">Actions du compte</h3>
                       
                       <div className="flex flex-col sm:flex-row gap-4">
-                        <Button 
-                          variant="outline"
-                          onClick={fetchDashboardData}
-                          className="border-blue-200 text-blue-600 hover:bg-blue-50"
-                        >
+                        <Button variant="outline" onClick={() => { syncWithLocalStorage(); fetchDashboardData() }} className="border-blue-200 text-blue-600 hover:bg-blue-50">
                           <Download className="h-4 w-4 mr-2" />
                           Rafraîchir les données
                         </Button>
                         
-                        <Button 
-                          variant="outline"
-                          onClick={() => {
-                            useAuthStore.getState().logout()
-                            router.push('/')
-                          }}
-                          className="border-red-200 text-red-600 hover:bg-red-50"
-                        >
+                        <Button variant="outline" onClick={() => { logout(); router.push('/') }} className="border-red-200 text-red-600 hover:bg-red-50">
                           <User className="h-4 w-4 mr-2" />
                           Se déconnecter
                         </Button>

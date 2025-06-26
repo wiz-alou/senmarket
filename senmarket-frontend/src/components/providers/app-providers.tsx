@@ -1,4 +1,4 @@
-// 🔧 APP PROVIDERS CORRIGÉ
+// 🔧 APP PROVIDERS AVEC AUTHPROVIDER INTÉGRÉ
 // src/components/providers/app-providers.tsx
 
 'use client'
@@ -7,8 +7,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { ThemeProvider } from 'next-themes'
 import { ToastProvider } from './toast-provider'
-import { useState, useEffect } from 'react'
-import { useAuthStore } from '@/stores/auth.store' // ✅ Import du bon store
+import { AuthProvider } from './AuthProvider'
+import { FavoritesInitializer } from './favorites-initializer'
+import { useState } from 'react'
 
 interface AppProvidersProps {
   children: React.ReactNode
@@ -24,8 +25,8 @@ export function AppProviders({ children }: AppProvidersProps) {
             refetchOnWindowFocus: false,
             retry: (failureCount, error: any) => {
               // Ne pas retry sur les erreurs 401, 403, 404
-              if (error?.response?.status === 401 || 
-                  error?.response?.status === 403 || 
+              if (error?.response?.status === 401 ||
+                  error?.response?.status === 403 ||
                   error?.response?.status === 404) {
                 return false
               }
@@ -39,15 +40,6 @@ export function AppProviders({ children }: AppProvidersProps) {
       })
   )
 
-  // ✅ RÉCUPÉRER LA FONCTION CORRECTE
-  const { loadUserFromStorage } = useAuthStore()
-
-  // ✅ CHARGER L'UTILISATEUR AU DÉMARRAGE
-  useEffect(() => {
-    console.log('🚀 App Providers - Initialisation auth...')
-    loadUserFromStorage()
-  }, [loadUserFromStorage])
-
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider
@@ -56,8 +48,15 @@ export function AppProviders({ children }: AppProvidersProps) {
         enableSystem
         disableTransitionOnChange
       >
-        <ToastProvider />
-        {children}
+        {/* ✅ AUTHPROVIDER EN PREMIER POUR GÉRER L'HYDRATATION */}
+        <AuthProvider>
+          {/* ✅ FAVORITES INITIALIZER APRÈS AUTH */}
+          <FavoritesInitializer>
+            <ToastProvider />
+            {children}
+          </FavoritesInitializer>
+        </AuthProvider>
+        
         <ReactQueryDevtools initialIsOpen={false} />
       </ThemeProvider>
     </QueryClientProvider>

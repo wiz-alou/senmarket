@@ -50,8 +50,142 @@ import {
   Wrench,
   Sofa,
   Heart,
-  Settings
+  Settings,
+  Gift
 } from 'lucide-react';
+
+// ✅ COMPOSANT BANNIÈRE DE LANCEMENT GRATUIT
+const LaunchBanner = () => {
+  const endDate = new Date('2025-08-26T23:59:59');
+  const [timeLeft, setTimeLeft] = useState(calculateTimeLeft());
+
+  function calculateTimeLeft() {
+    const now = new Date();
+    const difference = endDate.getTime() - now.getTime();
+    
+    if (difference > 0) {
+      return {
+        days: Math.floor(difference / (1000 * 60 * 60 * 24)),
+        hours: Math.floor((difference / (1000 * 60 * 60)) % 24),
+        minutes: Math.floor((difference / 1000 / 60) % 60),
+        seconds: Math.floor((difference / 1000) % 60),
+        isActive: true
+      };
+    }
+    
+    return { days: 0, hours: 0, minutes: 0, seconds: 0, isActive: false };
+  }
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTimeLeft(calculateTimeLeft());
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  if (!timeLeft.isActive) return null;
+
+  return (
+    <motion.div 
+      className="bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 text-white mb-8 rounded-xl overflow-hidden shadow-2xl"
+      initial={{ opacity: 0, y: -20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.6 }}
+    >
+      <div className="relative p-6 md:p-8">
+        {/* Effet de brillance animé */}
+        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent transform -skew-x-12 animate-pulse" />
+        
+        <div className="relative z-10 text-center">
+          {/* Titre principal */}
+          <motion.div 
+            className="flex items-center justify-center gap-3 mb-4"
+            initial={{ scale: 0.9 }}
+            animate={{ scale: 1 }}
+            transition={{ delay: 0.2 }}
+          >
+            <Gift className="h-8 w-8 text-yellow-300" />
+            <h2 className="text-2xl md:text-3xl font-bold">
+              🎉 LANCEMENT SPÉCIAL - 100% GRATUIT !
+            </h2>
+            <Star className="h-8 w-8 text-yellow-300" />
+          </motion.div>
+
+          {/* Sous-titre */}
+          <p className="text-lg md:text-xl mb-6 text-emerald-100">
+            Publiez <strong>GRATUITEMENT</strong> pendant notre période de lancement !
+          </p>
+
+          {/* Compteur à rebours */}
+          <motion.div 
+            className="bg-black/20 rounded-lg p-4 mb-4 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.4 }}
+          >
+            <div className="flex items-center justify-center gap-2 mb-2">
+              <Clock className="h-5 w-5 text-yellow-300" />
+              <span className="text-sm font-medium text-emerald-100">
+                Temps restant pour profiter de l'offre :
+              </span>
+            </div>
+            
+            <div className="flex justify-center gap-4 text-2xl md:text-3xl font-mono font-bold">
+              <div className="bg-white/10 rounded-lg px-3 py-2 min-w-[60px]">
+                <div>{timeLeft.days.toString().padStart(2, '0')}</div>
+                <div className="text-xs text-emerald-200">JOURS</div>
+              </div>
+              <div className="bg-white/10 rounded-lg px-3 py-2 min-w-[60px]">
+                <div>{timeLeft.hours.toString().padStart(2, '0')}</div>
+                <div className="text-xs text-emerald-200">HEURES</div>
+              </div>
+              <div className="bg-white/10 rounded-lg px-3 py-2 min-w-[60px]">
+                <div>{timeLeft.minutes.toString().padStart(2, '0')}</div>
+                <div className="text-xs text-emerald-200">MIN</div>
+              </div>
+              <div className="bg-white/10 rounded-lg px-3 py-2 min-w-[60px]">
+                <div>{timeLeft.seconds.toString().padStart(2, '0')}</div>
+                <div className="text-xs text-emerald-200">SEC</div>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Avantages */}
+          <motion.div 
+            className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.6 }}
+          >
+            <div className="flex items-center justify-center gap-2">
+              <Zap className="h-4 w-4 text-yellow-300" />
+              <span>Annonces illimitées</span>
+            </div>
+            <div className="flex items-center justify-center gap-2">
+              <Star className="h-4 w-4 text-yellow-300" />
+              <span>Toutes les fonctionnalités</span>
+            </div>
+            <div className="flex items-center justify-center gap-2">
+              <Gift className="h-4 w-4 text-yellow-300" />
+              <span>Aucun frais caché</span>
+            </div>
+          </motion.div>
+
+          {/* Message d'urgence */}
+          <motion.p 
+            className="mt-4 text-xs md:text-sm text-yellow-200 font-medium"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.8 }}
+          >
+            ⚡ Offre limitée dans le temps - Après cette période, publication payante
+          </motion.p>
+        </div>
+      </div>
+    </motion.div>
+  );
+};
 
 // Types
 interface Category {
@@ -68,29 +202,6 @@ interface ListingFormData {
   price: string;
   category_id: string;
   region: string;
-}
-
-interface UploadedImage {
-  url: string;
-  filename: string;
-  size: number;
-  width: number;
-  height: number;
-}
-
-interface PaymentRequest {
-  payment_method: 'orange_money' | 'wave' | 'free_money';
-  phone: string;
-}
-
-interface PaymentResponse {
-  payment: {
-    id: string;
-    amount: number;
-    status: string;
-    transaction_id: string;
-  };
-  payment_url: string;
 }
 
 // Icônes des catégories
@@ -112,13 +223,12 @@ const regions = [
   'Kaffrine', 'Kédougou', 'Ziguinchor', 'Gossas', 'Koungheul'
 ];
 
-// Étapes du processus
+// ✅ ÉTAPES MODIFIÉES POUR LA PHASE GRATUITE (pas de paiement)
 const steps = [
   { id: 1, title: 'Informations', icon: FileText },
   { id: 2, title: 'Images', icon: Camera },
   { id: 3, title: 'Aperçu', icon: Eye },
-  { id: 4, title: 'Paiement', icon: CreditCard },
-  { id: 5, title: 'Confirmation', icon: CheckCircle },
+  { id: 4, title: 'Confirmation', icon: CheckCircle }, // Plus d'étape paiement
 ];
 
 export default function SellPage() {
@@ -134,9 +244,6 @@ export default function SellPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [createdListing, setCreatedListing] = useState<any>(null);
-  const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<'orange_money' | 'wave' | 'free_money'>('orange_money');
-  const [userPhone, setUserPhone] = useState<string>('');
 
   // Form hook
   const { register, handleSubmit, watch, formState: { errors }, setValue } = useForm<ListingFormData>({
@@ -163,7 +270,6 @@ export default function SellPage() {
     }
 
     const user = JSON.parse(userData);
-    setUserPhone(user.phone || '');
     setValue('region', user.region || 'Dakar');
 
     // Charger les catégories
@@ -194,7 +300,7 @@ export default function SellPage() {
     }
   };
 
-  // ✅ FIX PRINCIPAL - Upload d'images avec gestion correcte des URLs
+  // Upload d'images avec gestion correcte des URLs
   const handleImageUpload = useCallback(async (files: File[]) => {
     console.log('🔥 Upload démarré avec', files.length, 'fichiers');
 
@@ -259,36 +365,31 @@ export default function SellPage() {
       const data = await response.json();
       console.log('✅ Réponse API complète:', data);
 
-      // ✅ EXTRACTION CORRECTE DES URLS
+      // Extraction correcte des URLs
       let uploadedUrls: string[] = [];
 
       if (data.data && Array.isArray(data.data)) {
-        // Cas réponse multiple
         uploadedUrls = data.data.map((img: any) => {
           console.log('🔍 Traitement image:', img);
           
-          // Format string direct
           if (typeof img === 'string') {
             const url = img.startsWith('http') ? img : `http://localhost:8080${img}`;
             console.log('📎 String URL:', img, '→', url);
             return url;
           }
           
-          // Format objet avec propriété 'url'
           if (img.url) {
             const url = img.url.startsWith('http') ? img.url : `http://localhost:8080${img.url}`;
             console.log('📎 Object.url:', img.url, '→', url);
             return url;
           }
           
-          // Format objet avec propriété 'URL' (majuscule)
           if (img.URL) {
             const url = img.URL.startsWith('http') ? img.URL : `http://localhost:8080${img.URL}`;
             console.log('📎 Object.URL:', img.URL, '→', url);
             return url;
           }
           
-          // Format avec filename
           if (img.filename) {
             const url = `http://localhost:8080/uploads/${img.filename}`;
             console.log('📎 Filename:', img.filename, '→', url);
@@ -300,13 +401,11 @@ export default function SellPage() {
         }).filter((url: string | null) => url !== null);
         
       } else if (data.data && (data.data.url || data.data.URL)) {
-        // Cas réponse single
         const url = data.data.url || data.data.URL;
         const fullUrl = url.startsWith('http') ? url : `http://localhost:8080${url}`;
         uploadedUrls = [fullUrl];
         
       } else if (data.url) {
-        // Format direct dans data
         const url = data.url.startsWith('http') ? data.url : `http://localhost:8080${data.url}`;
         uploadedUrls = [url];
       }
@@ -317,7 +416,6 @@ export default function SellPage() {
         throw new Error('Impossible d\'extraire les URLs des images de la réponse API');
       }
 
-      // ✅ MISE À JOUR STATE AVEC URLS VALIDES
       setUploadedImages(prev => {
         const newImages = [...prev, ...uploadedUrls];
         console.log('💾 State mis à jour:');
@@ -374,9 +472,9 @@ export default function SellPage() {
     if (currentStep > 1) setCurrentStep(prev => prev - 1);
   }, [currentStep]);
 
-  // Création de l'annonce
+  // ✅ CRÉATION GRATUITE D'ANNONCE (MODIFIÉE)
   const handleFormSubmit = useCallback(async (data: ListingFormData) => {
-    console.log('📝 Soumission formulaire:', data);
+    console.log('📝 Soumission formulaire - PHASE GRATUITE:', data);
     console.log('📷 Images à inclure:', uploadedImages);
 
     if (uploadedImages.length === 0) {
@@ -387,22 +485,41 @@ export default function SellPage() {
     setIsLoading(true);
     try {
       const token = localStorage.getItem('senmarket_token');
+      const userData = localStorage.getItem('senmarket_user');
       
-      // ✅ FIX: Conversion correcte des données pour l'API
+      if (!token || !userData) {
+        showError('Session expirée', 'Veuillez vous reconnecter');
+        router.push('/auth/login');
+        return;
+      }
+
+      const user = JSON.parse(userData);
+      const userPhone = user.phone;
+      
+      if (!userPhone) {
+        showError('Données utilisateur incomplètes', 'Numéro de téléphone manquant');
+        return;
+      }
+
+      console.log('👤 Utilisateur:', user.first_name, user.last_name);
+      console.log('📱 Téléphone utilisateur:', userPhone);
+      
+      // ✅ DONNÉES POUR PUBLICATION GRATUITE DIRECTE
       const listingData = {
         title: data.title.trim(),
         description: data.description.trim(),
-        price: parseFloat(data.price), // Conversion en nombre
-        currency: 'XOF', // Devise par défaut
+        price: parseFloat(data.price),
+        currency: 'XOF',
         category_id: data.category_id,
         region: data.region,
-        images: uploadedImages, // Array d'URLs
-        status: 'draft' // Statut initial
+        images: uploadedImages,
+        phone: userPhone,
+        status: 'active' // ✅ PUBLIER DIRECTEMENT (pas de draft)
       };
 
-      console.log('📡 Données finales envoyées:', listingData);
+      console.log('📡 Publication gratuite - Données envoyées:', listingData);
 
-      // Validation côté client avant envoi
+      // Validation côté client
       if (!listingData.title || listingData.title.length < 10) {
         throw new Error('Le titre doit contenir au moins 10 caractères');
       }
@@ -427,6 +544,10 @@ export default function SellPage() {
         throw new Error('Au moins une image est requise');
       }
 
+      if (!listingData.phone) {
+        throw new Error('Numéro de téléphone requis');
+      }
+
       const response = await fetch('http://localhost:8080/api/v1/listings', {
         method: 'POST',
         headers: {
@@ -442,7 +563,6 @@ export default function SellPage() {
         const errorData = await response.json();
         console.error('❌ Erreur API détaillée:', errorData);
         
-        // Messages d'erreur plus détaillés
         if (response.status === 400) {
           const errorMessage = errorData.details || errorData.error || 'Données invalides';
           throw new Error(`Validation échouée: ${errorMessage}`);
@@ -456,16 +576,17 @@ export default function SellPage() {
       }
 
       const result = await response.json();
-      console.log('✅ Annonce créée avec succès:', result);
+      console.log('✅ Annonce publiée gratuitement:', result);
       
       setCreatedListing(result.data);
-      setCurrentStep(4); // Passer au paiement
-      showSuccess('Annonce créée', 'Passez maintenant au paiement pour publier');
+      
+      // ✅ PASSER DIRECTEMENT À L'ÉTAPE DE CONFIRMATION GRATUITE
+      setCurrentStep(4);
+      showSuccess('Annonce publiée GRATUITEMENT !', '🎉 Votre annonce est en ligne !');
 
     } catch (error) {
       console.error('❌ Erreur création complète:', error);
       
-      // Gestion d'erreur plus précise
       if (error instanceof Error) {
         if (error.message.includes('fetch')) {
           showError('Erreur réseau', 'Vérifiez votre connexion internet');
@@ -478,52 +599,7 @@ export default function SellPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [uploadedImages, showError, showSuccess]);
-
-  // Paiement
-  const handlePayment = useCallback(async () => {
-    if (!createdListing) {
-      showError('Erreur', 'Aucune annonce à payer');
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const token = localStorage.getItem('senmarket_token');
-      
-      const paymentData: PaymentRequest = {
-        payment_method: paymentMethod,
-        phone: userPhone
-      };
-
-      const response = await fetch(`http://localhost:8080/api/v1/listings/${createdListing.id}/pay`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(paymentData),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Erreur initiation paiement');
-      }
-
-      const result = await response.json();
-      console.log('✅ Paiement initié:', result);
-      
-      setPaymentUrl(result.payment_url);
-      setCurrentStep(5);
-      showSuccess('Paiement initié', 'Suivez les instructions pour finaliser');
-
-    } catch (error) {
-      console.error('❌ Erreur paiement:', error);
-      showError('Erreur paiement', error instanceof Error ? error.message : 'Échec paiement');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [createdListing, paymentMethod, userPhone, showError, showSuccess]);
+  }, [uploadedImages, showError, showSuccess, router]);
 
   // Debug helper
   const debugImages = useCallback(() => {
@@ -535,7 +611,6 @@ export default function SellPage() {
     uploadedImages.forEach((url, index) => {
       console.log(`- Image ${index + 1}: ${url}`);
       
-      // Test de l'URL
       fetch(url, { method: 'HEAD' })
         .then(response => {
           console.log(`  ✅ Image ${index + 1} accessible: ${response.ok} (${response.status})`);
@@ -568,6 +643,9 @@ export default function SellPage() {
             </p>
           </motion.div>
 
+          {/* ✅ BANNIÈRE DE LANCEMENT GRATUIT */}
+          <LaunchBanner />
+
           {/* Alertes */}
           {error && (
             <motion.div className="max-w-4xl mx-auto mb-8" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
@@ -587,7 +665,7 @@ export default function SellPage() {
             </motion.div>
           )}
 
-          {/* Progress Steps */}
+          {/* ✅ PROGRESS STEPS MODIFIÉS (4 étapes au lieu de 5) */}
           <motion.div className="mb-12" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
             <div className="flex justify-center">
               <div className="flex items-center space-x-4 bg-white rounded-2xl p-6 shadow-lg">
@@ -871,7 +949,7 @@ export default function SellPage() {
                                     </button>
                                   </div>
                                   
-                                  {/* URL debug (visible en dev) */}
+                                  {/* URL debug */}
                                   <div className="mt-1 text-xs text-slate-500 font-mono truncate" title={imageUrl}>
                                     {imageUrl.split('/').pop()}
                                   </div>
@@ -902,7 +980,7 @@ export default function SellPage() {
                 </motion.div>
               )}
 
-              {/* ✅ Étape 3: Aperçu COMPLÈTEMENT RÉÉCRITE */}
+              {/* Étape 3: Aperçu */}
               {currentStep === 3 && (
                 <motion.div
                   key="step3"
@@ -916,12 +994,12 @@ export default function SellPage() {
                         <Eye className="h-8 w-8 text-blue-600" />
                         Aperçu de votre annonce
                       </CardTitle>
-                      <p className="text-slate-600">Vérifiez tous les détails avant de continuer</p>
+                      <p className="text-slate-600">Vérifiez tous les détails avant publication gratuite</p>
                     </CardHeader>
 
                     <CardContent className="space-y-8">
                       
-                      {/* ✅ SECTION IMAGES AMÉLIORÉE */}
+                      {/* Section images */}
                       <div>
                         <div className="flex items-center justify-between mb-4">
                           <h3 className="text-lg font-semibold text-slate-900">
@@ -939,7 +1017,6 @@ export default function SellPage() {
                         
                         {uploadedImages.length > 0 ? (
                           <div className="space-y-4">
-                            {/* Galerie principale */}
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                               {uploadedImages.map((imageUrl, index) => {
                                 console.log(`🖼️ Aperçu image ${index + 1}:`, imageUrl);
@@ -956,8 +1033,6 @@ export default function SellPage() {
                                         }}
                                         onError={(e) => {
                                           console.error(`❌ Erreur aperçu image ${index + 1}:`, imageUrl);
-                                          console.error('Error event:', e);
-                                          // Fallback: afficher une div avec l'erreur
                                           e.currentTarget.style.display = 'none';
                                         }}
                                       />
@@ -974,13 +1049,11 @@ export default function SellPage() {
                                         </div>
                                       )}
 
-                                      {/* Overlay hover */}
                                       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-all duration-300 flex items-center justify-center">
                                         <Eye className="h-6 w-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
                                       </div>
                                     </div>
                                     
-                                    {/* URL pour debug */}
                                     <div className="mt-1 text-xs text-slate-400 font-mono truncate" title={imageUrl}>
                                       {imageUrl.substring(imageUrl.lastIndexOf('/') + 1)}
                                     </div>
@@ -989,7 +1062,6 @@ export default function SellPage() {
                               })}
                             </div>
                             
-                            {/* Actions sur les images */}
                             <div className="flex gap-2 flex-wrap">
                               <Button
                                 type="button"
@@ -1093,15 +1165,15 @@ export default function SellPage() {
                         </div>
                       )}
 
-                      {/* Info publication */}
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+                      {/* ✅ INFO PUBLICATION GRATUITE */}
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-6">
                         <div className="flex items-start gap-3">
-                          <Shield className="h-6 w-6 text-blue-600 flex-shrink-0 mt-0.5" />
+                          <Gift className="h-6 w-6 text-green-600 flex-shrink-0 mt-0.5" />
                           <div>
-                            <h4 className="text-blue-800 font-semibold">Prêt pour la publication</h4>
-                            <p className="text-blue-700 text-sm mt-1">
-                              Après validation, votre annonce sera publiée moyennant 200 FCFA. 
-                              Elle restera active pendant 30 jours.
+                            <h4 className="text-green-800 font-semibold">🎉 Publication GRATUITE !</h4>
+                            <p className="text-green-700 text-sm mt-1">
+                              Pendant notre phase de lancement, votre annonce sera publiée immédiatement et GRATUITEMENT. 
+                              Profitez-en dès maintenant !
                             </p>
                           </div>
                         </div>
@@ -1112,227 +1184,71 @@ export default function SellPage() {
                 </motion.div>
               )}
 
-              {/* Étape 4: Paiement */}
+              {/* ✅ Étape 4: Confirmation GRATUITE (ex-étape 5) */}
               {currentStep === 4 && (
                 <motion.div
                   key="step4"
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -20 }}
-                >
-                  <Card className="shadow-xl border-0">
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-3 text-2xl">
-                        <CreditCard className="h-8 w-8 text-blue-600" />
-                        Paiement de publication
-                      </CardTitle>
-                      <p className="text-slate-600">Payez 200 FCFA pour publier votre annonce</p>
-                    </CardHeader>
-
-                    <CardContent className="space-y-6">
-                      
-                      {/* Résumé commande */}
-                      <div className="bg-slate-50 rounded-lg p-6 border">
-                        <h3 className="font-semibold text-slate-900 mb-4">Résumé de votre commande</h3>
-                        <div className="space-y-3">
-                          <div className="flex justify-between">
-                            <span className="text-slate-600">Publication d'annonce</span>
-                            <span className="font-medium">200 FCFA</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-slate-600">Durée de publication</span>
-                            <span className="font-medium">30 jours</span>
-                          </div>
-                          <div className="border-t pt-3 flex justify-between text-lg font-bold">
-                            <span>Total</span>
-                            <span className="text-blue-600">200 FCFA</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Méthodes de paiement */}
-                      <div>
-                        <h3 className="font-semibold text-slate-900 mb-4">Choisir votre méthode de paiement</h3>
-                        <div className="grid gap-4">
-                          
-                          {/* Orange Money */}
-                          <label className={`flex items-center gap-4 p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                            paymentMethod === 'orange_money' 
-                              ? 'border-orange-500 bg-orange-50' 
-                              : 'border-slate-200 hover:border-orange-300'
-                          }`}>
-                            <input
-                              type="radio"
-                              name="payment_method"
-                              value="orange_money"
-                              checked={paymentMethod === 'orange_money'}
-                              onChange={(e) => setPaymentMethod(e.target.value as any)}
-                              className="text-orange-600"
-                            />
-                            <div className="w-12 h-12 bg-orange-600 rounded-lg flex items-center justify-center">
-                              <Smartphone className="h-6 w-6 text-white" />
-                            </div>
-                            <div className="flex-1">
-                              <h4 className="font-semibold text-slate-900">Orange Money</h4>
-                              <p className="text-sm text-slate-600">Paiement via votre compte Orange Money</p>
-                            </div>
-                            <Badge className="bg-orange-100 text-orange-800">Recommandé</Badge>
-                          </label>
-
-                          {/* Wave */}
-                          <label className={`flex items-center gap-4 p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                            paymentMethod === 'wave' 
-                              ? 'border-blue-500 bg-blue-50' 
-                              : 'border-slate-200 hover:border-blue-300'
-                          }`}>
-                            <input
-                              type="radio"
-                              name="payment_method"
-                              value="wave"
-                              checked={paymentMethod === 'wave'}
-                              onChange={(e) => setPaymentMethod(e.target.value as any)}
-                              className="text-blue-600"
-                            />
-                            <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center">
-                              <Zap className="h-6 w-6 text-white" />
-                            </div>
-                            <div className="flex-1">
-                              <h4 className="font-semibold text-slate-900">Wave</h4>
-                              <p className="text-sm text-slate-600">Paiement via votre portefeuille Wave</p>
-                            </div>
-                          </label>
-
-                          {/* Free Money */}
-                          <label className={`flex items-center gap-4 p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                            paymentMethod === 'free_money' 
-                              ? 'border-purple-500 bg-purple-50' 
-                              : 'border-slate-200 hover:border-purple-300'
-                          }`}>
-                            <input
-                              type="radio"
-                              name="payment_method"
-                              value="free_money"
-                              checked={paymentMethod === 'free_money'}
-                              onChange={(e) => setPaymentMethod(e.target.value as any)}
-                              className="text-purple-600"
-                            />
-                            <div className="w-12 h-12 bg-purple-600 rounded-lg flex items-center justify-center">
-                              <DollarSign className="h-6 w-6 text-white" />
-                            </div>
-                            <div className="flex-1">
-                              <h4 className="font-semibold text-slate-900">Free Money</h4>
-                              <p className="text-sm text-slate-600">Paiement via Free Money</p>
-                            </div>
-                          </label>
-
-                        </div>
-                      </div>
-
-                      {/* Numéro de téléphone */}
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">
-                          Numéro de téléphone
-                        </label>
-                        <Input
-                          type="tel"
-                          value={userPhone}
-                          onChange={(e) => setUserPhone(e.target.value)}
-                          placeholder="+221 XX XXX XX XX"
-                          className="text-lg"
-                        />
-                        <p className="text-sm text-slate-500 mt-1">
-                          Le numéro associé à votre compte {paymentMethod === 'orange_money' ? 'Orange Money' : paymentMethod === 'wave' ? 'Wave' : 'Free Money'}
-                        </p>
-                      </div>
-
-                      {/* Info sécurité */}
-                      <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                        <div className="flex items-start gap-3">
-                          <Shield className="h-5 w-5 text-green-600 mt-0.5" />
-                          <div>
-                            <p className="text-green-800 font-medium text-sm">Paiement sécurisé</p>
-                            <p className="text-green-700 text-sm mt-1">
-                              Vos informations de paiement sont protégées. Vous recevrez un SMS de confirmation.
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              )}
-
-              {/* Étape 5: Confirmation */}
-              {currentStep === 5 && (
-                <motion.div
-                  key="step5"
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.95 }}
                 >
-                  <Card className="shadow-xl border-0 bg-gradient-to-br from-green-50 to-blue-50">
+                  <Card className="shadow-xl border-0 bg-gradient-to-br from-green-50 to-emerald-50">
                     <CardHeader className="text-center">
                       <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
                         <CheckCircle className="h-10 w-10 text-green-600" />
                       </div>
-                      <CardTitle className="text-3xl text-green-800">Paiement initié avec succès !</CardTitle>
-                      <p className="text-green-600 text-lg">Votre annonce sera publiée dès réception du paiement</p>
+                      <CardTitle className="text-3xl text-green-800">
+                        🎉 Annonce publiée GRATUITEMENT !
+                      </CardTitle>
+                      <p className="text-green-600 text-lg">
+                        Votre annonce est maintenant en ligne et visible par tous
+                      </p>
                     </CardHeader>
 
                     <CardContent className="text-center space-y-6">
                       
-                      {/* Instructions */}
                       <div className="bg-white rounded-lg p-6 border shadow-sm">
-                        <h3 className="font-semibold text-slate-900 mb-4">Étapes suivantes</h3>
+                        <h3 className="font-semibold text-slate-900 mb-4">🎁 Phase de lancement spéciale</h3>
                         <div className="space-y-3 text-left">
                           <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-medium text-sm">1</div>
-                            <p className="text-slate-700">Suivez les instructions de paiement {paymentMethod === 'orange_money' ? 'Orange Money' : paymentMethod === 'wave' ? 'Wave' : 'Free Money'}</p>
+                            <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center text-green-600 font-medium text-sm">✓</div>
+                            <p className="text-slate-700">Votre annonce est <strong>immédiatement visible</strong></p>
                           </div>
                           <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-medium text-sm">2</div>
-                            <p className="text-slate-700">Confirmez le paiement de 200 FCFA</p>
+                            <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center text-green-600 font-medium text-sm">✓</div>
+                            <p className="text-slate-700"><strong>Aucun frais</strong> pendant la période de lancement</p>
                           </div>
                           <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-medium text-sm">3</div>
-                            <p className="text-slate-700">Votre annonce sera automatiquement publiée</p>
+                            <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center text-green-600 font-medium text-sm">✓</div>
+                            <p className="text-slate-700">Profitez-en pour publier <strong>autant d'annonces que vous voulez</strong></p>
                           </div>
                         </div>
                       </div>
 
-                      {/* Lien de paiement */}
-                      {paymentUrl && (
-                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
-                          <div className="flex items-center gap-3 mb-4">
-                            <ExternalLink className="h-5 w-5 text-yellow-600" />
-                            <h4 className="font-semibold text-yellow-800">Lien de paiement généré</h4>
-                          </div>
-                          <p className="text-yellow-700 text-sm mb-4">
-                            Un lien de paiement s'ouvrira automatiquement. 
-                            Si elle ne s'affiche pas, cliquez sur le bouton ci-dessous.
-                          </p>
-                          <Button
-                            type="button"
-                            onClick={() => window.open(paymentUrl, '_blank')}
-                            className="bg-yellow-600 hover:bg-yellow-700 text-white"
-                          >
-                            <ExternalLink className="h-4 w-4 mr-2" />
-                            Ouvrir le paiement
-                          </Button>
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+                        <div className="flex items-center gap-3 mb-4">
+                          <Gift className="h-5 w-5 text-blue-600" />
+                          <h4 className="font-semibold text-blue-800">Partagez la bonne nouvelle !</h4>
                         </div>
-                      )}
+                        <p className="text-blue-700 text-sm">
+                          Dites à vos amis que SenMarket est en phase de lancement avec publication 100% gratuite. 
+                          Cette offre ne durera pas éternellement !
+                        </p>
+                      </div>
 
-                      {/* Actions alternatives */}
                       <div className="flex gap-4 pt-4">
                         <Button
                           type="button"
-                          variant="outline"
-                          onClick={() => router.push('/dashboard')}
-                          className="flex-1"
+                          onClick={() => {
+                            // Reset pour créer une nouvelle annonce
+                            setCurrentStep(1);
+                            setUploadedImages([]);
+                            setCreatedListing(null);
+                          }}
+                          className="flex-1 bg-green-600 hover:bg-green-700 text-white"
                         >
-                          <Settings className="h-4 w-4 mr-2" />
-                          Aller au Dashboard
+                          <Plus className="h-4 w-4 mr-2" />
+                          Créer une autre annonce
                         </Button>
                         <Button
                           type="button"
@@ -1341,7 +1257,7 @@ export default function SellPage() {
                           className="flex-1"
                         >
                           <Eye className="h-4 w-4 mr-2" />
-                          Voir les annonces
+                          Voir toutes les annonces
                         </Button>
                       </div>
 
@@ -1352,8 +1268,8 @@ export default function SellPage() {
 
             </AnimatePresence>
 
-            {/* Navigation entre étapes */}
-            {currentStep < 5 && (
+            {/* ✅ NAVIGATION MODIFIÉE (4 étapes au lieu de 5) */}
+            {currentStep < 4 && (
               <motion.div 
                 className="flex justify-between items-center mt-8 pt-6 border-t border-slate-200"
                 initial={{ opacity: 0 }}
@@ -1372,14 +1288,14 @@ export default function SellPage() {
                   Précédent
                 </Button>
 
-                {/* Bouton Suivant/Soumettre */}
+                {/* Bouton Suivant/Publier */}
                 {currentStep < 3 ? (
                   <Button
                     type="button"
                     onClick={handleNext}
                     disabled={
                       (currentStep === 1 && (!watchedValues.title || !watchedValues.description || !watchedValues.price || !watchedValues.category_id || !watchedValues.region)) ||
-                      (currentStep === 2 && uploadedImages.length === 0) // ✅ Vérification stricte
+                      (currentStep === 2 && uploadedImages.length === 0)
                     }
                     className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white"
                   >
@@ -1389,37 +1305,18 @@ export default function SellPage() {
                 ) : currentStep === 3 ? (
                   <Button
                     type="submit"
-                    disabled={isLoading || uploadedImages.length === 0} // ✅ Blocage si pas d'images
+                    disabled={isLoading || uploadedImages.length === 0}
                     className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white"
                   >
                     {isLoading ? (
                       <>
                         <Loader2 className="h-4 w-4 animate-spin" />
-                        Création en cours...
+                        Publication en cours...
                       </>
                     ) : (
                       <>
-                        Créer l'annonce
-                        <Check className="h-4 w-4" />
-                      </>
-                    )}
-                  </Button>
-                ) : currentStep === 4 ? (
-                  <Button
-                    type="button"
-                    onClick={handlePayment}
-                    disabled={isLoading || !userPhone}
-                    className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white"
-                  >
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Traitement...
-                      </>
-                    ) : (
-                      <>
-                        Procéder au paiement
-                        <CreditCard className="h-4 w-4" />
+                        🎉 Publier GRATUITEMENT
+                        <Gift className="h-4 w-4" />
                       </>
                     )}
                   </Button>

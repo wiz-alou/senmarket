@@ -4,7 +4,6 @@ import './globals.css'
 import { AppProviders } from '@/components/providers/app-providers'
 import { ErrorBoundary } from '@/components/ui/error-boundary'
 import { OfflineBanner } from '@/components/ui/offline-banner'
-import { FavoritesInitializer } from '@/components/providers/favorites-initializer'
 
 const inter = Inter({ 
   subsets: ['latin'],
@@ -134,13 +133,12 @@ export default function RootLayout({
       </head>
       <body className={`${inter.className} antialiased min-h-screen bg-background font-sans`}>
         <ErrorBoundary>
+          {/* ✅ APPPROVIDERS MAINTENANT CONTIENT AUTHPROVIDER ET FAVORITESINITIALIZER */}
           <AppProviders>
-            <FavoritesInitializer>
-              <OfflineBanner />
-              <div className="relative flex min-h-screen flex-col">
-                {children}
-              </div>
-            </FavoritesInitializer>
+            <OfflineBanner />
+            <div className="relative flex min-h-screen flex-col">
+              {children}
+            </div>
           </AppProviders>
         </ErrorBoundary>
       </body>
