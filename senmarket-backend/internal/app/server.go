@@ -144,11 +144,11 @@ func New(cfg *config.Config) *Application {
 	jwtService := auth.NewJWTService(cfg.JWT.Secret, cfg.JWT.Expiry)
 	authService := auth.NewService(db, jwtService, twilioSMSService)
 	
-	// 🆕 SERVICE QUOTA
+	// 🆕 SERVICE QUOTA - IMPORTANT: Créer avant ListingService
 	quotaService := services.NewQuotaService(db)
 	
-	// Services avec cache intégré
-	listingService := services.NewListingService(db, redisRepo)
+	// 🔧 CORRIGÉ: Services avec les bons paramètres
+	listingService := services.NewListingService(db, cacheService, quotaService)
 	categoryService := services.NewCategoryService(db, redisRepo)
 	contactService := services.NewContactService(db)
 	
@@ -721,55 +721,55 @@ func (a *Application) warmupCache() {
 	}
 	
 	// Préchauffer quelques listings
-   if featured, err := a.listingService.GetFeaturedListings(6); err == nil {
-   	log.Printf("✅ Cache featured listings: %d éléments", len(featured))
-   }
-   
-   // 🆕 Préchauffer la configuration de monétisation
-   if config, err := a.quotaService.GetGlobalConfig(); err == nil {
-   	log.Printf("🎯 Config monétisation chargée: phase %s", config.GetCurrentPhase())
-   }
+	if featured, err := a.listingService.GetFeaturedListings(6); err == nil {
+		log.Printf("✅ Cache featured listings: %d éléments", len(featured))
+	}
+	
+	// 🆕 Préchauffer la configuration de monétisation
+	if config, err := a.quotaService.GetGlobalConfig(); err == nil {
+		log.Printf("🎯 Config monétisation chargée: phase %s", config.GetCurrentPhase())
+	}
 
-   // ⭐ NOUVEAU: Vérifier MinIO et afficher stats
-   minioHealth := config.GetMinIOHealthCheck(a.minioClient, a.config.MinIO.BucketName)
-   if minioHealth["status"] == "up" {
-   	log.Printf("📁 MinIO opérationnel: %d buckets", minioHealth["total_buckets"])
-   	if minioHealth["bucket_exists"] == true {
-   		log.Printf("✅ Bucket principal '%s' disponible", a.config.MinIO.BucketName)
-   	} else {
-   		log.Printf("⚠️ Bucket principal '%s' non trouvé", a.config.MinIO.BucketName)
-   	}
-   } else {
-   	log.Printf("❌ MinIO non accessible")
-   }
-   
-   // Vérifier le total des clés en cache
-   if totalKeys, err := a.redis.DBSize(ctx).Result(); err == nil {
-   	log.Printf("🔴 Cache préchauffé: %d clés totales", totalKeys)
-   }
+	// ⭐ NOUVEAU: Vérifier MinIO et afficher stats
+	minioHealth := config.GetMinIOHealthCheck(a.minioClient, a.config.MinIO.BucketName)
+	if minioHealth["status"] == "up" {
+		log.Printf("📁 MinIO opérationnel: %d buckets", minioHealth["total_buckets"])
+		if minioHealth["bucket_exists"] == true {
+			log.Printf("✅ Bucket principal '%s' disponible", a.config.MinIO.BucketName)
+		} else {
+			log.Printf("⚠️ Bucket principal '%s' non trouvé", a.config.MinIO.BucketName)
+		}
+	} else {
+		log.Printf("❌ MinIO non accessible")
+	}
+	
+	// Vérifier le total des clés en cache
+	if totalKeys, err := a.redis.DBSize(ctx).Result(); err == nil {
+		log.Printf("🔴 Cache préchauffé: %d clés totales", totalKeys)
+	}
 
-   log.Println("🎉 Préchauffage terminé - Tous les services prêts")
+	log.Println("🎉 Préchauffage terminé - Tous les services prêts")
 }
 
 func (a *Application) Run() error {
-   port := a.config.Port
-   if port == "" {
-   	port = "8080"
-   }
-   
-   log.Printf("🚀 SenMarket API v3.1 avec MinIO démarré sur le port %s", port)
-   log.Printf("🌐 Health check: http://localhost:%s/health", port)
-   log.Printf("🎯 Phase monétisation: http://localhost:%s/api/v1/quota/current-phase", port)
-   log.Printf("📁 MinIO status: http://localhost:%s/api/v1/storage/status", port)
-   log.Printf("🎛️ MinIO Console: http://localhost:9001 (senmarket/senmarket123)")
-   
-   // Afficher un résumé des services
-   log.Println("📊 Services actifs:")
-   log.Println("   ✅ PostgreSQL - Base de données")
-   log.Println("   ✅ Redis - Cache et sessions")
-   log.Println("   ✅ MinIO - Stockage d'images cloud")
-   log.Println("   ✅ Twilio - SMS et vérifications")
-   log.Println("   ✅ Quotas - Système de monétisation")
-   
-   return a.router.Run(":" + port)
+	port := a.config.Port
+	if port == "" {
+		port = "8080"
+	}
+	
+	log.Printf("🚀 SenMarket API v3.1 avec MinIO démarré sur le port %s", port)
+	log.Printf("🌐 Health check: http://localhost:%s/health", port)
+	log.Printf("🎯 Phase monétisation: http://localhost:%s/api/v1/quota/current-phase", port)
+	log.Printf("📁 MinIO status: http://localhost:%s/api/v1/storage/status", port)
+	log.Printf("🎛️ MinIO Console: http://localhost:9001 (senmarket/senmarket123)")
+	
+	// Afficher un résumé des services
+	log.Println("📊 Services actifs:")
+	log.Println("   ✅ PostgreSQL - Base de données")
+	log.Println("   ✅ Redis - Cache et sessions")
+	log.Println("   ✅ MinIO - Stockage d'images cloud")
+	log.Println("   ✅ Twilio - SMS et vérifications")
+	log.Println("   ✅ Quotas - Système de monétisation")
+	
+	return a.router.Run(":" + port)
 }

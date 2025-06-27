@@ -103,6 +103,8 @@ const SENEGAL_REGIONS = [
   'Kédougou', 'Matam', 'Sédhiou', 'Saraya', 'Koungheul'
 ];
 
+
+
 export default function ListingsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -125,7 +127,7 @@ export default function ListingsPage() {
     max_price: searchParams.get('max_price') || '',
     sort: searchParams.get('sort') || 'date',
     page: 1,
-    limit: 24
+    limit: 25
   });
 
   const [pagination, setPagination] = useState({
@@ -222,45 +224,69 @@ export default function ListingsPage() {
     }
   };
 
-  const fetchListings = async () => {
-    setLoading(true);
-    setError(null);
+const fetchListings = async () => {
+  setLoading(true);
+  setError(null);
 
-    try {
-      const params = new URLSearchParams();
+  try {
+    const params = new URLSearchParams();
 
-      if (filters.search) params.append('search', filters.search);
-      if (filters.category_id && filters.category_id !== 'all') {
-        params.append('category_id', filters.category_id);
-      }
-      if (filters.region && filters.region !== 'all') {
-        params.append('region', filters.region);
-      }
-      if (filters.min_price) params.append('min_price', filters.min_price);
-      if (filters.max_price) params.append('max_price', filters.max_price);
-      if (filters.sort) params.append('sort', filters.sort);
-      params.append('page', filters.page.toString());
-      params.append('limit', filters.limit.toString());
-
-      const url = `http://localhost:8080/api/v1/listings?${params.toString()}`;
-      const response = await fetch(url);
-      const data = await response.json();
-
-      if (data.data) {
-        setListings(data.data.listings || []);
-        setPagination({
-          total: data.data.total || 0,
-          pages: data.data.pages || 0,
-          currentPage: data.data.page || 1
-        });
-      }
-    } catch (error) {
-      console.error('Erreur chargement annonces:', error);
-      setError('Erreur lors du chargement des annonces');
-    } finally {
-      setLoading(false);
+    if (filters.search) params.append('search', filters.search);
+    if (filters.category_id && filters.category_id !== 'all') {
+      params.append('category_id', filters.category_id);
     }
-  };
+    if (filters.region && filters.region !== 'all') {
+      params.append('region', filters.region);
+    }
+    if (filters.min_price) params.append('min_price', filters.min_price);
+    if (filters.max_price) params.append('max_price', filters.max_price);
+    if (filters.sort) params.append('sort', filters.sort);
+    params.append('page', filters.page.toString());
+    params.append('limit', filters.limit.toString());
+
+    const url = `http://localhost:8080/api/v1/listings?${params.toString()}`;
+    const response = await fetch(url);
+    const data = await response.json();
+
+    console.log('🔍 DEBUG - API Response:', data);
+
+    if (data.data) {
+      setListings(data.data.listings || []);
+      
+      // 🔧 CORRECTION: Mapper correctement la pagination
+      const paginationData = data.data.pagination || {};
+      
+      setPagination({
+        total: paginationData.total || data.data.total || 0,
+        pages: paginationData.pages || data.data.pages || 0,
+        currentPage: paginationData.page || data.data.page || 1
+      });
+
+      console.log('🔍 DEBUG - Pagination Set:', {
+        total: paginationData.total || data.data.total || 0,
+        pages: paginationData.pages || data.data.pages || 0,
+        currentPage: paginationData.page || data.data.page || 1
+      });
+    }
+  } catch (error) {
+    console.error('Erreur chargement annonces:', error);
+    setError('Erreur lors du chargement des annonces');
+  } finally {
+    setLoading(false);
+  }
+};
+
+// 🆕 AJOUT: Debug hook pour tracer la pagination
+useEffect(() => {
+  console.log('🔍 DEBUG PAGINATION STATE:', {
+    loading,
+    error,
+    listingsLength: listings.length,
+    pagination,
+    shouldShowPagination: !loading && !error && listings.length > 0 && pagination.pages > 1
+  });
+}, [loading, error, listings, pagination]);
+
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('fr-SN', {
@@ -348,7 +374,7 @@ export default function ListingsPage() {
       max_price: '',
       sort: 'date',
       page: 1,
-      limit: 24
+      limit: 25
     });
   };
 

@@ -1,4 +1,4 @@
-// internal/services/listing_service.go - VERSION MISE À JOUR AVEC QUOTAS
+// internal/services/listing_service.go
 package services
 
 import (
@@ -9,19 +9,10 @@ import (
 	"time"
 
 	"senmarket/internal/models"
-	"senmarket/internal/repository/redis"
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
 	"gorm.io/gorm"
-)
-
-// Erreurs existantes
-var (
-	ErrListingNotFound   = errors.New("annonce non trouvée")
-	ErrInvalidCategory   = errors.New("catégorie invalide")
-	ErrInvalidRegion     = errors.New("région invalide")
-	ErrUnauthorized      = errors.New("non autorisé")
 )
 
 type ListingService struct {
@@ -30,99 +21,75 @@ type ListingService struct {
 	quotaService *QuotaService
 }
 
-func NewListingService(db *gorm.DB, cacheRepo *redis.CacheRepository) *ListingService {
+// Constantes pour les erreurs
+var (
+	ErrListingNotFound = errors.New("annonce non trouvée")
+	ErrQuotaExceeded   = errors.New("quota d'annonces dépassé")
+)
+
+func NewListingService(db *gorm.DB, cacheService *CacheService, quotaService *QuotaService) *ListingService {
 	return &ListingService{
 		db:           db,
-		cacheService: NewCacheService(cacheRepo),
-		quotaService: NewQuotaService(db),
+		cacheService: cacheService,
+		quotaService: quotaService,
 	}
 }
 
-// 🆕 CheckListingEligibility vérifie si l'utilisateur peut créer une annonce
-func (s *ListingService) CheckListingEligibility(userID uuid.UUID) (map[string]interface{}, error) {
-	return s.quotaService.CheckListingEligibility(userID)
-}
-
-// 🆕 CreateListingWithQuota crée une annonce en respectant les quotas
+// CreateListingWithQuota crée une nouvelle annonce avec vérification des quotas
 func (s *ListingService) CreateListingWithQuota(userID uuid.UUID, req *CreateListingRequest) (*models.Listing, error) {
-	// Validation de base
-	if req.CategoryID == "" {
-		return nil, ErrInvalidCategory
-	}
-	if req.Region == "" {
-		return nil, ErrInvalidRegion
-	}
-
-	categoryUUID, err := uuid.Parse(req.CategoryID)
-	if err != nil {
-		return nil, ErrInvalidCategory
-	}
-
-	// 🔍 Vérifier l'éligibilité pour une annonce gratuite
-	canCreateFree, _, err := s.quotaService.CanCreateFreeListing(userID)
+	// Vérifier si l'utilisateur peut créer une annonce
+	canCreate, _, err := s.quotaService.CanCreateFreeListing(userID)
 	if err != nil {
 		return nil, fmt.Errorf("erreur vérification quota: %w", err)
 	}
 
-	// Définir l'expiration
-	expiresAt := time.Now().AddDate(0, 1, 0) // 1 mois
+	if !canCreate {
+		return nil, ErrQuotaExceeded
+	}
+
+	// Parser le CategoryID depuis string vers UUID
+	categoryUUID, err := uuid.Parse(req.CategoryID)
+	if err != nil {
+		return nil, fmt.Errorf("ID catégorie invalide: %w", err)
+	}
 
 	// Créer l'annonce
-	listing := &models.Listing{
+	listing := models.Listing{
+		ID:          uuid.New(),
 		Title:       req.Title,
 		Description: req.Description,
 		Price:       req.Price,
-		CategoryID:  categoryUUID,
+		Currency:    "XOF", // Franc CFA par défaut
 		Region:      req.Region,
-		UserID:      userID,
-		IsFeatured:  false,
 		Images:      pq.StringArray(req.Images),
-		ExpiresAt:   &expiresAt,
-		Currency:    "XOF",
+		Status:      "draft", // Draft par défaut
+		IsFeatured:  req.Featured,
+		UserID:      userID,
+		CategoryID:  categoryUUID, // Utiliser directement l'UUID
+		ViewsCount:  0,
 	}
 
-	// 🎯 Logique selon les quotas
-	if canCreateFree {
-		// Publication gratuite directe
-		listing.Status = "active"
-		
-		if err := s.db.Create(listing).Error; err != nil {
-			return nil, fmt.Errorf("erreur création annonce: %w", err)
-		}
-		
-		// Consommer le quota (si en phase 2+)
-		if err := s.quotaService.ConsumeFreeListing(userID); err != nil {
-			// Log l'erreur mais ne pas échouer la création
-			log.Printf("⚠️ Erreur consommation quota (non bloquant): %v", err)
-		}
-		
-		log.Printf("✅ Annonce %s publiée GRATUITEMENT pour utilisateur %s", listing.ID, userID)
-		
-	} else {
-		// Création en draft (nécessite paiement)
-		listing.Status = "draft"
-		
-		if err := s.db.Create(listing).Error; err != nil {
-			return nil, fmt.Errorf("erreur création annonce: %w", err)
-		}
-		
-		log.Printf("📝 Annonce %s créée en DRAFT pour utilisateur %s (paiement requis)", listing.ID, userID)
+	// Sauvegarder en base
+	if err := s.db.Create(&listing).Error; err != nil {
+		return nil, fmt.Errorf("erreur création annonce: %w", err)
 	}
 
-	// Invalider les caches liés
-	ctx := context.Background()
-	go func() {
-		if err := s.cacheService.InvalidateListingCache(ctx, listing.ID.String()); err != nil {
-			log.Printf("Erreur invalidation cache: %v", err)
-		}
-	}()
+	// Compter l'annonce créée dans le quota
+	if err := s.quotaService.ConsumeFreeListing(userID); err != nil {
+		log.Printf("⚠️ Erreur comptage annonce gratuite: %v", err)
+	}
 
-	return listing, nil
+	// Preload les relations
+	if err := s.db.Preload("User").Preload("Category").First(&listing, listing.ID).Error; err != nil {
+		return nil, fmt.Errorf("erreur rechargement annonce: %w", err)
+	}
+
+	log.Printf("✅ Annonce %s créée pour utilisateur %s", listing.ID, userID)
+	return &listing, nil
 }
 
-// 🆕 PublishListingAfterPayment publie une annonce après paiement
-func (s *ListingService) PublishListingAfterPayment(listingID uuid.UUID, userID uuid.UUID) error {
-	// Vérifier que l'annonce existe et appartient à l'utilisateur
+// PublishListingAfterPayment publie une annonce après paiement
+func (s *ListingService) PublishListingAfterPayment(userID uuid.UUID, listingID uuid.UUID) error {
 	var listing models.Listing
 	if err := s.db.Where("id = ? AND user_id = ? AND status = ?", listingID, userID, "draft").
 		First(&listing).Error; err != nil {
@@ -155,9 +122,14 @@ func (s *ListingService) PublishListingAfterPayment(listingID uuid.UUID, userID 
 	return nil
 }
 
-// 🆕 GetUserQuotaStatus retourne le statut du quota d'un utilisateur
+// GetUserQuotaStatus retourne le statut du quota d'un utilisateur
 func (s *ListingService) GetUserQuotaStatus(userID uuid.UUID) (map[string]interface{}, error) {
 	return s.quotaService.GetUserQuotaStatus(userID)
+}
+
+// CheckListingEligibility vérifie l'éligibilité pour créer une annonce
+func (s *ListingService) CheckListingEligibility(userID uuid.UUID) (map[string]interface{}, error) {
+	return s.quotaService.CheckListingEligibility(userID)
 }
 
 // CreateListing méthode originale (maintenant wrapper)
@@ -182,8 +154,53 @@ func (s *ListingService) GetListings(page, limit int, filters map[string]interfa
 		// Récupérer le total count depuis le cache aussi
 		var totalCount int64
 		if err := s.cacheService.cache.Get(ctx, CACHE_LISTINGS_COUNT, &totalCount); err == nil {
+			log.Printf("🔴 Cache HIT - Total count %d", totalCount)
 			return cachedListings, totalCount, nil
 		}
+		
+		// 🆕 NOUVEAU: Si le total count n'est pas en cache, on le recalcule
+		log.Printf("🔴 Cache MISS - Total count, recalculating...")
+		
+		// Construire la même requête pour compter
+		query := s.db.Model(&models.Listing{}).Where("status = ?", "active")
+		
+		// Appliquer les mêmes filtres
+		if categoryID, ok := filters["category_id"].(string); ok && categoryID != "" {
+			query = query.Where("category_id = ?", categoryID)
+		}
+		
+		if region, ok := filters["region"].(string); ok && region != "" {
+			query = query.Where("region = ?", region)
+		}
+		
+		if minPrice, ok := filters["min_price"].(float64); ok && minPrice > 0 {
+			query = query.Where("price >= ?", minPrice)
+		}
+		
+		if maxPrice, ok := filters["max_price"].(float64); ok && maxPrice > 0 {
+			query = query.Where("price <= ?", maxPrice)
+		}
+		
+		if search, ok := filters["search"].(string); ok && search != "" {
+			query = query.Where("title ILIKE ? OR description ILIKE ?", "%"+search+"%", "%"+search+"%")
+		}
+		
+		// Compter le total
+		if err := query.Count(&totalCount).Error; err != nil {
+			log.Printf("❌ Erreur comptage depuis cache: %v", err)
+			// Fallback: utiliser les listings cachés mais avec un total approximatif
+			return cachedListings, int64(len(cachedListings)), nil
+		}
+		
+		// Remettre le total en cache
+		go func() {
+			if err := s.cacheService.cache.Set(ctx, CACHE_LISTINGS_COUNT, totalCount, time.Hour); err != nil {
+				log.Printf("Erreur cache count: %v", err)
+			}
+		}()
+		
+		log.Printf("🔴 Cache HIT + DB Count - Listings: %d, Total: %d", len(cachedListings), totalCount)
+		return cachedListings, totalCount, nil
 	}
 	
 	log.Printf("🔴 Cache MISS - Récupération depuis DB page %d", page)
@@ -237,6 +254,8 @@ func (s *ListingService) GetListings(page, limit int, filters map[string]interfa
 			sort = "created_at ASC"
 		case "views":
 			sort = "views_count DESC"
+		case "date": // Support pour le frontend qui utilise "date"
+			sort = "created_at DESC"
 		}
 	}
 
@@ -253,11 +272,12 @@ func (s *ListingService) GetListings(page, limit int, filters map[string]interfa
 		if err := s.cacheService.CacheListingsPage(ctx, page, limit, filters, listings); err != nil {
 			log.Printf("Erreur cache listings: %v", err)
 		}
-		if err := s.cacheService.cache.Set(ctx, CACHE_LISTINGS_COUNT, total, time.Hour); err != nil {
+		if err := s.cacheService.cache.Set(ctx, "listings:count", total, time.Hour); err != nil {
 			log.Printf("Erreur cache count: %v", err)
 		}
 	}()
 
+	log.Printf("🔴 DB Query - Listings: %d, Total: %d", len(listings), total)
 	return listings, total, nil
 }
 
@@ -350,6 +370,9 @@ func (s *ListingService) UpdateListing(listingID string, userID string, req *Upd
 	}
 	if req.Images != nil {
 		updates["images"] = pq.StringArray(req.Images)
+	}
+	if req.Phone != nil {
+		updates["phone"] = *req.Phone
 	}
 	if req.Status != nil {
 		updates["status"] = *req.Status
