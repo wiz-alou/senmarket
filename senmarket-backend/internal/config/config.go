@@ -14,6 +14,7 @@ type Config struct {
 	Redis    RedisConfig
 	JWT      JWTConfig
 	WhatsApp WhatsAppConfig
+	MinIO    MinIOConfig        // ⭐ NOUVEAU: Configuration MinIO
 }
 
 type DatabaseConfig struct {
@@ -46,6 +47,16 @@ type WhatsAppConfig struct {
 	APIURL          string
 }
 
+// ⭐ NOUVEAU: Configuration MinIO
+type MinIOConfig struct {
+	Endpoint   string
+	AccessKey  string
+	SecretKey  string
+	BucketName string
+	UseSSL     bool
+	Region     string
+}
+
 func Load() (*Config, error) {
 	env := getEnv("ENV", "development")
 	
@@ -72,6 +83,7 @@ func Load() (*Config, error) {
 			Expiry: jwtExpiry,
 		},
 		WhatsApp: getWhatsAppConfig(env),
+		MinIO:    getMinIOConfig(env),    // ⭐ NOUVEAU
 	}
 
 	return config, nil
@@ -119,6 +131,42 @@ func getRedisConfig(env string) RedisConfig {
 		Port:     getEnv("REDIS_PORT", "6379"),
 		Password: getEnv("REDIS_PASSWORD", getDefaultRedisPassword(env)),
 		DB:       redisDB,
+	}
+}
+
+// ⭐ NOUVEAU: Configuration MinIO selon l'environnement
+func getMinIOConfig(env string) MinIOConfig {
+	// Parse SSL boolean
+	useSSL, _ := strconv.ParseBool(getEnv("MINIO_SSL", getDefaultMinIOSSL(env)))
+	
+	switch env {
+	case "production":
+		return MinIOConfig{
+			Endpoint:   getEnv("MINIO_ENDPOINT", "storage.senmarket.sn"),
+			AccessKey:  getEnv("MINIO_ACCESS_KEY", ""),
+			SecretKey:  getEnv("MINIO_SECRET_KEY", ""),
+			BucketName: getEnv("MINIO_BUCKET", "senmarket-images-prod"),
+			UseSSL:     useSSL,
+			Region:     getEnv("MINIO_REGION", "dakar-1"),
+		}
+	case "staging":
+		return MinIOConfig{
+			Endpoint:   getEnv("MINIO_ENDPOINT", "staging-storage.senmarket.sn"),
+			AccessKey:  getEnv("MINIO_ACCESS_KEY", ""),
+			SecretKey:  getEnv("MINIO_SECRET_KEY", ""),
+			BucketName: getEnv("MINIO_BUCKET", "senmarket-images-staging"),
+			UseSSL:     useSSL,
+			Region:     getEnv("MINIO_REGION", "dakar-1"),
+		}
+	default: // development
+		return MinIOConfig{
+			Endpoint:   getEnv("MINIO_ENDPOINT", "localhost:9000"),
+			AccessKey:  getEnv("MINIO_ACCESS_KEY", "senmarket"),
+			SecretKey:  getEnv("MINIO_SECRET_KEY", "senmarket123"),
+			BucketName: getEnv("MINIO_BUCKET", "senmarket-images"),
+			UseSSL:     useSSL,
+			Region:     getEnv("MINIO_REGION", "us-east-1"),
+		}
 	}
 }
 
@@ -193,6 +241,16 @@ func getDefaultRedisDB(env string) string {
 		return "2"
 	default:
 		return "0"
+	}
+}
+
+// ⭐ NOUVELLES: Fonctions utilitaires MinIO
+func getDefaultMinIOSSL(env string) string {
+	switch env {
+	case "production", "staging":
+		return "true"  // HTTPS en production/staging
+	default:
+		return "false" // HTTP en développement
 	}
 }
 

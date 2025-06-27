@@ -1,6 +1,7 @@
 // src/hooks/useQuota.ts - VERSION CORRIGÉE AVEC IMPORTS ALIGNÉS
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { useAuthStore } from '@/stores/auth.store'; // ✅ AJOUT IMPORT
 
 // ✅ CORRECTION MAJEURE : Import depuis le bon chemin
 import { 
@@ -28,11 +29,13 @@ export const QUOTA_QUERY_KEYS = {
 };
 
 // ============================================
-// HOOKS PRINCIPAUX
+// HOOKS PRINCIPAUX - MODIFIÉS AVEC enabled: isAuthenticated
 // ============================================
 
 // Hook pour obtenir le statut complet des quotas
 export function useQuotaStatus() {
+  const { isAuthenticated } = useAuthStore(); // ✅ AJOUT AUTH CHECK
+  
   return useQuery({
     queryKey: QUOTA_QUERY_KEYS.status(),
     queryFn: quotaService.getQuotaStatus,
@@ -40,40 +43,49 @@ export function useQuotaStatus() {
     gcTime: 5 * 60 * 1000, // 5 minutes
     retry: 2,
     refetchOnWindowFocus: true,
+    enabled: isAuthenticated, // ✅ CRUCIAL : Seulement si authentifié
   });
 }
 
 // Hook pour vérifier l'éligibilité
 export function useEligibilityCheck() {
+  const { isAuthenticated } = useAuthStore(); // ✅ AJOUT AUTH CHECK
+  
   return useQuery({
     queryKey: QUOTA_QUERY_KEYS.eligibility(),
     queryFn: quotaService.checkEligibility,
     staleTime: 15 * 1000, // 15 secondes (plus frais)
     gcTime: 2 * 60 * 1000, // 2 minutes
     retry: 1,
+    enabled: isAuthenticated, // ✅ CRUCIAL : Seulement si authentifié
   });
 }
 
 // Hook pour le résumé des quotas (version légère)
 export function useQuotaSummary() {
+  const { isAuthenticated } = useAuthStore(); // ✅ AJOUT AUTH CHECK
+  
   return useQuery({
     queryKey: QUOTA_QUERY_KEYS.summary(),
     queryFn: quotaService.getQuotaSummary,
     staleTime: 20 * 1000, // 20 secondes
     gcTime: 3 * 60 * 1000, // 3 minutes
     retry: 2,
+    enabled: isAuthenticated, // ✅ CRUCIAL : Seulement si authentifié
   });
 }
 
 // Hook pour l'historique des quotas
 export function useQuotaHistory(months: number = 6) {
+  const { isAuthenticated } = useAuthStore(); // ✅ AJOUT AUTH CHECK
+  
   return useQuery({
     queryKey: QUOTA_QUERY_KEYS.history(months),
     queryFn: () => quotaService.getQuotaHistory(months),
     staleTime: 2 * 60 * 1000, // 2 minutes
     gcTime: 10 * 60 * 1000, // 10 minutes
     retry: 1,
-    enabled: months > 0,
+    enabled: isAuthenticated && months > 0, // ✅ CRUCIAL : Auth + validation
   });
 }
 
@@ -86,18 +98,21 @@ export function useCurrentPhase() {
     gcTime: 30 * 60 * 1000, // 30 minutes
     retry: 2,
     refetchOnWindowFocus: false, // Moins critique
+    // ✅ PAS DE enabled: car c'est public
   });
 }
 
 // Hook pour les statistiques de la plateforme
 export function usePlatformStats() {
+  const { isAuthenticated } = useAuthStore(); // ✅ AJOUT AUTH CHECK
+  
   return useQuery({
     queryKey: QUOTA_QUERY_KEYS.platformStats(),
     queryFn: quotaService.getPlatformStats,
     staleTime: 60 * 1000, // 1 minute
     gcTime: 10 * 60 * 1000, // 10 minutes
     retry: 1,
-    enabled: false, // Activé manuellement (pour admin)
+    enabled: isAuthenticated, // ✅ CRUCIAL : Auth pour les stats admin
   });
 }
 
@@ -128,13 +143,32 @@ export function useUpdateUserPhase() {
 }
 
 // ============================================
-// HOOKS COMPOSÉS
+// HOOKS COMPOSÉS - MODIFIÉS AVEC FALLBACKS
 // ============================================
 
 // Hook composé pour vérifier l'éligibilité avant création d'annonce
 export function useCreateListingEligibility() {
+  const { isAuthenticated } = useAuthStore(); // ✅ AJOUT AUTH CHECK
   const eligibilityQuery = useEligibilityCheck();
   const statusQuery = useQuotaStatus();
+
+  // ✅ VALEURS PAR DÉFAUT QUAND NON CONNECTÉ
+  if (!isAuthenticated) {
+    return {
+      isLoading: false,
+      isError: false,
+      error: null,
+      data: null,
+      canCreateFree: false,
+      requiresPayment: true,
+      isInLaunchPhase: true, // Supposer qu'on est en phase de lancement pour le marketing
+      statusColor: 'blue',
+      statusMessage: 'Connectez-vous pour publier des annonces gratuitement',
+      urgencyMessage: 'Profitez de notre phase de lancement !',
+      recommendations: [],
+      refetchBoth: () => {}, // Fonction vide
+    };
+  }
 
   return {
     ...eligibilityQuery,
@@ -157,8 +191,8 @@ export function useCreateListingEligibility() {
 
 // Hook pour la bannière de lancement avec données temps réel
 export function useLaunchBanner() {
-  const phaseQuery = useCurrentPhase();
-  const statusQuery = useQuotaStatus();
+  const phaseQuery = useCurrentPhase(); // ✅ Public, pas besoin d'auth
+  const statusQuery = useQuotaStatus(); // ✅ Déjà protégé par isAuthenticated
 
   const isVisible = phaseQuery.data?.is_launch_active ?? false;
   const daysLeft = phaseQuery.data?.days_until_launch_end ?? 0;
@@ -183,8 +217,8 @@ export function useLaunchBanner() {
 
 // Hook pour le tableau de bord quota (usage complexe)
 export function useQuotaDashboard() {
-  const statusQuery = useQuotaStatus();
-  const historyQuery = useQuotaHistory(6);
+  const statusQuery = useQuotaStatus(); // ✅ Déjà protégé
+  const historyQuery = useQuotaHistory(6); // ✅ Déjà protégé
 
   const status = statusQuery.data;
   const history = historyQuery.data;

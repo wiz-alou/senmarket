@@ -10,7 +10,7 @@ import (
 	"os"
 	// "strconv"
 	"time"
-
+	"strings"  
 	"senmarket/internal/auth"
 	"senmarket/internal/config"
 	"senmarket/internal/handlers"
@@ -20,6 +20,7 @@ import (
 	"senmarket/internal/services"
 
 	"github.com/gin-gonic/gin"
+	"github.com/minio/minio-go/v7"
 	redislib "github.com/redis/go-redis/v9"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -30,6 +31,7 @@ type Application struct {
 	config            *config.Config
 	db                *gorm.DB
 	redis             *redislib.Client
+	minioClient       *minio.Client          // ⭐ Client MinIO
 	router            *gin.Engine
 	authService       *auth.Service
 	jwtService        *auth.JWTService
@@ -41,7 +43,7 @@ type Application struct {
 	twilioSMSService  *services.TwilioSMSService
 	cacheService      *services.CacheService
 	
-	// 🆕 NOUVEAUX SERVICES POUR LA MONÉTISATION
+	// 🆕 SERVICES POUR LA MONÉTISATION
 	quotaService      *services.QuotaService
 	
 	authMiddleware    *auth.Middleware
@@ -55,7 +57,7 @@ type Application struct {
 	cacheHandler      *handlers.CacheHandler
 	monitoringHandler *handlers.MonitoringHandler
 	
-	// 🆕 NOUVEAUX HANDLERS POUR LA MONÉTISATION
+	// 🆕 HANDLERS POUR LA MONÉTISATION
 	quotaHandler      *handlers.QuotaHandler
 }
 
@@ -101,6 +103,18 @@ func New(cfg *config.Config) *Application {
 	}
 	log.Println("✅ Redis connecté avec succès")
 
+	// ⭐ NOUVEAU: Configuration MinIO avec validation
+	log.Println("🔧 Configuration MinIO...")
+	if err := config.ValidateMinIOConfig(cfg.MinIO); err != nil {
+		log.Fatalf("Erreur validation config MinIO: %v", err)
+	}
+
+	minioClient, err := config.NewMinIO(cfg.MinIO)
+	if err != nil {
+		log.Fatalf("Erreur connexion MinIO: %v", err)
+	}
+	log.Println("✅ MinIO connecté avec succès")
+
 	// Configurer Gin selon l'environnement
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -130,7 +144,7 @@ func New(cfg *config.Config) *Application {
 	jwtService := auth.NewJWTService(cfg.JWT.Secret, cfg.JWT.Expiry)
 	authService := auth.NewService(db, jwtService, twilioSMSService)
 	
-	// 🆕 NOUVEAU SERVICE QUOTA
+	// 🆕 SERVICE QUOTA
 	quotaService := services.NewQuotaService(db)
 	
 	// Services avec cache intégré
@@ -145,7 +159,13 @@ func New(cfg *config.Config) *Application {
 		os.Getenv("ORANGE_MONEY_MERCHANT_KEY"),
 		os.Getenv("ORANGE_MONEY_MERCHANT_SECRET"),
 	)
-	imageService := services.NewImageService("uploads", "http://localhost:8080")
+
+	// ⭐ NOUVEAU: ImageService avec MinIO
+	minioBaseURL := fmt.Sprintf("http://%s", cfg.MinIO.Endpoint)
+	if cfg.MinIO.UseSSL {
+		minioBaseURL = fmt.Sprintf("https://%s", cfg.MinIO.Endpoint)
+	}
+	imageService := services.NewImageService(minioClient, cfg.MinIO.BucketName, minioBaseURL)
 
 	// Initialiser les middlewares
 	authMiddleware := auth.NewMiddleware(jwtService, authService)
@@ -161,7 +181,7 @@ func New(cfg *config.Config) *Application {
 	cacheHandler := handlers.NewCacheHandler(cacheService)
 	monitoringHandler := handlers.NewMonitoringHandler(cacheService, redisClient)
 
-	// 🆕 NOUVEAU HANDLER QUOTA
+	// 🆕 HANDLER QUOTA
 	quotaHandler := handlers.NewQuotaHandler(quotaService)
 
 	// ============================================
@@ -210,6 +230,7 @@ func New(cfg *config.Config) *Application {
 		config:            cfg,
 		db:                db,
 		redis:             redisClient,
+		minioClient:       minioClient,        // ⭐ NOUVEAU
 		router:            gin.New(),
 		authService:       authService,
 		jwtService:        jwtService,
@@ -221,7 +242,7 @@ func New(cfg *config.Config) *Application {
 		twilioSMSService:  twilioSMSService,
 		cacheService:      cacheService,
 		
-		// 🆕 NOUVEAU SERVICE
+		// 🆕 SERVICE
 		quotaService:      quotaService,
 		
 		authMiddleware:    authMiddleware,
@@ -235,7 +256,7 @@ func New(cfg *config.Config) *Application {
 		cacheHandler:      cacheHandler,
 		monitoringHandler: monitoringHandler,
 		
-		// 🆕 NOUVEAU HANDLER
+		// 🆕 HANDLER
 		quotaHandler:      quotaHandler,
 	}
 
@@ -278,11 +299,12 @@ func (a *Application) setupMiddleware() {
 	a.router.StaticFile("/manifest.json", "./public/manifest.json")
 	a.router.StaticFile("/sw.js", "./public/sw.js")
 	a.router.StaticFile("/offline.html", "./public/offline.html")
-	a.router.Static("/uploads", "./uploads")
+	// ⭐ SUPPRIMÉ: Plus besoin de servir /uploads car tout est sur MinIO
+	// a.router.Static("/uploads", "./uploads")
 }
 
 func (a *Application) setupRoutes() {
-	// Health check avec info Redis + Twilio + Monétisation
+	// Health check avec info Redis + Twilio + Monétisation + MinIO
 	a.router.GET("/health", func(c *gin.Context) {
 		twilioInfo, _ := a.twilioSMSService.GetAccountInfo()
 		
@@ -292,6 +314,9 @@ func (a *Application) setupRoutes() {
 		if err := a.redis.Ping(ctx).Err(); err == nil {
 			redisStatus = "UP"
 		}
+
+		// ⭐ NOUVEAU: Test MinIO avec fonction dédiée
+		minioHealth := config.GetMinIOHealthCheck(a.minioClient, a.config.MinIO.BucketName)
 		
 		// 🆕 Info monétisation
 		monetizationInfo := gin.H{
@@ -311,11 +336,12 @@ func (a *Application) setupRoutes() {
 		c.JSON(http.StatusOK, gin.H{
 			"status":    "UP",
 			"service":   "SenMarket API",
-			"version":   "3.0.0", // 🆕 Version avec monétisation
+			"version":   "3.1.0", // ⭐ Version avec MinIO
 			"timestamp": time.Now().Format(time.RFC3339),
 			"checks": gin.H{
 				"database":      a.checkDatabase(),
 				"redis":         redisStatus,
+				"minio":         minioHealth["status"],        // ⭐ NOUVEAU
 				"twilio_sms":    twilioInfo["status"],
 				"monetization":  monetizationInfo["status"],
 			},
@@ -328,6 +354,15 @@ func (a *Application) setupRoutes() {
 				"quota_management":   true, // 🆕
 				"phase_monetization": true, // 🆕
 				"pricing_config":     true, // 🆕
+				"minio_storage":      true, // ⭐ NOUVEAU
+				"cloud_images":       true, // ⭐ NOUVEAU
+			},
+			"storage": gin.H{                       // ⭐ NOUVEAU
+				"provider":    "minio",
+				"bucket":      a.config.MinIO.BucketName,
+				"endpoint":    a.config.MinIO.Endpoint,
+				"ssl":         a.config.MinIO.UseSSL,
+				"health":      minioHealth,
 			},
 			"monetization": monetizationInfo,
 		})
@@ -343,6 +378,9 @@ func (a *Application) setupRoutes() {
 			// Stats Redis
 			ctx := context.Background()
 			totalKeys, _ := a.redis.DBSize(ctx).Result()
+
+			// ⭐ NOUVEAU: Stats MinIO détaillées
+			minioStats := config.GetMinIOHealthCheck(a.minioClient, a.config.MinIO.BucketName)
 			
 			// 🆕 Stats monétisation
 			monetizationStats := gin.H{}
@@ -351,19 +389,74 @@ func (a *Application) setupRoutes() {
 			}
 			
 			c.JSON(http.StatusOK, gin.H{
-				"message": "🇸🇳 SenMarket API v3.0 avec monétisation !",
+				"message": "🇸🇳 SenMarket API v3.1 avec MinIO !",
 				"env":     a.config.Env,
-				"version": "3.0.0",
+				"version": "3.1.0",
 				"redis": gin.H{
 					"connected":  true,
 					"total_keys": totalKeys,
 				},
+				"minio": minioStats, // ⭐ NOUVEAU
 				"sms": gin.H{
 					"provider":                "twilio_free",
 					"configured":              a.twilioSMSService.IsConfigured(),
 					"free_messages_remaining": twilioStats["free_messages_remaining"],
 				},
 				"monetization": monetizationStats, // 🆕
+			})
+		})
+
+		// ⭐ NOUVEAU: Endpoint MinIO status détaillé
+		api.GET("/storage/status", func(c *gin.Context) {
+			ctx := context.Background()
+			
+			buckets, err := a.minioClient.ListBuckets(ctx)
+			if err != nil {
+				c.JSON(http.StatusServiceUnavailable, gin.H{
+					"error": "MinIO non accessible",
+					"details": err.Error(),
+				})
+				return
+			}
+
+			// Informations sur le bucket principal
+			bucketInfo := gin.H{
+				"name": a.config.MinIO.BucketName,
+				"exists": false,
+			}
+
+			for _, bucket := range buckets {
+				if bucket.Name == a.config.MinIO.BucketName {
+					bucketInfo["exists"] = true
+					bucketInfo["created"] = bucket.CreationDate
+					break
+				}
+			}
+
+			// Compter les objets dans le bucket principal
+			objectCount := 0
+			objectCh := a.minioClient.ListObjects(ctx, a.config.MinIO.BucketName, minio.ListObjectsOptions{
+				Recursive: true,
+			})
+
+			for object := range objectCh {
+				if object.Err != nil {
+					break
+				}
+				objectCount++
+			}
+
+			c.JSON(http.StatusOK, gin.H{
+				"status": "connected",
+				"endpoint": a.config.MinIO.Endpoint,
+				"ssl": a.config.MinIO.UseSSL,
+				"total_buckets": len(buckets),
+				"main_bucket": bucketInfo,
+				"object_count": objectCount,
+				"config": gin.H{
+					"bucket_name": a.config.MinIO.BucketName,
+					"region": a.config.MinIO.Region,
+				},
 			})
 		})
 
@@ -495,7 +588,7 @@ func (a *Application) setupRoutes() {
 			paymentsProtected.GET("/my", a.paymentHandler.GetMyPayments)
 		}
 
-		// Routes images
+		// Routes images avec MinIO
 		images := api.Group("/images")
 		{
 			images.POST("/validate", a.imageHandler.ValidateImage)
@@ -508,6 +601,10 @@ func (a *Application) setupRoutes() {
 			imagesProtected.POST("/upload-multiple", a.imageHandler.UploadMultipleImages)
 			imagesProtected.DELETE("/delete", a.imageHandler.DeleteImage)
 			imagesProtected.GET("/info", a.imageHandler.GetImageInfo)
+			// ⭐ NOUVEAUX endpoints MinIO
+			imagesProtected.GET("/signed-url", a.imageHandler.GetSignedURL)
+			imagesProtected.GET("/list", a.imageHandler.ListImages)
+			imagesProtected.DELETE("/delete-prefix", a.imageHandler.DeleteByPrefix)
 		}
 
 		// Cache management (admin endpoints)
@@ -528,6 +625,8 @@ func (a *Application) setupRoutes() {
 				monitoring.GET("/cache/hit-ratio", a.monitoringHandler.GetCacheHitRatio)
 				monitoring.GET("/cache/top-keys", a.monitoringHandler.GetTopKeys)
 				monitoring.GET("/memory", a.monitoringHandler.GetMemoryUsage)
+				// ⭐ NOUVEAU: Monitoring MinIO
+				monitoring.GET("/minio", a.getMinIOMetrics)
 			}
 		}
 	}
@@ -552,6 +651,44 @@ func (a *Application) setupRoutes() {
 		}
 		c.JSON(http.StatusOK, gin.H{"data": regions})
 	})
+}
+
+// ⭐ NOUVEAU: Métriques MinIO détaillées
+func (a *Application) getMinIOMetrics(c *gin.Context) {
+	ctx := context.Background()
+	
+	// Utiliser la fonction dédiée pour les métriques
+	health := config.GetMinIOHealthCheck(a.minioClient, a.config.MinIO.BucketName)
+	
+	// Ajouter des métriques supplémentaires
+	if health["status"] == "up" {
+		// Compter les objets par dossier
+		folderStats := make(map[string]int)
+		
+		objectCh := a.minioClient.ListObjects(ctx, a.config.MinIO.BucketName, minio.ListObjectsOptions{
+			Recursive: true,
+		})
+
+		totalObjects := 0
+		for object := range objectCh {
+			if object.Err != nil {
+				break
+			}
+			
+			// Extraire le premier niveau du dossier
+			parts := strings.Split(object.Key, "/")
+			if len(parts) > 0 {
+				folder := parts[0]
+				folderStats[folder]++
+			}
+			totalObjects++
+		}
+		
+		health["total_objects"] = totalObjects
+		health["folder_stats"] = folderStats
+	}
+	
+	c.JSON(http.StatusOK, health)
 }
 
 func (a *Application) checkDatabase() string {
@@ -584,30 +721,55 @@ func (a *Application) warmupCache() {
 	}
 	
 	// Préchauffer quelques listings
-	if featured, err := a.listingService.GetFeaturedListings(6); err == nil {
-		log.Printf("✅ Cache featured listings: %d éléments", len(featured))
-	}
-	
-	// 🆕 Préchauffer la configuration de monétisation
-	if config, err := a.quotaService.GetGlobalConfig(); err == nil {
-		log.Printf("🎯 Config monétisation chargée: phase %s", config.GetCurrentPhase())
-	}
-	
-	// Vérifier le total des clés en cache
-	if totalKeys, err := a.redis.DBSize(ctx).Result(); err == nil {
-		log.Printf("🔴 Cache préchauffé: %d clés totales", totalKeys)
-	}
+   if featured, err := a.listingService.GetFeaturedListings(6); err == nil {
+   	log.Printf("✅ Cache featured listings: %d éléments", len(featured))
+   }
+   
+   // 🆕 Préchauffer la configuration de monétisation
+   if config, err := a.quotaService.GetGlobalConfig(); err == nil {
+   	log.Printf("🎯 Config monétisation chargée: phase %s", config.GetCurrentPhase())
+   }
+
+   // ⭐ NOUVEAU: Vérifier MinIO et afficher stats
+   minioHealth := config.GetMinIOHealthCheck(a.minioClient, a.config.MinIO.BucketName)
+   if minioHealth["status"] == "up" {
+   	log.Printf("📁 MinIO opérationnel: %d buckets", minioHealth["total_buckets"])
+   	if minioHealth["bucket_exists"] == true {
+   		log.Printf("✅ Bucket principal '%s' disponible", a.config.MinIO.BucketName)
+   	} else {
+   		log.Printf("⚠️ Bucket principal '%s' non trouvé", a.config.MinIO.BucketName)
+   	}
+   } else {
+   	log.Printf("❌ MinIO non accessible")
+   }
+   
+   // Vérifier le total des clés en cache
+   if totalKeys, err := a.redis.DBSize(ctx).Result(); err == nil {
+   	log.Printf("🔴 Cache préchauffé: %d clés totales", totalKeys)
+   }
+
+   log.Println("🎉 Préchauffage terminé - Tous les services prêts")
 }
 
 func (a *Application) Run() error {
-	port := a.config.Port
-	if port == "" {
-		port = "8080"
-	}
-	
-	log.Printf("🚀 SenMarket API v3.0 avec monétisation démarré sur le port %s", port)
-	log.Printf("🌐 Health check: http://localhost:%s/health", port)
-	log.Printf("🎯 Phase monétisation: http://localhost:%s/api/v1/quota/current-phase", port)
-	
-	return a.router.Run(":" + port)
+   port := a.config.Port
+   if port == "" {
+   	port = "8080"
+   }
+   
+   log.Printf("🚀 SenMarket API v3.1 avec MinIO démarré sur le port %s", port)
+   log.Printf("🌐 Health check: http://localhost:%s/health", port)
+   log.Printf("🎯 Phase monétisation: http://localhost:%s/api/v1/quota/current-phase", port)
+   log.Printf("📁 MinIO status: http://localhost:%s/api/v1/storage/status", port)
+   log.Printf("🎛️ MinIO Console: http://localhost:9001 (senmarket/senmarket123)")
+   
+   // Afficher un résumé des services
+   log.Println("📊 Services actifs:")
+   log.Println("   ✅ PostgreSQL - Base de données")
+   log.Println("   ✅ Redis - Cache et sessions")
+   log.Println("   ✅ MinIO - Stockage d'images cloud")
+   log.Println("   ✅ Twilio - SMS et vérifications")
+   log.Println("   ✅ Quotas - Système de monétisation")
+   
+   return a.router.Run(":" + port)
 }
