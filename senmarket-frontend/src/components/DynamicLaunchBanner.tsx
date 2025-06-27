@@ -1,4 +1,4 @@
-// src/components/DynamicLaunchBanner.tsx
+// src/components/DynamicLaunchBanner.tsx - VERSION CORRIGÉE
 'use client'
 
 import React, { useState, useEffect } from 'react';
@@ -19,7 +19,42 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useLaunchBanner } from '@/hooks/useQuota';
-import { useQuotaStore } from '@/stores/quota.store';
+
+// ✅ CORRECTION MAJEURE : Gérer l'état local de la bannière
+const useBannerState = () => {
+  const [isDismissed, setIsDismissed] = useState(false);
+
+  // Vérifier si la bannière a été fermée dans localStorage
+  useEffect(() => {
+    try {
+      const dismissed = localStorage.getItem('senmarket-banner-dismissed');
+      if (dismissed === 'true') {
+        setIsDismissed(true);
+      }
+    } catch (error) {
+      // Ignore localStorage errors
+    }
+  }, []);
+
+  const dismissBanner = () => {
+    setIsDismissed(true);
+    try {
+      localStorage.setItem('senmarket-banner-dismissed', 'true');
+    } catch (error) {
+      // Ignore localStorage errors
+    }
+  };
+
+  const shouldShowBanner = () => {
+    return !isDismissed;
+  };
+
+  return {
+    shouldShowBanner,
+    dismissBanner,
+    isDismissed
+  };
+};
 
 interface CountdownProps {
   endDate: string;
@@ -149,24 +184,26 @@ const LaunchPhaseBanner: React.FC<{
             )}
           </p>
 
-          {/* Compteur à rebours */}
-          <motion.div 
-            className="bg-black/20 rounded-lg p-4 mb-4 backdrop-blur-sm"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.4 }}
-          >
-            <div className="flex items-center justify-center gap-2 mb-2">
-              <Clock className="h-5 w-5 text-yellow-300" />
-              <span className="text-sm font-medium">
-                {isEndingSoon ? "Plus que :" : "Temps restant :"}
-              </span>
-            </div>
-            
-            <CountdownTimer 
-              endDate={phaseData.launch_end_date}
-            />
-          </motion.div>
+          {/* Compteur à rebours si date disponible */}
+          {phaseData?.launch_end_date && (
+            <motion.div 
+              className="bg-black/20 rounded-lg p-4 mb-4 backdrop-blur-sm"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.4 }}
+            >
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <Clock className="h-5 w-5 text-yellow-300" />
+                <span className="text-sm font-medium">
+                  {isEndingSoon ? "Plus que :" : "Temps restant :"}
+                </span>
+              </div>
+              
+              <CountdownTimer 
+                endDate={phaseData.launch_end_date}
+              />
+            </motion.div>
+          )}
 
           {/* Avantages */}
           <motion.div 
@@ -274,14 +311,11 @@ const CreditPhaseBanner: React.FC<{
   );
 };
 
-// Bannière phase payante
-const PaidPhaseBanner: React.FC<{
-  pricingData: any;
-  onDismiss: () => void;
-}> = ({ pricingData, onDismiss }) => {
+// Bannière simple par défaut
+const DefaultBanner: React.FC<{ onDismiss: () => void }> = ({ onDismiss }) => {
   return (
     <motion.div 
-      className="bg-gradient-to-r from-gray-700 via-gray-800 to-black text-white mb-8 rounded-xl overflow-hidden shadow-2xl relative"
+      className="bg-gradient-to-r from-green-500 via-teal-500 to-cyan-500 text-white mb-8 rounded-xl overflow-hidden shadow-2xl relative"
       initial={{ opacity: 0, y: -20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
@@ -289,7 +323,7 @@ const PaidPhaseBanner: React.FC<{
     >
       <button
         onClick={onDismiss}
-        className="absolute top-4 right-4 z-20 p-2 rounded-full bg-white/20 hover:bg-white/40 transition-colors"
+        className="absolute top-4 right-4 z-20 p-2 rounded-full bg-black/20 hover:bg-black/40 transition-colors"
       >
         <X className="h-4 w-4" />
       </button>
@@ -297,33 +331,29 @@ const PaidPhaseBanner: React.FC<{
       <div className="relative z-10 p-6 md:p-8">
         <div className="text-center">
           <motion.div className="flex items-center justify-center gap-3 mb-4">
-            <CheckCircle className="h-8 w-8 text-green-400" />
+            <Gift className="h-8 w-8 text-yellow-300" />
             <h2 className="text-2xl md:text-3xl font-bold">
-              ✨ Plateforme professionnelle
+              🎉 Phase de lancement spéciale !
             </h2>
-            <Star className="h-8 w-8 text-yellow-400" />
+            <Star className="h-8 w-8 text-yellow-300" />
           </motion.div>
 
           <p className="text-lg mb-6">
-            Publication d'annonce : <strong>{pricingData?.standard_price || 200} FCFA</strong>
+            Profitez des <strong>annonces gratuites illimitées</strong> pendant notre période de lancement !
           </p>
 
-          {/* Options premium */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-            <div className="bg-white/10 rounded-lg p-3">
-              <div className="font-semibold">Pack 5 annonces</div>
-              <div className="text-lg">{pricingData?.pack_5_price || 800} FCFA</div>
-              <div className="text-xs text-green-300">-{pricingData?.pack_5_discount || 20}%</div>
+            <div className="flex items-center justify-center gap-2">
+              <Zap className="h-4 w-4 text-yellow-300" />
+              <span>Annonces illimitées</span>
             </div>
-            <div className="bg-white/10 rounded-lg p-3">
-              <div className="font-semibold">Pack 10 annonces</div>
-              <div className="text-lg">{pricingData?.pack_10_price || 1500} FCFA</div>
-              <div className="text-xs text-green-300">-{pricingData?.pack_10_discount || 25}%</div>
+            <div className="flex items-center justify-center gap-2">
+              <Star className="h-4 w-4 text-yellow-300" />
+              <span>Toutes les fonctionnalités</span>
             </div>
-            <div className="bg-white/10 rounded-lg p-3">
-              <div className="font-semibold">Options premium</div>
-              <div className="text-sm">Boost +{pricingData?.premium_boost_price || 100} FCFA</div>
-              <div className="text-sm">Couleur +{pricingData?.featured_color_price || 50} FCFA</div>
+            <div className="flex items-center justify-center gap-2">
+              <Gift className="h-4 w-4 text-yellow-300" />
+              <span>Aucun frais caché</span>
             </div>
           </div>
         </div>
@@ -332,40 +362,49 @@ const PaidPhaseBanner: React.FC<{
   );
 };
 
-// Composant principal
+// ✅ COMPOSANT PRINCIPAL CORRIGÉ
 export const DynamicLaunchBanner: React.FC = () => {
+  // ✅ Utiliser le hook local au lieu du store défaillant
+  const { shouldShowBanner, dismissBanner } = useBannerState();
+  
+  // Hook pour les données de phase (avec gestion d'erreur)
+  const bannerHook = useLaunchBanner();
   const { 
     isVisible, 
     isEndingSoon, 
     isCritical, 
     phaseData, 
     statusData, 
-    isLoading 
-  } = useLaunchBanner();
-
-  const { shouldShowBanner, dismissBanner } = useQuotaStore();
+    isLoading,
+    error
+  } = bannerHook || {};
   
-  // Ne pas afficher si explicitement fermée
+  // ✅ Ne pas afficher si explicitement fermée
   if (!shouldShowBanner()) {
     return null;
   }
 
-  // Ne pas afficher pendant le chargement
+  // ✅ Ne pas afficher pendant le chargement
   if (isLoading) {
     return null;
   }
 
-  // Déterminer quelle bannière afficher
-  const currentPhase = phaseData?.current_phase || 'unknown';
+  // ✅ En cas d'erreur, afficher bannière simple
+  if (error) {
+    return <DefaultBanner onDismiss={dismissBanner} />;
+  }
+
+  // ✅ Déterminer quelle bannière afficher
+  const currentPhase = phaseData?.current_phase || 'launch';
 
   return (
     <AnimatePresence mode="wait">
-      {currentPhase === 'launch' && isVisible && (
+      {currentPhase === 'launch' && (isVisible || !phaseData) && (
         <LaunchPhaseBanner
           key="launch-banner"
-          phaseData={phaseData}
+          phaseData={phaseData || {}}
           onDismiss={dismissBanner}
-          isEndingSoon={isEndingSoon || isCritical}
+          isEndingSoon={isEndingSoon || isCritical || false}
         />
       )}
       
@@ -377,10 +416,10 @@ export const DynamicLaunchBanner: React.FC = () => {
         />
       )}
       
-      {currentPhase === 'paid_system' && (
-        <PaidPhaseBanner
-          key="paid-banner"
-          pricingData={phaseData}
+      {/* Fallback - afficher bannière simple si aucune autre condition */}
+      {!phaseData && !isLoading && !error && (
+        <DefaultBanner
+          key="default-banner"
           onDismiss={dismissBanner}
         />
       )}
@@ -390,16 +429,16 @@ export const DynamicLaunchBanner: React.FC = () => {
 
 // Hook pour utiliser la bannière dans d'autres composants
 export const useDynamicBanner = () => {
-  const { phaseData, statusData, isLoading } = useLaunchBanner();
-  const { shouldShowBanner, dismissBanner } = useQuotaStore();
-
+  const { shouldShowBanner, dismissBanner } = useBannerState();
+  const bannerHook = useLaunchBanner();
+  
   return {
     shouldShow: shouldShowBanner(),
-    currentPhase: phaseData?.current_phase || 'unknown',
-    isLoading,
+    currentPhase: bannerHook?.phaseData?.current_phase || 'unknown',
+    isLoading: bannerHook?.isLoading || false,
     dismiss: dismissBanner,
-    phaseData,
-    statusData,
+    phaseData: bannerHook?.phaseData,
+    statusData: bannerHook?.statusData,
   };
 };
 

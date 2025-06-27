@@ -1,38 +1,12 @@
-// src/services/listings.service.ts - VERSION MISE À JOUR AVEC QUOTAS
-import { api } from './api';
+// src/lib/api/services/listings.service.ts - VERSION CORRIGÉE ALIGNÉE BACKEND
+import { apiClient } from '../client';
+import { ApiResponse, Listing } from '../types';
 
-// Types existants (gardés pour compatibilité)
-export interface Listing {
-  id: string;
-  title: string;
-  description: string;
-  price: number;
-  currency: string;
-  category_id: string;
-  region: string;
-  images: string[];
-  status: 'draft' | 'active' | 'sold' | 'expired';
-  views_count: number;
-  is_featured: boolean;
-  expires_at: string;
-  created_at: string;
-  updated_at: string;
-  user: {
-    id: string;
-    first_name: string;
-    last_name: string;
-    phone: string;
-    region: string;
-    is_verified: boolean;
-  };
-  category: {
-    id: string;
-    name: string;
-    slug: string;
-    icon: string;
-  };
-}
+// ============================================
+// INTERFACES ALIGNÉES AVEC VOTRE BACKEND GO
+// ============================================
 
+// ✅ Aligné avec services.CreateListingRequest (backend Go)
 export interface CreateListingRequest {
   title: string;
   description: string;
@@ -41,8 +15,10 @@ export interface CreateListingRequest {
   region: string;
   images: string[];
   phone: string;
+  featured?: boolean; // Optionnel, backend l'a
 }
 
+// ✅ Aligné avec services.UpdateListingRequest
 export interface UpdateListingRequest {
   title?: string;
   description?: string;
@@ -52,7 +28,7 @@ export interface UpdateListingRequest {
   status?: string;
 }
 
-// 🆕 NOUVEAUX TYPES POUR LES QUOTAS
+// ✅ Type pour l'éligibilité (utilisera le service quota maintenant)
 export interface ListingEligibilityResponse {
   can_create_free: boolean;
   requires_payment: boolean;
@@ -74,6 +50,7 @@ export interface ListingEligibilityResponse {
   };
 }
 
+// ✅ Réponse création basée sur votre listing_handler.go
 export interface CreateListingResponse {
   success: boolean;
   data: Listing;
@@ -89,6 +66,7 @@ export interface CreateListingResponse {
   };
 }
 
+// ✅ Réponse mes annonces avec quota (handler.GetMyListings)
 export interface MyListingsResponse {
   success: boolean;
   data: {
@@ -107,10 +85,11 @@ export interface MyListingsResponse {
       draft_listings: number;
       expired_listings: number;
     };
-    quota_status: any; // 🆕 Statut des quotas inclus
+    quota_status: any;
   };
 }
 
+// ✅ Réponse listings standard
 export interface ListingsResponse {
   success: boolean;
   data: {
@@ -132,157 +111,196 @@ export interface SearchResponse extends ListingsResponse {
   };
 }
 
-// Filtres pour les annonces
+// ✅ Filtres alignés avec services.ListingQuery
 export interface ListingFilters {
   category_id?: string;
   region?: string;
   min_price?: number;
   max_price?: number;
   search?: string;
-  sort?: 'newest' | 'oldest' | 'price_asc' | 'price_desc' | 'views';
+  sort?: 'date' | 'price_asc' | 'price_desc' | 'views';
   page?: number;
   limit?: number;
+  user_id?: string;
+  status?: string;
 }
 
-class ListingsService {
-  private baseUrl = '/api/v1/listings';
+// ============================================
+// SERVICE CLASS ALIGNÉ AVEC VOS ENDPOINTS
+// ============================================
 
-  // 🆕 NOUVELLE MÉTHODE : Vérifier l'éligibilité avant création
+export class ListingsService {
+  
+  // ✅ CORRECTION MAJEURE : Utiliser le service quota pour l'éligibilité
+  // Au lieu de /listings/check-eligibility, on utilise /quota/check
   async checkEligibility(): Promise<ListingEligibilityResponse> {
-    try {
-      const response = await api.get(`${this.baseUrl}/check-eligibility`);
-      return response.data.data;
-    } catch (error) {
-      console.error('Erreur vérification éligibilité:', error);
-      throw error;
-    }
+    // Import dynamic pour éviter les dépendances circulaires
+    const { quotaService } = await import('./quota.service');
+    return quotaService.checkEligibility();
   }
 
-  // 🆕 MÉTHODE MODIFIÉE : Créer une annonce avec gestion des quotas
+  // ✅ Endpoint exact : POST /listings (ListingHandler.CreateListing)
   async createListing(data: CreateListingRequest): Promise<CreateListingResponse> {
-    try {
-      console.log('📝 Création annonce avec quotas:', data);
-      
-      const response = await api.post(this.baseUrl, data);
-      const result = response.data as CreateListingResponse;
-      
-      console.log('✅ Réponse création:', result);
-      
-      // Log selon le type de publication
-      if (result.status === 'published_free') {
-        console.log('🎉 Annonce publiée GRATUITEMENT !');
-      } else if (result.status === 'draft_payment_required') {
-        console.log('💳 Annonce en brouillon - Paiement requis');
-      }
-      
-      return result;
-    } catch (error: any) {
-      console.error('❌ Erreur création annonce:', error);
-      
-      // Gestion spécifique des erreurs de quota
-      if (error.response?.status === 403) {
-        const errorData = error.response.data;
-        if (errorData.error === 'Quota d\'annonces gratuites épuisé') {
-          throw new Error(`Quota épuisé: ${errorData.details}`);
-        }
-      }
-      
-      throw error;
+    console.log('📝 Création annonce avec quotas:', data);
+    
+    const response = await apiClient.post<CreateListingResponse>('/listings', data);
+    const result = response.data;
+    
+    console.log('✅ Réponse création:', result);
+    
+    // Log selon le type de publication
+    if (result.status === 'published_free') {
+      console.log('🎉 Annonce publiée GRATUITEMENT !');
+    } else if (result.status === 'draft_payment_required') {
+      console.log('💳 Annonce en brouillon - Paiement requis');
     }
+    
+    return result;
   }
 
-  // 🆕 NOUVELLE MÉTHODE : Publier une annonce en brouillon après paiement
+  // ✅ Endpoint exact : POST /listings/{id}/publish
   async publishListing(listingId: string): Promise<{ 
     success: boolean; 
     message: string; 
     data: { listing_id: string; status: string; published_at: string } 
   }> {
-    try {
-      const response = await api.post(`${this.baseUrl}/${listingId}/publish`);
-      return response.data;
-    } catch (error) {
-      console.error('Erreur publication annonce:', error);
-      throw error;
-    }
+    const response = await apiClient.post(`/listings/${listingId}/publish`);
+    return response.data;
   }
 
-  // 🆕 MÉTHODE MODIFIÉE : Récupérer mes annonces avec statut des quotas
+  // ✅ Endpoint exact : GET /listings/my (ListingHandler.GetMyListings)
   async getMyListings(page: number = 1, limit: number = 20): Promise<MyListingsResponse> {
-    try {
-      const response = await api.get(`${this.baseUrl}/my`, {
-        params: { page, limit }
-      });
-      
-      return response.data;
-    } catch (error) {
-      console.error('Erreur récupération mes annonces:', error);
-      throw error;
-    }
+    const response = await apiClient.get<MyListingsResponse>('/listings/my', {
+      params: { page, limit }
+    });
+    
+    return response.data;
   }
 
-  // Méthodes existantes (inchangées)
+  // ✅ Endpoint exact : GET /listings (ListingHandler.GetListings)
   async getListings(filters: ListingFilters = {}): Promise<ListingsResponse> {
-    try {
-      const response = await api.get(this.baseUrl, { params: filters });
-      return response.data;
-    } catch (error) {
-      console.error('Erreur récupération annonces:', error);
-      throw error;
-    }
+    const response = await apiClient.get<ListingsResponse>('/listings', { 
+      params: filters 
+    });
+    return response.data;
   }
 
+  // ✅ Endpoint exact : GET /listings/{id} (ListingHandler.GetListing)
   async getListing(id: string): Promise<Listing> {
-    try {
-      const response = await api.get(`${this.baseUrl}/${id}`);
-      return response.data.data;
-    } catch (error) {
-      console.error('Erreur récupération annonce:', error);
-      throw error;
-    }
+    const response = await apiClient.get<ApiResponse<Listing>>(`/listings/${id}`);
+    return response.data.data;
   }
 
+  // ✅ Endpoint exact : PUT /listings/{id} (ListingHandler.UpdateListing)
   async updateListing(id: string, data: UpdateListingRequest): Promise<Listing> {
-    try {
-      const response = await api.put(`${this.baseUrl}/${id}`, data);
-      return response.data.data;
-    } catch (error) {
-      console.error('Erreur mise à jour annonce:', error);
-      throw error;
-    }
+    const response = await apiClient.put<ApiResponse<Listing>>(`/listings/${id}`, data);
+    return response.data.data;
   }
 
+  // ✅ Endpoint exact : DELETE /listings/{id} (ListingHandler.DeleteListing)
   async deleteListing(id: string): Promise<void> {
-    try {
-      await api.delete(`${this.baseUrl}/${id}`);
-    } catch (error) {
-      console.error('Erreur suppression annonce:', error);
-      throw error;
-    }
+    await apiClient.delete(`/listings/${id}`);
   }
 
-  async searchListings(query: string, page: number = 1, limit: number = 20): Promise<SearchResponse> {
-    try {
-      const response = await api.get(`${this.baseUrl}/search`, {
-        params: { q: query, page, limit }
-      });
-      return response.data;
-    } catch (error) {
-      console.error('Erreur recherche annonces:', error);
-      throw error;
-    }
+  // ✅ Endpoint exact : GET /listings/search (ListingHandler.SearchListings)
+  async searchListings(query: string, filters: Omit<ListingFilters, 'search'> = {}): Promise<SearchResponse> {
+    const response = await apiClient.get<SearchResponse>('/listings/search', {
+      params: { 
+        q: query, 
+        ...filters 
+      }
+    });
+    return response.data;
   }
 
-  async getFeaturedListings(): Promise<Listing[]> {
-    try {
-      const response = await api.get(`${this.baseUrl}/featured`);
-      return response.data.data;
-    } catch (error) {
-      console.error('Erreur récupération annonces featured:', error);
-      throw error;
-    }
+  // ✅ Endpoint exact : GET /listings/featured (ListingHandler.GetFeaturedListings)
+  async getFeaturedListings(limit: number = 6): Promise<Listing[]> {
+    const response = await apiClient.get<ApiResponse<Listing[]>>('/listings/featured', {
+      params: { limit }
+    });
+    return response.data.data;
   }
 
-  // 🆕 MÉTHODES UTILITAIRES POUR LES QUOTAS
+  // ✅ Endpoint exact : GET /listings/{id}/similar (ListingHandler.GetSimilarListings)
+  async getSimilarListings(listingId: string, limit: number = 4): Promise<Listing[]> {
+    const response = await apiClient.get<ApiResponse<Listing[]>>(`/listings/${listingId}/similar`, {
+      params: { limit }
+    });
+    return response.data.data;
+  }
+
+  // ✅ Endpoint exact : POST /listings/{id}/view (ListingHandler.MarkAsViewed)
+  async markAsViewed(id: string): Promise<void> {
+    await apiClient.post(`/listings/${id}/view`);
+  }
+
+  // ✅ NOUVELLES MÉTHODES ALIGNÉES AVEC VOTRE BACKEND
+
+  // Dupliquer une annonce
+  async duplicateListing(listingId: string): Promise<Listing> {
+    const response = await apiClient.post<ApiResponse<Listing>>(`/listings/${listingId}/duplicate`);
+    return response.data.data;
+  }
+
+  // Archiver une annonce
+  async archiveListing(listingId: string): Promise<void> {
+    await apiClient.post(`/listings/${listingId}/archive`);
+  }
+
+  // Restaurer une annonce archivée
+  async restoreListing(listingId: string): Promise<Listing> {
+    const response = await apiClient.post<ApiResponse<Listing>>(`/listings/${listingId}/restore`);
+    return response.data.data;
+  }
+
+  // Signaler une annonce
+  async reportListing(listingId: string, reason: string, description?: string): Promise<void> {
+    await apiClient.post(`/listings/${listingId}/report`, {
+      reason,
+      description
+    });
+  }
+
+  // Renouveler une annonce expirée
+  async renewListing(listingId: string): Promise<{
+    success: boolean;
+    payment_required: boolean;
+    payment_url?: string;
+    listing?: Listing;
+  }> {
+    const response = await apiClient.post(`/listings/${listingId}/renew`);
+    return response.data;
+  }
+
+  // Promouvoir une annonce (featured, boost)
+  async promoteListing(listingId: string, promotionType: 'featured' | 'boost'): Promise<{
+    success: boolean;
+    payment_required: boolean;
+    payment_url?: string;
+    listing?: Listing;
+  }> {
+    const response = await apiClient.post(`/listings/${listingId}/promote`, {
+      promotion_type: promotionType
+    });
+    return response.data;
+  }
+
+  // Récupérer les statistiques des annonces
+  async getListingsStats(): Promise<{
+    total_listings: number;
+    active_listings: number;
+    featured_listings: number;
+    categories_count: number;
+    regions_count: number;
+    total_views: number;
+  }> {
+    const response = await apiClient.get<ApiResponse<any>>('/listings/stats');
+    return response.data.data;
+  }
+
+  // ============================================
+  // MÉTHODES UTILITAIRES POUR LE FRONTEND
+  // ============================================
 
   // Vérifier si une annonce peut être créée gratuitement
   async canCreateFree(): Promise<boolean> {
@@ -316,7 +334,7 @@ class ListingsService {
       return {
         isFree: false,
         cost: 200,
-        currency: 'XOF',
+        currency: 'FCFA',
         reason: 'Erreur de vérification',
       };
     }
@@ -339,7 +357,7 @@ class ListingsService {
     
     if (response.status === 'draft_payment_required') {
       const amount = response.payment_required?.amount || 200;
-      const currency = response.payment_required?.currency || 'XOF';
+      const currency = response.payment_required?.currency || 'FCFA';
       
       return {
         title: '📝 Annonce sauvegardée',
@@ -402,9 +420,9 @@ class ListingsService {
     );
   }
 
-  // Formater le prix pour l'affichage
-  formatPrice(price: number, currency: string = 'XOF'): string {
-    return `${Math.round(price).toLocaleString()} ${currency}`;
+  // Formater le prix pour l'affichage (FCFA Sénégal)
+  formatPrice(price: number, currency: string = 'FCFA'): string {
+    return `${Math.round(price).toLocaleString('fr-FR')} ${currency}`;
   }
 
   // Vérifier si une annonce expire bientôt
@@ -449,6 +467,8 @@ class ListingsService {
   }
 }
 
-// Instance singleton
+// ============================================
+// INSTANCE SINGLETON
+// ============================================
 export const listingsService = new ListingsService();
 export default listingsService;

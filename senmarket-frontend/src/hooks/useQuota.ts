@@ -1,17 +1,22 @@
-// src/hooks/useQuota.ts
+// src/hooks/useQuota.ts - VERSION CORRIGÉE AVEC IMPORTS ALIGNÉS
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import quotaService, {
-  QuotaStatus,
-  EligibilityCheck,
-  QuotaSummary,
-  QuotaHistory,
-  CurrentPhase,
-  PricingInfo,
-  PlatformStats
-} from '@/services/quota.service';
 
-// Clés de cache pour React Query
+// ✅ CORRECTION MAJEURE : Import depuis le bon chemin
+import { 
+  quotaService,
+  type QuotaStatus,
+  type EligibilityCheck,
+  type QuotaSummary,
+  type QuotaHistory,
+  type CurrentPhase,
+  type PlatformStats
+} from '@/lib/api';
+
+// ============================================
+// CLÉS DE CACHE POUR REACT QUERY
+// ============================================
+
 export const QUOTA_QUERY_KEYS = {
   all: ['quota'] as const,
   status: () => [...QUOTA_QUERY_KEYS.all, 'status'] as const,
@@ -19,9 +24,12 @@ export const QUOTA_QUERY_KEYS = {
   summary: () => [...QUOTA_QUERY_KEYS.all, 'summary'] as const,
   history: (months?: number) => [...QUOTA_QUERY_KEYS.all, 'history', months] as const,
   currentPhase: () => [...QUOTA_QUERY_KEYS.all, 'current-phase'] as const,
-  pricing: () => [...QUOTA_QUERY_KEYS.all, 'pricing'] as const,
   platformStats: () => [...QUOTA_QUERY_KEYS.all, 'platform-stats'] as const,
 };
+
+// ============================================
+// HOOKS PRINCIPAUX
+// ============================================
 
 // Hook pour obtenir le statut complet des quotas
 export function useQuotaStatus() {
@@ -81,18 +89,6 @@ export function useCurrentPhase() {
   });
 }
 
-// Hook pour les informations de tarification (public)
-export function usePricingInfo() {
-  return useQuery({
-    queryKey: QUOTA_QUERY_KEYS.pricing(),
-    queryFn: quotaService.getPricingInfo,
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    gcTime: 60 * 60 * 1000, // 1 heure
-    retry: 2,
-    refetchOnWindowFocus: false,
-  });
-}
-
 // Hook pour les statistiques de la plateforme
 export function usePlatformStats() {
   return useQuery({
@@ -104,6 +100,10 @@ export function usePlatformStats() {
     enabled: false, // Activé manuellement (pour admin)
   });
 }
+
+// ============================================
+// HOOKS MUTATIONS
+// ============================================
 
 // Hook mutation pour mettre à jour la phase utilisateur
 export function useUpdateUserPhase() {
@@ -127,26 +127,9 @@ export function useUpdateUserPhase() {
   });
 }
 
-// Hook mutation pour nettoyer les quotas
-export function useCleanupQuotas() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: quotaService.cleanupQuotas,
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: QUOTA_QUERY_KEYS.history() });
-      
-      toast.success('Nettoyage effectué', {
-        description: data.message,
-      });
-    },
-    onError: (error: any) => {
-      toast.error('Erreur nettoyage', {
-        description: error?.response?.data?.error || 'Une erreur est survenue',
-      });
-    },
-  });
-}
+// ============================================
+// HOOKS COMPOSÉS
+// ============================================
 
 // Hook composé pour vérifier l'éligibilité avant création d'annonce
 export function useCreateListingEligibility() {
@@ -202,11 +185,9 @@ export function useLaunchBanner() {
 export function useQuotaDashboard() {
   const statusQuery = useQuotaStatus();
   const historyQuery = useQuotaHistory(6);
-  const pricingQuery = usePricingInfo();
 
   const status = statusQuery.data;
   const history = historyQuery.data;
-  const pricing = pricingQuery.data;
 
   // Calculs dérivés
   const quotaUsagePercent = status ? quotaService.getQuotaUsagePercent(status) : 0;
@@ -214,20 +195,19 @@ export function useQuotaDashboard() {
   const isInLaunchPhase = status ? quotaService.isInLaunchPhase(status) : false;
 
   // Statistiques historiques
-  const totalListingsCreated = history?.summary.total_listings ?? 0;
-  const totalFreeUsed = history?.summary.total_free_used ?? 0;
-  const totalPaidUsed = history?.summary.total_paid ?? 0;
+  const totalListingsCreated = history?.summary?.total_listings ?? 0;
+  const totalFreeUsed = history?.summary?.total_free_used ?? 0;
+  const totalPaidUsed = history?.summary?.total_paid ?? 0;
 
   return {
     // États des requêtes
-    isLoading: statusQuery.isLoading || historyQuery.isLoading || pricingQuery.isLoading,
-    isError: statusQuery.isError || historyQuery.isError || pricingQuery.isError,
-    error: statusQuery.error || historyQuery.error || pricingQuery.error,
+    isLoading: statusQuery.isLoading || historyQuery.isLoading,
+    isError: statusQuery.isError || historyQuery.isError,
+    error: statusQuery.error || historyQuery.error,
 
     // Données principales
     status,
     history,
-    pricing,
 
     // Données calculées
     quotaUsagePercent,
@@ -242,16 +222,19 @@ export function useQuotaDashboard() {
     getStatusMessage: () => status ? quotaService.getStatusMessage(status) : '',
     getUrgencyMessage: () => status ? quotaService.getUrgencyMessage(status) : null,
     getRecommendations: () => status ? quotaService.getActionRecommendations(status) : [],
-    formatPrice: (price: number) => quotaService.formatPrice(price, pricing?.currency),
+    formatPrice: (price: number, currency: string = 'FCFA') => quotaService.formatPrice(price, currency),
 
     // Actions
     refetchAll: () => {
       statusQuery.refetch();
       historyQuery.refetch();
-      pricingQuery.refetch();
     },
   };
 }
+
+// ============================================
+// HOOKS UTILITAIRES
+// ============================================
 
 // Hook pour invalider les caches de quota (après création d'annonce)
 export function useInvalidateQuotaCache() {
@@ -272,6 +255,10 @@ export function useInvalidateQuotaCache() {
     },
     invalidateAll: () => {
       queryClient.invalidateQueries({ queryKey: QUOTA_QUERY_KEYS.all });
+      
+      // ✅ Invalider aussi les caches des listings qui incluent quota_status
+      queryClient.invalidateQueries({ queryKey: ['listings', 'my'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
   };
 }
@@ -302,23 +289,108 @@ export function usePrefetchQuotaData() {
         staleTime: 60 * 1000,
       });
     },
+    prefetchAll: () => {
+      queryClient.prefetchQuery({
+        queryKey: QUOTA_QUERY_KEYS.status(),
+        queryFn: quotaService.getQuotaStatus,
+        staleTime: 30 * 1000,
+      });
+      queryClient.prefetchQuery({
+        queryKey: QUOTA_QUERY_KEYS.eligibility(),
+        queryFn: quotaService.checkEligibility,
+        staleTime: 15 * 1000,
+      });
+      queryClient.prefetchQuery({
+        queryKey: QUOTA_QUERY_KEYS.currentPhase(),
+        queryFn: quotaService.getCurrentPhase,
+        staleTime: 60 * 1000,
+      });
+    },
   };
 }
 
-// Export par défaut de tous les hooks principaux
+// ============================================
+// HOOKS SIMPLIFIÉS POUR LES CAS COURANTS
+// ============================================
+
+// Hook simple pour vérifier si l'utilisateur peut créer gratuitement
+export function useCanCreateFree() {
+  const { data, isLoading, error } = useEligibilityCheck();
+  
+  return {
+    canCreateFree: data?.can_create_free ?? false,
+    isLoading,
+    error,
+    data
+  };
+}
+
+// Hook simple pour obtenir le prix de création
+export function useCreationPrice() {
+  const { data, isLoading, error } = useEligibilityCheck();
+  
+  return {
+    price: data?.standard_price ?? 200,
+    currency: data?.currency ?? 'FCFA',
+    isFree: data?.can_create_free ?? false,
+    isLoading,
+    error,
+    formattedPrice: data ? quotaService.formatPrice(data.standard_price, data.currency) : '200 FCFA'
+  };
+}
+
+// Hook simple pour les notifications de quota
+export function useQuotaNotifications() {
+  const { data: status } = useQuotaStatus();
+  
+  const notifications = [];
+  
+  if (status) {
+    const urgencyMessage = quotaService.getUrgencyMessage(status);
+    if (urgencyMessage) {
+      notifications.push({
+        type: 'warning' as const,
+        message: urgencyMessage,
+        action: 'create_listing'
+      });
+    }
+    
+    const recommendations = quotaService.getActionRecommendations(status);
+    recommendations.forEach(rec => {
+      notifications.push({
+        type: rec.priority === 'high' ? 'error' : 'info' as const,
+        message: rec.message,
+        action: rec.action
+      });
+    });
+  }
+  
+  return {
+    notifications,
+    hasNotifications: notifications.length > 0,
+    criticalNotifications: notifications.filter(n => n.type === 'error'),
+    hasCritical: notifications.some(n => n.type === 'error')
+  };
+}
+
+// ============================================
+// EXPORT PAR DÉFAUT
+// ============================================
+
 export default {
   useQuotaStatus,
   useEligibilityCheck,
   useQuotaSummary,
   useQuotaHistory,
   useCurrentPhase,
-  usePricingInfo,
   usePlatformStats,
   useUpdateUserPhase,
-  useCleanupQuotas,
   useCreateListingEligibility,
   useLaunchBanner,
   useQuotaDashboard,
   useInvalidateQuotaCache,
   usePrefetchQuotaData,
+  useCanCreateFree,
+  useCreationPrice,
+  useQuotaNotifications,
 };

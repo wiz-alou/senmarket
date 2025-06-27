@@ -1,379 +1,304 @@
-// src/stores/quota.store.ts
+// src/stores/quota.store.ts - VERSION CORRIGÉE AVEC IMPORTS ALIGNÉS
+
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
-import { immer } from 'zustand/middleware/immer';
-import quotaService, {
-  QuotaStatus,
-  EligibilityCheck,
-  CurrentPhase,
-  PricingInfo,
-} from '@/services/quota.service';
 
-// Types pour le store
+// ✅ CORRECTION MAJEURE : Import depuis le bon chemin
+import { 
+  quotaService,
+  type QuotaStatus,
+  type EligibilityCheck,
+  type CurrentPhase
+} from '@/lib/api';
+
+// ============================================
+// TYPES POUR LE STORE
+// ============================================
+
 interface QuotaState {
-  // Données de quota
-  quotaStatus: QuotaStatus | null;
+  // État du quota
+  status: QuotaStatus | null;
   eligibility: EligibilityCheck | null;
   currentPhase: CurrentPhase | null;
-  pricingInfo: PricingInfo | null;
   
   // États de chargement
   isLoading: boolean;
+  isLoadingStatus: boolean;
   isLoadingEligibility: boolean;
   isLoadingPhase: boolean;
   
-  // Cache et timestamps
-  lastFetched: number | null;
-  eligibilityLastFetched: number | null;
-  phaseLastFetched: number | null;
-  
-  // États UI
-  showUrgencyBanner: boolean;
-  bannerDismissed: boolean;
-  lastBannerCheck: number | null;
-  
-  // Préférences utilisateur
-  preferences: {
-    showQuotaInHeader: boolean;
-    notifyQuotaLow: boolean;
-    notifyPhaseChange: boolean;
-    autoRefreshInterval: number; // en millisecondes
-  };
-  
   // Erreurs
   error: string | null;
+  lastFetch: number | null;
   
-  // Actions principales
-  fetchQuotaStatus: () => Promise<void>;
-  fetchEligibility: () => Promise<void>;
-  fetchCurrentPhase: () => Promise<void>;
-  fetchPricingInfo: () => Promise<void>;
-  
-  // Actions composées
-  initializeQuotaData: () => Promise<void>;
-  refreshAllData: () => Promise<void>;
-  
-  // Actions UI
-  dismissBanner: () => void;
-  setShowUrgencyBanner: (show: boolean) => void;
-  updatePreferences: (prefs: Partial<QuotaState['preferences']>) => void;
-  
-  // Actions utilitaires
-  clearError: () => void;
-  resetStore: () => void;
-  
-  // Getters calculés
-  canCreateFree: () => boolean;
-  isInLaunchPhase: () => boolean;
-  getStatusColor: () => 'green' | 'yellow' | 'red' | 'gray';
-  getStatusMessage: () => string;
-  getUrgencyMessage: () => string | null;
-  shouldShowBanner: () => boolean;
-  getQuotaUsagePercent: () => number;
-  getDaysUntilLaunchEnd: () => number;
-  
-  // Cache helpers
-  isQuotaStatusStale: () => boolean;
-  isEligibilityStale: () => boolean;
-  isPhaseStale: () => boolean;
+  // Cache
+  cacheExpiry: number;
 }
 
-// Configuration par défaut
-const defaultPreferences: QuotaState['preferences'] = {
-  showQuotaInHeader: true,
-  notifyQuotaLow: true,
-  notifyPhaseChange: true,
-  autoRefreshInterval: 60000, // 1 minute
+interface QuotaActions {
+  // Actions principales
+  setStatus: (status: QuotaStatus | null) => void;
+  setEligibility: (eligibility: EligibilityCheck | null) => void;
+  setCurrentPhase: (phase: CurrentPhase | null) => void;
+  
+  // Actions de chargement
+  setLoading: (loading: boolean) => void;
+  setLoadingStatus: (loading: boolean) => void;
+  setLoadingEligibility: (loading: boolean) => void;
+  setLoadingPhase: (loading: boolean) => void;
+  
+  // Actions d'erreur
+  setError: (error: string | null) => void;
+  clearError: () => void;
+  
+  // Actions de cache
+  updateLastFetch: () => void;
+  isCacheValid: () => boolean;
+  clearCache: () => void;
+  
+  // Actions métier
+  fetchStatus: () => Promise<void>;
+  fetchEligibility: () => Promise<void>;
+  fetchCurrentPhase: () => Promise<void>;
+  refreshAll: () => Promise<void>;
+  
+  // Utilitaires
+  canCreateFree: () => boolean;
+  getStatusMessage: () => string;
+  getUrgencyMessage: () => string | null;
+  formatPrice: (price: number) => string;
+}
+
+// ============================================
+// CONSTANTES
+// ============================================
+
+const CACHE_DURATION = 2 * 60 * 1000; // 2 minutes
+const DEFAULT_STATE: QuotaState = {
+  status: null,
+  eligibility: null,
+  currentPhase: null,
+  isLoading: false,
+  isLoadingStatus: false,
+  isLoadingEligibility: false,
+  isLoadingPhase: false,
+  error: null,
+  lastFetch: null,
+  cacheExpiry: CACHE_DURATION,
 };
 
-// Durées de cache (en millisecondes)
-const CACHE_DURATIONS = {
-  quotaStatus: 30 * 1000, // 30 secondes
-  eligibility: 15 * 1000,  // 15 secondes
-  currentPhase: 60 * 1000, // 1 minute
-  pricingInfo: 5 * 60 * 1000, // 5 minutes
-};
+// ============================================
+// STORE PRINCIPAL
+// ============================================
 
-export const useQuotaStore = create<QuotaState>()(
+export const useQuotaStore = create<QuotaState & QuotaActions>()(
   devtools(
     persist(
-      immer((set, get) => ({
-        // État initial
-        quotaStatus: null,
-        eligibility: null,
-        currentPhase: null,
-        pricingInfo: null,
-        
-        isLoading: false,
-        isLoadingEligibility: false,
-        isLoadingPhase: false,
-        
-        lastFetched: null,
-        eligibilityLastFetched: null,
-        phaseLastFetched: null,
-        
-        showUrgencyBanner: false,
-        bannerDismissed: false,
-        lastBannerCheck: null,
-        
-        preferences: defaultPreferences,
-        error: null,
+      (set, get) => ({
+        ...DEFAULT_STATE,
 
-        // Actions principales
-        fetchQuotaStatus: async () => {
-          const state = get();
+        // ============================================
+        // ACTIONS DE BASE
+        // ============================================
+
+        setStatus: (status) => {
+          set((state) => ({
+            ...state,
+            status,
+            isLoadingStatus: false,
+            error: null,
+          }));
+        },
+
+        setEligibility: (eligibility) => {
+          set((state) => ({
+            ...state,
+            eligibility,
+            isLoadingEligibility: false,
+            error: null,
+          }));
+        },
+
+        setCurrentPhase: (currentPhase) => {
+          set((state) => ({
+            ...state,
+            currentPhase,
+            isLoadingPhase: false,
+            error: null,
+          }));
+        },
+
+        setLoading: (isLoading) => {
+          set((state) => ({ ...state, isLoading }));
+        },
+
+        setLoadingStatus: (isLoadingStatus) => {
+          set((state) => ({ ...state, isLoadingStatus }));
+        },
+
+        setLoadingEligibility: (isLoadingEligibility) => {
+          set((state) => ({ ...state, isLoadingEligibility }));
+        },
+
+        setLoadingPhase: (isLoadingPhase) => {
+          set((state) => ({ ...state, isLoadingPhase }));
+        },
+
+        setError: (error) => {
+          set((state) => ({
+            ...state,
+            error,
+            isLoading: false,
+            isLoadingStatus: false,
+            isLoadingEligibility: false,
+            isLoadingPhase: false,
+          }));
+        },
+
+        clearError: () => {
+          set((state) => ({ ...state, error: null }));
+        },
+
+        updateLastFetch: () => {
+          set((state) => ({ ...state, lastFetch: Date.now() }));
+        },
+
+        isCacheValid: () => {
+          const { lastFetch, cacheExpiry } = get();
+          if (!lastFetch) return false;
+          return Date.now() - lastFetch < cacheExpiry;
+        },
+
+        clearCache: () => {
+          set(() => ({
+            ...DEFAULT_STATE,
+          }));
+        },
+
+        // ============================================
+        // ACTIONS ASYNC
+        // ============================================
+
+        fetchStatus: async () => {
+          const { setLoadingStatus, setStatus, setError, updateLastFetch } = get();
           
-          // Vérifier si les données sont encore fraîches
-          if (state.lastFetched && 
-              Date.now() - state.lastFetched < CACHE_DURATIONS.quotaStatus) {
-            return;
-          }
-
-          set((draft) => {
-            draft.isLoading = true;
-            draft.error = null;
-          });
-
           try {
-            const quotaStatus = await quotaService.getQuotaStatus();
-            
-            set((draft) => {
-              draft.quotaStatus = quotaStatus;
-              draft.lastFetched = Date.now();
-              draft.isLoading = false;
-              
-              // Mettre à jour l'état de la bannière d'urgence
-              if (quotaStatus && quotaService.isLaunchEndingSoon(quotaStatus)) {
-                draft.showUrgencyBanner = !draft.bannerDismissed;
-              }
-            });
-          } catch (error) {
-            set((draft) => {
-              draft.error = error instanceof Error ? error.message : 'Erreur inconnue';
-              draft.isLoading = false;
-            });
+            setLoadingStatus(true);
+            const status = await quotaService.getQuotaStatus();
+            setStatus(status);
+            updateLastFetch();
+          } catch (error: any) {
+            console.error('Erreur fetch status:', error);
+            setError(error?.message || 'Erreur récupération statut');
+          } finally {
+            setLoadingStatus(false);
           }
         },
 
         fetchEligibility: async () => {
-          const state = get();
+          const { setLoadingEligibility, setEligibility, setError, updateLastFetch } = get();
           
-          if (state.eligibilityLastFetched && 
-              Date.now() - state.eligibilityLastFetched < CACHE_DURATIONS.eligibility) {
-            return;
-          }
-
-          set((draft) => {
-            draft.isLoadingEligibility = true;
-            draft.error = null;
-          });
-
           try {
+            setLoadingEligibility(true);
             const eligibility = await quotaService.checkEligibility();
-            
-            set((draft) => {
-              draft.eligibility = eligibility;
-              draft.eligibilityLastFetched = Date.now();
-              draft.isLoadingEligibility = false;
-            });
-          } catch (error) {
-            set((draft) => {
-              draft.error = error instanceof Error ? error.message : 'Erreur vérification éligibilité';
-              draft.isLoadingEligibility = false;
-            });
+            setEligibility(eligibility);
+            updateLastFetch();
+          } catch (error: any) {
+            console.error('Erreur fetch eligibility:', error);
+            setError(error?.message || 'Erreur vérification éligibilité');
+          } finally {
+            setLoadingEligibility(false);
           }
         },
 
         fetchCurrentPhase: async () => {
-          const state = get();
+          const { setLoadingPhase, setCurrentPhase, setError, updateLastFetch } = get();
           
-          if (state.phaseLastFetched && 
-              Date.now() - state.phaseLastFetched < CACHE_DURATIONS.currentPhase) {
-            return;
-          }
-
-          set((draft) => {
-            draft.isLoadingPhase = true;
-            draft.error = null;
-          });
-
           try {
-            const currentPhase = await quotaService.getCurrentPhase();
-            
-            set((draft) => {
-              draft.currentPhase = currentPhase;
-              draft.phaseLastFetched = Date.now();
-              draft.isLoadingPhase = false;
-              
-              // Notifier le changement de phase si activé
-              if (draft.preferences.notifyPhaseChange && 
-                  draft.quotaStatus && 
-                  draft.quotaStatus.current_phase !== currentPhase.current_phase) {
-                // Ici on pourrait déclencher une notification
-                console.log('🎯 Changement de phase détecté:', currentPhase.current_phase);
-              }
-            });
-          } catch (error) {
-            set((draft) => {
-              draft.error = error instanceof Error ? error.message : 'Erreur récupération phase';
-              draft.isLoadingPhase = false;
-            });
+            setLoadingPhase(true);
+            const phase = await quotaService.getCurrentPhase();
+            setCurrentPhase(phase);
+            updateLastFetch();
+          } catch (error: any) {
+            console.error('Erreur fetch phase:', error);
+            setError(error?.message || 'Erreur récupération phase');
+          } finally {
+            setLoadingPhase(false);
           }
         },
 
-        fetchPricingInfo: async () => {
-          try {
-            const pricingInfo = await quotaService.getPricingInfo();
-            
-            set((draft) => {
-              draft.pricingInfo = pricingInfo;
-            });
-          } catch (error) {
-            console.error('Erreur récupération prix:', error);
-          }
-        },
-
-        // Actions composées
-        initializeQuotaData: async () => {
-          const actions = get();
+        refreshAll: async () => {
+          const { setLoading, fetchStatus, fetchEligibility, fetchCurrentPhase } = get();
           
-          // Charger les données essentielles en parallèle
-          await Promise.allSettled([
-            actions.fetchCurrentPhase(),
-            actions.fetchQuotaStatus(),
-            actions.fetchEligibility(),
-            actions.fetchPricingInfo(),
-          ]);
+          try {
+            setLoading(true);
+            await Promise.all([
+              fetchStatus(),
+              fetchEligibility(),
+              fetchCurrentPhase(),
+            ]);
+          } catch (error: any) {
+            console.error('Erreur refresh all:', error);
+          } finally {
+            setLoading(false);
+          }
         },
 
-        refreshAllData: async () => {
-          set((draft) => {
-            // Forcer le refresh en réinitialisant les timestamps
-            draft.lastFetched = null;
-            draft.eligibilityLastFetched = null;
-            draft.phaseLastFetched = null;
-          });
+        // ============================================
+        // UTILITAIRES MÉTIER
+        // ============================================
 
-          await get().initializeQuotaData();
-        },
-
-        // Actions UI
-        dismissBanner: () => {
-          set((draft) => {
-            draft.bannerDismissed = true;
-            draft.showUrgencyBanner = false;
-            draft.lastBannerCheck = Date.now();
-          });
-        },
-
-        setShowUrgencyBanner: (show: boolean) => {
-          set((draft) => {
-            draft.showUrgencyBanner = show;
-          });
-        },
-
-        updatePreferences: (prefs) => {
-          set((draft) => {
-            draft.preferences = { ...draft.preferences, ...prefs };
-          });
-        },
-
-        // Actions utilitaires
-        clearError: () => {
-          set((draft) => {
-            draft.error = null;
-          });
-        },
-
-        resetStore: () => {
-          set((draft) => {
-            draft.quotaStatus = null;
-            draft.eligibility = null;
-            draft.currentPhase = null;
-            draft.pricingInfo = null;
-            draft.lastFetched = null;
-            draft.eligibilityLastFetched = null;
-            draft.phaseLastFetched = null;
-            draft.showUrgencyBanner = false;
-            draft.bannerDismissed = false;
-            draft.error = null;
-          });
-        },
-
-        // Getters calculés
         canCreateFree: () => {
-          const { quotaStatus } = get();
-          return quotaStatus?.can_create_free ?? false;
-        },
-
-        isInLaunchPhase: () => {
-          const { quotaStatus } = get();
-          return quotaStatus ? quotaService.isInLaunchPhase(quotaStatus) : false;
-        },
-
-        getStatusColor: () => {
-          const { quotaStatus } = get();
-          return quotaStatus ? quotaService.getStatusColor(quotaStatus) : 'gray';
-        },
-
-        getStatusMessage: () => {
-          const { quotaStatus } = get();
-          return quotaStatus ? quotaService.getStatusMessage(quotaStatus) : '';
-        },
-
-        getUrgencyMessage: () => {
-          const { quotaStatus } = get();
-          return quotaStatus ? quotaService.getUrgencyMessage(quotaStatus) : null;
-        },
-
-        shouldShowBanner: () => {
-          const { showUrgencyBanner, bannerDismissed, quotaStatus } = get();
+          const { eligibility, status } = get();
           
-          // Ne pas montrer si explicitement fermée
-          if (bannerDismissed) return false;
+          // Priorité à l'éligibilité si disponible
+          if (eligibility) {
+            return eligibility.can_create_free;
+          }
           
-          // Montrer si marquée comme visible et conditions remplies
-          if (showUrgencyBanner && quotaStatus) {
-            return quotaService.isLaunchEndingSoon(quotaStatus);
+          // Fallback sur le statut
+          if (status) {
+            return status.can_create_free;
           }
           
           return false;
         },
 
-        getQuotaUsagePercent: () => {
-          const { quotaStatus } = get();
-          return quotaStatus ? quotaService.getQuotaUsagePercent(quotaStatus) : 0;
+        getStatusMessage: () => {
+          const { status } = get();
+          
+          if (!status) {
+            return 'Statut non disponible';
+          }
+          
+          return quotaService.getStatusMessage(status);
         },
 
-        getDaysUntilLaunchEnd: () => {
-          const { currentPhase } = get();
-          return currentPhase?.days_until_launch_end ?? 0;
+        getUrgencyMessage: () => {
+          const { status } = get();
+          
+          if (!status) {
+            return null;
+          }
+          
+          return quotaService.getUrgencyMessage(status);
         },
 
-        // Cache helpers
-        isQuotaStatusStale: () => {
-          const { lastFetched } = get();
-          return !lastFetched || Date.now() - lastFetched > CACHE_DURATIONS.quotaStatus;
+        formatPrice: (price: number) => {
+          const { eligibility } = get();
+          const currency = eligibility?.currency || 'FCFA';
+          return quotaService.formatPrice(price, currency);
         },
-
-        isEligibilityStale: () => {
-          const { eligibilityLastFetched } = get();
-          return !eligibilityLastFetched || Date.now() - eligibilityLastFetched > CACHE_DURATIONS.eligibility;
-        },
-
-        isPhaseStale: () => {
-          const { phaseLastFetched } = get();
-          return !phaseLastFetched || Date.now() - phaseLastFetched > CACHE_DURATIONS.currentPhase;
-        },
-      })),
+      }),
       {
         name: 'senmarket-quota-store',
         partialize: (state) => ({
-          // Persister seulement les préférences et l'état de la bannière
-          preferences: state.preferences,
-          bannerDismissed: state.bannerDismissed,
-          lastBannerCheck: state.lastBannerCheck,
+          status: state.status,
+          eligibility: state.eligibility,
+          currentPhase: state.currentPhase,
+          lastFetch: state.lastFetch,
         }),
+        version: 1,
       }
     ),
     {
@@ -382,79 +307,129 @@ export const useQuotaStore = create<QuotaState>()(
   )
 );
 
-// Hooks utilitaires pour accéder aux parties spécifiques du store
-export const useQuotaData = () => {
-  const quotaStatus = useQuotaStore((state) => state.quotaStatus);
+// ============================================
+// HOOKS SÉLECTEURS
+// ============================================
+
+// Hook pour obtenir l'état du quota
+export const useQuotaStatus = () => {
+  const status = useQuotaStore((state) => state.status);
+  const isLoading = useQuotaStore((state) => state.isLoadingStatus);
+  const error = useQuotaStore((state) => state.error);
+  const fetchStatus = useQuotaStore((state) => state.fetchStatus);
+  
+  return {
+    status,
+    isLoading,
+    error,
+    fetchStatus,
+  };
+};
+
+// Hook pour l'éligibilité
+export const useQuotaEligibility = () => {
   const eligibility = useQuotaStore((state) => state.eligibility);
-  const currentPhase = useQuotaStore((state) => state.currentPhase);
-  const pricingInfo = useQuotaStore((state) => state.pricingInfo);
-  
-  return {
-    quotaStatus,
-    eligibility,
-    currentPhase,
-    pricingInfo,
-  };
-};
-
-export const useQuotaActions = () => {
-  const fetchQuotaStatus = useQuotaStore((state) => state.fetchQuotaStatus);
+  const isLoading = useQuotaStore((state) => state.isLoadingEligibility);
+  const error = useQuotaStore((state) => state.error);
   const fetchEligibility = useQuotaStore((state) => state.fetchEligibility);
-  const fetchCurrentPhase = useQuotaStore((state) => state.fetchCurrentPhase);
-  const initializeQuotaData = useQuotaStore((state) => state.initializeQuotaData);
-  const refreshAllData = useQuotaStore((state) => state.refreshAllData);
   
   return {
-    fetchQuotaStatus,
+    eligibility,
+    isLoading,
+    error,
     fetchEligibility,
-    fetchCurrentPhase,
-    initializeQuotaData,
-    refreshAllData,
   };
 };
 
-export const useQuotaUI = () => {
-  const showUrgencyBanner = useQuotaStore((state) => state.showUrgencyBanner);
-  const bannerDismissed = useQuotaStore((state) => state.bannerDismissed);
-  const shouldShowBanner = useQuotaStore((state) => state.shouldShowBanner);
-  const dismissBanner = useQuotaStore((state) => state.dismissBanner);
-  const getStatusColor = useQuotaStore((state) => state.getStatusColor);
+// Hook pour la phase actuelle
+export const useCurrentPhaseStore = () => {
+  const currentPhase = useQuotaStore((state) => state.currentPhase);
+  const isLoading = useQuotaStore((state) => state.isLoadingPhase);
+  const error = useQuotaStore((state) => state.error);
+  const fetchCurrentPhase = useQuotaStore((state) => state.fetchCurrentPhase);
+  
+  return {
+    currentPhase,
+    isLoading,
+    error,
+    fetchCurrentPhase,
+  };
+};
+
+// Hook pour les utilitaires
+export const useQuotaUtils = () => {
+  const canCreateFree = useQuotaStore((state) => state.canCreateFree);
   const getStatusMessage = useQuotaStore((state) => state.getStatusMessage);
   const getUrgencyMessage = useQuotaStore((state) => state.getUrgencyMessage);
+  const formatPrice = useQuotaStore((state) => state.formatPrice);
   
   return {
-    showUrgencyBanner,
-    bannerDismissed,
-    shouldShowBanner: shouldShowBanner(),
-    dismissBanner,
-    statusColor: getStatusColor(),
-    statusMessage: getStatusMessage(),
-    urgencyMessage: getUrgencyMessage(),
+    canCreateFree,
+    getStatusMessage,
+    getUrgencyMessage,
+    formatPrice,
   };
 };
 
-export const useQuotaPreferences = () => {
-  const preferences = useQuotaStore((state) => state.preferences);
-  const updatePreferences = useQuotaStore((state) => state.updatePreferences);
+// Hook pour les actions
+export const useQuotaActions = () => {
+  const refreshAll = useQuotaStore((state) => state.refreshAll);
+  const clearCache = useQuotaStore((state) => state.clearCache);
+  const clearError = useQuotaStore((state) => state.clearError);
+  const isCacheValid = useQuotaStore((state) => state.isCacheValid);
   
   return {
-    preferences,
-    updatePreferences,
+    refreshAll,
+    clearCache,
+    clearError,
+    isCacheValid,
   };
 };
 
-// Hook pour l'état de chargement global
-export const useQuotaLoading = () => {
-  const isLoading = useQuotaStore((state) => state.isLoading);
-  const isLoadingEligibility = useQuotaStore((state) => state.isLoadingEligibility);
-  const isLoadingPhase = useQuotaStore((state) => state.isLoadingPhase);
+// ============================================
+// HOOK PRINCIPAL COMBINÉ
+// ============================================
+
+export const useQuota = () => {
+  const state = useQuotaStore();
   
   return {
-    isLoading,
-    isLoadingEligibility,
-    isLoadingPhase,
-    isAnyLoading: isLoading || isLoadingEligibility || isLoadingPhase,
+    // État
+    status: state.status,
+    eligibility: state.eligibility,
+    currentPhase: state.currentPhase,
+    
+    // Loading
+    isLoading: state.isLoading,
+    isLoadingStatus: state.isLoadingStatus,
+    isLoadingEligibility: state.isLoadingEligibility,
+    isLoadingPhase: state.isLoadingPhase,
+    
+    // Erreur
+    error: state.error,
+    
+    // Utilitaires
+    canCreateFree: state.canCreateFree(),
+    statusMessage: state.getStatusMessage(),
+    urgencyMessage: state.getUrgencyMessage(),
+    
+    // Actions
+    fetchStatus: state.fetchStatus,
+    fetchEligibility: state.fetchEligibility,
+    fetchCurrentPhase: state.fetchCurrentPhase,
+    refreshAll: state.refreshAll,
+    clearCache: state.clearCache,
+    clearError: state.clearError,
+    formatPrice: state.formatPrice,
+    
+    // Cache
+    isCacheValid: state.isCacheValid(),
+    lastFetch: state.lastFetch,
   };
 };
+
+// ============================================
+// EXPORT PAR DÉFAUT
+// ============================================
 
 export default useQuotaStore;

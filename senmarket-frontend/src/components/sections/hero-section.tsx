@@ -223,7 +223,6 @@ export function HeroSection() {
     { name: 'Orange Money', logo: '🍊', verified: true },
     { name: 'Wave', logo: '🌊', verified: true },
     { name: 'Free Money', logo: '💚', verified: true },
-    { name: 'PayDunya', logo: '💎', verified: false },
   ]
 
   return (

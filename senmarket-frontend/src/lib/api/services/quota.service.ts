@@ -1,12 +1,16 @@
-// src/services/quota.service.ts
-import { api } from './api';
+// src/lib/api/services/quota.service.ts - VERSION CORRIGÉE ALIGNÉE BACKEND
+import { apiClient } from '../client';
+import { ApiResponse } from '../types';
 
-// Types pour les quotas
+// ============================================
+// TYPES ALIGNÉS AVEC VOTRE BACKEND GO
+// ============================================
+
 export interface QuotaStatus {
   current_phase: string;
   is_launch_active: boolean;
-  launch_end_date: string;
-  days_until_launch_end: number;
+  launch_end_date?: string;
+  days_until_launch_end?: number;
   currency: string;
   standard_price: number;
   unlimited_free: boolean;
@@ -66,12 +70,14 @@ export interface QuotaHistory {
     year: number;
     free_used: number;
     free_limit: number;
+    free_remaining: number;
     paid_listings: number;
     total_listings: number;
-    quota_progress: number;
+    can_create_free: boolean;
+    progress_percent: number;
     is_current_month: boolean;
   }>;
-  summary: {
+  summary?: {
     total_free_used: number;
     total_paid: number;
     total_listings: number;
@@ -81,8 +87,8 @@ export interface QuotaHistory {
 export interface CurrentPhase {
   current_phase: string;
   is_launch_active: boolean;
-  launch_end_date: string;
-  days_until_launch_end: number;
+  launch_end_date?: string;
+  days_until_launch_end?: number;
   credit_system_active: boolean;
   paid_system_active: boolean;
   monthly_free_limit: number;
@@ -93,28 +99,10 @@ export interface CurrentPhase {
   benefits: string[];
 }
 
-export interface PricingInfo {
-  current_phase: string;
-  is_launch_active: boolean;
-  days_until_launch_end: number;
-  launch_end_date: string;
-  standard_price: number;
-  premium_boost_price: number;
-  featured_color_price: number;
-  currency: string;
-  pack_5_price: number;
-  pack_10_price: number;
-  pack_5_discount: number;
-  pack_10_discount: number;
-  monthly_free_limit: number;
-  credit_system_active: boolean;
-  phase_message: string;
-}
-
 export interface PlatformStats {
   current_phase: string;
   is_launch_active: boolean;
-  days_until_launch_end: number;
+  days_until_launch_end?: number;
   current_month: number;
   current_year: number;
   total_users: number;
@@ -127,111 +115,59 @@ export interface PlatformStats {
   active_users_this_month: number;
 }
 
-class QuotaService {
-  private baseUrl = '/api/v1/quota';
+// ============================================
+// SERVICE CLASS ALIGNÉ AVEC VOS ENDPOINTS
+// ============================================
 
-  // Obtenir le statut complet des quotas de l'utilisateur
+export class QuotaService {
+  
+  // ✅ Endpoint exact : /quota/status (QuotaHandler.GetQuotaStatus)
   async getQuotaStatus(): Promise<QuotaStatus> {
-    try {
-      const response = await api.get(`${this.baseUrl}/status`);
-      return response.data.data;
-    } catch (error) {
-      console.error('Erreur récupération statut quota:', error);
-      throw error;
-    }
+    const response = await apiClient.get<ApiResponse<QuotaStatus>>('/quota/status');
+    return response.data.data;
   }
 
-  // Vérifier l'éligibilité pour créer une annonce
+  // ✅ Endpoint exact : /quota/check (QuotaHandler.CheckEligibility)
   async checkEligibility(): Promise<EligibilityCheck> {
-    try {
-      const response = await api.get(`${this.baseUrl}/check`);
-      return response.data.data;
-    } catch (error) {
-      console.error('Erreur vérification éligibilité:', error);
-      throw error;
-    }
+    const response = await apiClient.get<ApiResponse<EligibilityCheck>>('/quota/check');
+    return response.data.data;
   }
 
-  // Obtenir un résumé simplifié des quotas
+  // ✅ Endpoint exact : /quota/summary (QuotaHandler.GetQuotaSummary)
   async getQuotaSummary(): Promise<QuotaSummary> {
-    try {
-      const response = await api.get(`${this.baseUrl}/summary`);
-      return response.data.data;
-    } catch (error) {
-      console.error('Erreur récupération résumé quota:', error);
-      throw error;
-    }
+    const response = await apiClient.get<ApiResponse<QuotaSummary>>('/quota/summary');
+    return response.data.data;
   }
 
-  // Obtenir l'historique des quotas
+  // ✅ Endpoint exact : /quota/history (QuotaHandler.GetQuotaHistory)
   async getQuotaHistory(months: number = 6): Promise<QuotaHistory> {
-    try {
-      const response = await api.get(`${this.baseUrl}/history`, {
-        params: { months }
-      });
-      return response.data.data;
-    } catch (error) {
-      console.error('Erreur récupération historique quota:', error);
-      throw error;
-    }
+    const response = await apiClient.get<ApiResponse<QuotaHistory>>('/quota/history', {
+      params: { months }
+    });
+    return response.data.data;
   }
 
-  // Obtenir la phase actuelle (public, pas besoin d'auth)
+  // ✅ Endpoint exact : /quota/current-phase (QuotaHandler.GetCurrentPhase)
   async getCurrentPhase(): Promise<CurrentPhase> {
-    try {
-      const response = await api.get(`${this.baseUrl}/current-phase`);
-      return response.data.data;
-    } catch (error) {
-      console.error('Erreur récupération phase actuelle:', error);
-      throw error;
-    }
+    const response = await apiClient.get<ApiResponse<CurrentPhase>>('/quota/current-phase');
+    return response.data.data;
   }
 
-  // Obtenir les informations de tarification (public)
-  async getPricingInfo(): Promise<PricingInfo> {
-    try {
-      const response = await api.get(`${this.baseUrl}/pricing`);
-      return response.data.data;
-    } catch (error) {
-      console.error('Erreur récupération info tarification:', error);
-      throw error;
-    }
-  }
-
-  // Obtenir les statistiques de la plateforme
+  // ✅ Endpoint exact : /quota/platform-stats (QuotaHandler.GetPlatformStats)  
   async getPlatformStats(): Promise<PlatformStats> {
-    try {
-      const response = await api.get(`${this.baseUrl}/platform-stats`);
-      return response.data.data;
-    } catch (error) {
-      console.error('Erreur récupération stats plateforme:', error);
-      throw error;
-    }
+    const response = await apiClient.get<ApiResponse<PlatformStats>>('/quota/platform-stats');
+    return response.data.data;
   }
 
-  // Mettre à jour la phase utilisateur (usage interne)
+  // ✅ Endpoint exact : /quota/update-phase (QuotaHandler.UpdateUserPhase)
   async updateUserPhase(): Promise<QuotaStatus> {
-    try {
-      const response = await api.post(`${this.baseUrl}/update-phase`);
-      return response.data.data;
-    } catch (error) {
-      console.error('Erreur mise à jour phase utilisateur:', error);
-      throw error;
-    }
+    const response = await apiClient.post<ApiResponse<QuotaStatus>>('/quota/update-phase');
+    return response.data.data;
   }
 
-  // Nettoyer les anciens quotas (admin)
-  async cleanupQuotas(): Promise<{ message: string }> {
-    try {
-      const response = await api.post(`${this.baseUrl}/cleanup`);
-      return response.data;
-    } catch (error) {
-      console.error('Erreur nettoyage quotas:', error);
-      throw error;
-    }
-  }
-
-  // Méthodes utilitaires pour le frontend
+  // ============================================
+  // MÉTHODES UTILITAIRES POUR LE FRONTEND
+  // ============================================
 
   // Vérifier si l'utilisateur est en phase de lancement gratuit
   isInLaunchPhase(status: QuotaStatus): boolean {
@@ -274,13 +210,15 @@ class QuotaService {
     return Math.round((status.used_this_month || 0) / status.monthly_limit * 100);
   }
 
-  // Formater le prix pour l'affichage
-  formatPrice(price: number, currency: string = 'XOF'): string {
-    return `${Math.round(price).toLocaleString()} ${currency}`;
+  // Formater le prix pour l'affichage (FCFA au Sénégal)
+  formatPrice(price: number, currency: string = 'FCFA'): string {
+    return `${Math.round(price).toLocaleString('fr-FR')} ${currency}`;
   }
 
   // Calculer les jours restants jusqu'à la fin de la phase de lancement
-  getDaysUntilLaunchEnd(launchEndDate: string): number {
+  getDaysUntilLaunchEnd(launchEndDate?: string): number {
+    if (!launchEndDate) return 0;
+    
     const endDate = new Date(launchEndDate);
     const now = new Date();
     const diffTime = endDate.getTime() - now.getTime();
@@ -289,7 +227,7 @@ class QuotaService {
 
   // Vérifier si la phase de lancement se termine bientôt (moins de 7 jours)
   isLaunchEndingSoon(status: QuotaStatus): boolean {
-    return this.isInLaunchPhase(status) && status.days_until_launch_end <= 7;
+    return this.isInLaunchPhase(status) && (status.days_until_launch_end || 0) <= 7;
   }
 
   // Obtenir le texte d'urgence pour la fin de phase
@@ -298,7 +236,7 @@ class QuotaService {
       return null;
     }
     
-    const days = status.days_until_launch_end;
+    const days = status.days_until_launch_end || 0;
     
     if (days <= 1) {
       return '⚡ Plus que quelques heures pour profiter des annonces gratuites !';
@@ -352,8 +290,83 @@ class QuotaService {
     
     return recommendations;
   }
+
+  // ✅ NOUVELLES MÉTHODES ALIGNÉES AVEC VOTRE BACKEND
+
+  // Obtenir un résumé rapide pour l'UI (cache-friendly)
+  async getQuickStatus(): Promise<{
+    canCreateFree: boolean;
+    message: string;
+    phase: string;
+    priceRequired?: number;
+  }> {
+    try {
+      const summary = await this.getQuotaSummary();
+      return {
+        canCreateFree: summary.can_create_free,
+        message: summary.message,
+        phase: summary.current_phase,
+        priceRequired: summary.requires_payment ? summary.price_per_listing : undefined
+      };
+    } catch (error) {
+      // Fallback en cas d'erreur
+      return {
+        canCreateFree: false,
+        message: 'Impossible de vérifier le statut',
+        phase: 'unknown'
+      };
+    }
+  }
+
+  // Vérifier si l'utilisateur est dans une phase payante
+  isInPaidPhase(status: QuotaStatus): boolean {
+    return status.current_phase === 'paid_system' || 
+           (status.current_phase === 'credit_system' && !status.can_create_free);
+  }
+
+  // Obtenir le nombre d'annonces restantes avant paiement
+  getRemainingFreeListings(status: QuotaStatus): number {
+    if (status.unlimited_free) return -1; // Illimité
+    return Math.max(0, status.remaining_free);
+  }
+
+  // Formatter les informations de quota pour l'affichage
+  formatQuotaInfo(status: QuotaStatus): {
+    title: string;
+    description: string;
+    color: 'green' | 'yellow' | 'red';
+    icon: string;
+  } {
+    if (this.isInLaunchPhase(status)) {
+      return {
+        title: '🎉 Période de lancement',
+        description: 'Annonces gratuites illimitées !',
+        color: 'green',
+        icon: '🚀'
+      };
+    }
+
+    if (status.can_create_free) {
+      const remaining = this.getRemainingFreeListings(status);
+      return {
+        title: `${remaining} annonce${remaining > 1 ? 's' : ''} gratuite${remaining > 1 ? 's' : ''}`,
+        description: `Il vous reste ${remaining} annonce${remaining > 1 ? 's' : ''} gratuite${remaining > 1 ? 's' : ''} ce mois`,
+        color: remaining > 1 ? 'green' : 'yellow',
+        icon: '✅'
+      };
+    }
+
+    return {
+      title: 'Quota épuisé',
+      description: `${this.formatPrice(status.standard_price, status.currency)} par annonce`,
+      color: 'red',
+      icon: '💳'
+    };
+  }
 }
 
-// Instance singleton
+// ============================================
+// INSTANCE SINGLETON
+// ============================================
 export const quotaService = new QuotaService();
 export default quotaService;
