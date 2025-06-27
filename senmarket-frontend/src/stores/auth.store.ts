@@ -1,4 +1,4 @@
-// 🔧 AUTH STORE AVEC SYNCHRONISATION LOCALSTORAGE COMPLÈTE
+// 🔧 AUTH STORE AVEC DÉBOGAGE POUR IDENTIFIER LE PROBLÈME
 // src/stores/auth.store.ts
 
 import { create } from 'zustand'
@@ -47,7 +47,7 @@ export const useAuthStore = create<AuthState & AuthActions>()(
       isAuthenticated: false,
       isHydrated: false,
 
-      // ✅ SYNCHRONISATION AVEC LOCALSTORAGE
+      // ✅ SYNCHRONISATION AVEC LOCALSTORAGE AMÉLIORÉE
       syncWithLocalStorage: () => {
         if (typeof window === 'undefined') return
         
@@ -56,7 +56,7 @@ export const useAuthStore = create<AuthState & AuthActions>()(
           const token = localStorage.getItem('senmarket_token')
           const userStr = localStorage.getItem('senmarket_user')
           
-          console.log('🔄 Synchronisation localStorage:', {
+          console.log('🔄 Synchronisation localStorage auth:', {
             hasToken: !!token,
             hasUser: !!userStr,
             tokenPreview: token?.slice(0, 20) + '...'
@@ -64,7 +64,7 @@ export const useAuthStore = create<AuthState & AuthActions>()(
 
           if (token && userStr) {
             const user = JSON.parse(userStr)
-            console.log('✅ Données trouvées, mise à jour store pour:', user.first_name)
+            console.log('✅ Données auth trouvées, mise à jour store pour:', user.first_name)
             
             set({
               user,
@@ -73,16 +73,18 @@ export const useAuthStore = create<AuthState & AuthActions>()(
               isHydrated: true
             })
 
-            // Initialiser les favoris si disponible
-            if (typeof window !== 'undefined') {
+            // ✅ INITIALISER LES FAVORIS APRÈS L'AUTH
+            setTimeout(() => {
               import('./favorites.store').then(({ useFavoritesStore }) => {
-                const setCurrentUser = useFavoritesStore.getState().setCurrentUser
-                setCurrentUser(user.id)
-                console.log('✅ Favoris initialisés après sync pour:', user.first_name)
-              }).catch(() => {
-                console.log('⚠️ Store favoris non disponible')
+                const favStore = useFavoritesStore.getState()
+                if (favStore.currentUserId !== user.id) {
+                  console.log('📋 Synchronisation favoris après auth pour:', user.first_name)
+                  favStore.setCurrentUser(user.id)
+                }
+              }).catch(err => {
+                console.warn('⚠️ Erreur chargement store favoris:', err)
               })
-            }
+            }, 50)
           } else {
             console.log('❌ Pas de données auth dans localStorage')
             set({
@@ -93,7 +95,7 @@ export const useAuthStore = create<AuthState & AuthActions>()(
             })
           }
         } catch (error) {
-          console.error('❌ Erreur synchronisation localStorage:', error)
+          console.error('❌ Erreur synchronisation localStorage auth:', error)
           set({
             user: null,
             token: null,
@@ -103,56 +105,49 @@ export const useAuthStore = create<AuthState & AuthActions>()(
         }
       },
 
-      setHydrated: (hydrated) => {
-        console.log('🔄 Hydratation marquée:', hydrated)
-        set({ isHydrated: hydrated })
-      },
-
-      loadUserFromStorage: () => {
-        console.log('📦 loadUserFromStorage appelé')
-        get().syncWithLocalStorage()
-      },
-
+      // ✅ INITIALISATION AUTH AMÉLIORÉE
       initializeAuth: () => {
+        if (get().isHydrated) {
+          console.log('✅ Auth déjà initialisé')
+          return
+        }
+
         console.log('🚀 Initialisation auth...')
         get().syncWithLocalStorage()
       },
 
-      // ✅ ACTIONS AVEC SYNCHRONISATION
-      setUser: (user) => {
-        console.log('👤 setUser appelé pour:', user.first_name)
+      // ✅ CHARGEMENT DEPUIS STORAGE
+      loadUserFromStorage: () => {
+        get().syncWithLocalStorage()
+      },
+
+      // Setters
+      setUser: (user: User) => {
+        console.log('👤 Mise à jour utilisateur:', user.first_name)
+        set({ user, isAuthenticated: true })
         
-        // Synchroniser avec localStorage
+        // Sauvegarder dans localStorage
         if (typeof window !== 'undefined') {
           localStorage.setItem('senmarket_user', JSON.stringify(user))
         }
-        
-        set({ user, isAuthenticated: true })
-        
-        // Initialiser les favoris
-        if (typeof window !== 'undefined') {
-          import('./favorites.store').then(({ useFavoritesStore }) => {
-            const setCurrentUser = useFavoritesStore.getState().setCurrentUser
-            setCurrentUser(user.id)
-            console.log('✅ Favoris configurés pour:', user.first_name)
-          }).catch(() => {
-            console.log('⚠️ Store favoris non disponible')
-          })
-        }
       },
 
-      setToken: (token) => {
-        console.log('🔑 Token mis à jour')
+      setToken: (token: string) => {
+        console.log('🔑 Mise à jour token')
+        set({ token })
         
-        // Synchroniser avec localStorage
+        // Sauvegarder dans localStorage
         if (typeof window !== 'undefined') {
           localStorage.setItem('senmarket_token', token)
         }
-        
-        set({ token })
       },
 
-      login: async (phone, password) => {
+      setHydrated: (hydrated: boolean) => {
+        set({ isHydrated: hydrated })
+      },
+
+      // ✅ LOGIN AVEC DÉBOGAGE COMPLET
+      login: async (phone: string, password: string) => {
         try {
           console.log('🔐 Tentative de connexion pour:', phone)
           
@@ -164,29 +159,69 @@ export const useAuthStore = create<AuthState & AuthActions>()(
             body: JSON.stringify({ phone, password }),
           })
 
-          if (!response.ok) {
-            const errorData = await response.json()
-            throw new Error(errorData.error || 'Erreur de connexion')
-          }
+          console.log('📡 Réponse serveur - Status:', response.status, response.statusText)
 
           const data = await response.json()
+          console.log('📦 Données reçues du serveur:', JSON.stringify(data, null, 2))
+
+          if (!response.ok) {
+            console.error('❌ Erreur HTTP:', response.status, data)
+            throw new Error(data.error || 'Erreur de connexion')
+          }
+
+          // ✅ DÉBOGAGE STRUCTURE RÉPONSE
+          console.log('🔍 Structure de la réponse:')
+          console.log('- data existe:', !!data)
+          console.log('- data.data existe:', !!data.data)
+          console.log('- data.success:', data.success)
+          console.log('- data.message:', data.message)
           
-          console.log('✅ Réponse login reçue:', {
-            userId: data.data.user.id,
-            userName: data.data.user.first_name,
-            hasToken: !!data.data.token
+          if (data.data) {
+            console.log('- data.data.user existe:', !!data.data.user)
+            console.log('- data.data.token existe:', !!data.data.token)
+            if (data.data.user) {
+              console.log('- User ID:', data.data.user.id)
+              console.log('- User name:', data.data.user.first_name)
+            }
+          }
+
+          // ✅ VÉRIFICATION FLEXIBLE DE LA STRUCTURE
+          let user, token
+
+          if (data.data && data.data.user && data.data.token) {
+            // Structure: { data: { user, token } }
+            user = data.data.user
+            token = data.data.token
+            console.log('✅ Structure détectée: data.data.{user,token}')
+          } else if (data.user && data.token) {
+            // Structure: { user, token }
+            user = data.user
+            token = data.token
+            console.log('✅ Structure détectée: data.{user,token}')
+          } else {
+            console.error('❌ Structure de réponse non reconnue:', data)
+            throw new Error('Structure de réponse invalide du serveur')
+          }
+
+          if (!user || !token) {
+            console.error('❌ Utilisateur ou token manquant:', { user: !!user, token: !!token })
+            throw new Error('Données utilisateur incomplètes')
+          }
+
+          console.log('✅ Données extraites avec succès:', {
+            userId: user.id,
+            userName: user.first_name,
+            tokenLength: token.length
           })
 
-          // ✅ MISE À JOUR SIMULTANÉE STORE ET LOCALSTORAGE
-          const { user, token } = data.data
-          
-          // LocalStorage
+          // ✅ SAUVEGARDER DONNÉES
           if (typeof window !== 'undefined') {
             localStorage.setItem('senmarket_token', token)
             localStorage.setItem('senmarket_user', JSON.stringify(user))
+            console.log('💾 Données sauvées dans localStorage')
           }
           
-          // Store
+          // ✅ METTRE À JOUR LE STORE
           set({
             user,
             token,
@@ -194,21 +229,29 @@ export const useAuthStore = create<AuthState & AuthActions>()(
             isHydrated: true
           })
 
-          // Favoris
-          if (typeof window !== 'undefined') {
-            import('./favorites.store').then(({ useFavoritesStore }) => {
-              const setCurrentUser = useFavoritesStore.getState().setCurrentUser
-              setCurrentUser(user.id)
-              console.log('✅ Favoris initialisés après login pour:', user.first_name)
-            }).catch(() => {
-              console.log('⚠️ Store favoris non disponible')
-            })
-          }
+          console.log('🎉 Store mis à jour avec succès')
 
-          console.log('🎉 Login terminé avec succès')
+          // ✅ INITIALISER LES FAVORIS APRÈS LE LOGIN
+          setTimeout(() => {
+            import('./favorites.store').then(({ useFavoritesStore }) => {
+              const favStore = useFavoritesStore.getState()
+              favStore.setCurrentUser(user.id)
+              console.log('✅ Favoris initialisés après login pour:', user.first_name)
+              
+              // Debug en développement
+              if (process.env.NODE_ENV === 'development') {
+                setTimeout(() => favStore.debugFavorites(), 100)
+              }
+            }).catch(err => {
+              console.warn('⚠️ Erreur initialisation favoris:', err)
+            })
+          }, 50)
+
+          console.log('🎉 Login terminé avec succès pour:', user.first_name)
           
         } catch (error) {
-          console.error('❌ Erreur lors de la connexion:', error)
+          console.error('❌ Erreur complète lors de la connexion:', error)
+          console.error('❌ Stack trace:', error instanceof Error ? error.stack : 'Pas de stack')
           throw error
         }
       },
@@ -238,6 +281,7 @@ export const useAuthStore = create<AuthState & AuthActions>()(
         }
       },
 
+      // ✅ LOGOUT AVEC NETTOYAGE FAVORIS
       logout: () => {
         console.log('🚪 Déconnexion...')
         
@@ -246,13 +290,13 @@ export const useAuthStore = create<AuthState & AuthActions>()(
           localStorage.removeItem('senmarket_token')
           localStorage.removeItem('senmarket_user')
           
-          // Nettoyer aussi les favoris
+          // Nettoyer les favoris de l'utilisateur actuel
           import('./favorites.store').then(({ useFavoritesStore }) => {
-            const clearFavorites = useFavoritesStore.getState().clearAllFavorites
-            clearFavorites()
-            console.log('✅ Favoris nettoyés')
-          }).catch(() => {
-            console.log('⚠️ Store favoris non disponible')
+            const favStore = useFavoritesStore.getState()
+            favStore.setCurrentUser(null)
+            console.log('✅ Favoris déconnectés')
+          }).catch(err => {
+            console.warn('⚠️ Erreur nettoyage favoris:', err)
           })
         }
         
@@ -260,51 +304,57 @@ export const useAuthStore = create<AuthState & AuthActions>()(
           user: null,
           token: null,
           isAuthenticated: false,
-          // Garder isHydrated à true
+          isHydrated: true
         })
-        
+
         console.log('✅ Déconnexion terminée')
       },
 
+      // ✅ CLEAR AUTH
       clearAuth: () => {
-        console.log('🧹 Nettoyage complet de l\'auth')
-        get().logout()
-      },
+        console.log('🧹 Nettoyage complet auth')
+        
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('senmarket_token')
+          localStorage.removeItem('senmarket_user')
+        }
+        
+        set({
+          user: null,
+          token: null,
+          isAuthenticated: false,
+          isHydrated: true
+        })
+      }
     }),
     {
-      name: 'senmarket-auth',
-      
-      // ✅ FONCTION D'HYDRATATION AMÉLIORÉE
+      name: 'senmarket-auth', // ✅ NOM UNIQUE POUR LOCALSTORAGE
+      // ✅ GESTION HYDRATATION
       onRehydrateStorage: () => (state) => {
-        console.log('🌊 Hydratation du store auth...')
-        
+        console.log('🔄 Auth store hydraté depuis localStorage')
         if (state) {
-          // Forcer une synchronisation avec localStorage après hydratation
-          setTimeout(() => {
-            console.log('🔄 Post-hydratation: synchronisation localStorage...')
-            state.syncWithLocalStorage()
-          }, 100)
-        } else {
-          console.log('❌ Pas de state après hydratation')
+          console.log('- Utilisateur:', state.user?.first_name || 'Aucun')
+          console.log('- Authentifié:', state.isAuthenticated)
+          
+          // Marquer comme hydraté
+          state.isHydrated = true
+          
+          // Synchroniser les favoris si utilisateur connecté
+          if (state.isAuthenticated && state.user) {
+            setTimeout(() => {
+              import('./favorites.store').then(({ useFavoritesStore }) => {
+                const favStore = useFavoritesStore.getState()
+                if (favStore.currentUserId !== state.user!.id) {
+                  console.log('📋 Sync favoris après hydratation pour:', state.user!.first_name)
+                  favStore.setCurrentUser(state.user!.id)
+                }
+              }).catch(err => {
+                console.warn('⚠️ Erreur sync favoris après hydratation:', err)
+              })
+            }, 100)
+          }
         }
       },
-      
-      // ✅ SÉRIALISATION PERSONNALISÉE
-      partialize: (state) => ({
-        user: state.user,
-        token: state.token,
-        isAuthenticated: state.isAuthenticated,
-        // Ne pas persister isHydrated
-      }),
     }
   )
-)
-
-// ✅ FONCTION D'INITIALISATION GLOBALE
-export const initializeAuthStore = () => {
-  if (typeof window !== 'undefined') {
-    const store = useAuthStore.getState()
-    console.log('🚀 Initialisation manuelle du store auth...')
-    store.syncWithLocalStorage()
-  }
-}
+);

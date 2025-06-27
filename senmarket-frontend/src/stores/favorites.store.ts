@@ -1,4 +1,4 @@
-// 🔧 FAVORITES STORE BASÉ SUR L'UTILISATEUR
+// 🔧 FAVORITES STORE AVEC PERSISTENCE LOCALSTORAGE
 // src/stores/favorites.store.ts
 
 import { create } from 'zustand';
@@ -40,170 +40,160 @@ interface FavoritesActions {
   setCurrentUser: (userId: string | null) => void;
   
   // Gestion favoris
-  addFavorite: (listingId: string, listingData?: Partial<FavoriteListing>) => void;
+  addFavorite: (listingId: string, listingData?: FavoriteListing) => void;
   removeFavorite: (listingId: string) => void;
   isFavorite: (listingId: string) => boolean;
   
-  // Récupération
+  // Getters
   getFavorites: () => string[];
   getFavoriteListings: () => FavoriteListing[];
+  getUserFavorites: (userId: string) => string[];
   
-  // Utilitaires
+  // Actions utilisateur
   clearUserFavorites: () => void;
   clearAllFavorites: () => void;
+  
+  // Utils
   debugFavorites: () => void;
 }
 
 export const useFavoritesStore = create<FavoritesState & FavoritesActions>()(
   persist(
     (set, get) => ({
-      // État initial
+      // ✅ ÉTAT INITIAL
       favoritesByUser: {},
       favoritesData: {},
       currentUserId: null,
 
       // ✅ DÉFINIR L'UTILISATEUR ACTUEL
-      setCurrentUser: (userId) => {
-        console.log('👤 setCurrentUser appelé:', userId);
+      setCurrentUser: (userId: string | null) => {
+        console.log('👤 Changement utilisateur favoris:', get().currentUserId, '→', userId);
         set({ currentUserId: userId });
-        
-        if (userId) {
-          // Initialiser les favoris pour cet utilisateur s'ils n'existent pas
-          const state = get();
-          if (!state.favoritesByUser[userId]) {
-            set(prev => ({
-              favoritesByUser: {
-                ...prev.favoritesByUser,
-                [userId]: []
-              }
-            }));
-            console.log('✅ Favoris initialisés pour user:', userId);
-          } else {
-            console.log('📋 Favoris existants pour user:', userId, '→', state.favoritesByUser[userId].length, 'items');
-          }
-        }
       },
 
-      // ✅ AJOUTER AUX FAVORIS
-      addFavorite: (listingId, listingData) => {
-        const { currentUserId } = get();
+      // ✅ AJOUTER UN FAVORI
+      addFavorite: (listingId: string, listingData?: FavoriteListing) => {
+        const { currentUserId, favoritesByUser, favoritesData } = get();
         
         if (!currentUserId) {
-          console.warn('⚠️ Impossible d\'ajouter aux favoris : utilisateur non connecté');
+          console.warn('⚠️ Tentative d\'ajout favori sans utilisateur connecté');
           return;
         }
 
-        console.log('❤️ Ajout favori:', listingId, 'pour user:', currentUserId);
-
-        set(prev => {
-          const userFavorites = prev.favoritesByUser[currentUserId] || [];
-          
-          // Éviter les doublons
-          if (userFavorites.includes(listingId)) {
-            console.log('ℹ️ Déjà en favoris');
-            return prev;
-          }
-
-          const newUserFavorites = [...userFavorites, listingId];
-          
-          return {
-            favoritesByUser: {
-              ...prev.favoritesByUser,
-              [currentUserId]: newUserFavorites
-            },
-            favoritesData: listingData ? {
-              ...prev.favoritesData,
-              [listingId]: {
-                id: listingId,
-                addedAt: new Date().toISOString(),
-                ...listingData
-              } as FavoriteListing
-            } : prev.favoritesData
-          };
-        });
-      },
-
-      // ✅ RETIRER DES FAVORIS
-      removeFavorite: (listingId) => {
-        const { currentUserId } = get();
-        
-        if (!currentUserId) {
-          console.warn('⚠️ Impossible de retirer des favoris : utilisateur non connecté');
+        // Vérifier si déjà en favori
+        const userFavorites = favoritesByUser[currentUserId] || [];
+        if (userFavorites.includes(listingId)) {
+          console.log('ℹ️ Listing déjà en favori:', listingId);
           return;
         }
 
-        console.log('💔 Retrait favori:', listingId, 'pour user:', currentUserId);
+        console.log('❤️ Ajout favori:', listingId, 'pour utilisateur:', currentUserId);
 
-        set(prev => {
-          const userFavorites = prev.favoritesByUser[currentUserId] || [];
-          const newUserFavorites = userFavorites.filter(id => id !== listingId);
-          
-          return {
-            favoritesByUser: {
-              ...prev.favoritesByUser,
-              [currentUserId]: newUserFavorites
-            },
-            // Garder les données pour les autres utilisateurs
-            favoritesData: prev.favoritesData
-          };
+        // Mettre à jour les favoris utilisateur
+        const updatedFavoritesByUser = {
+          ...favoritesByUser,
+          [currentUserId]: [...userFavorites, listingId]
+        };
+
+        // Mettre à jour les données si fournies
+        const updatedFavoritesData = listingData ? {
+          ...favoritesData,
+          [listingId]: {
+            ...listingData,
+            addedAt: new Date().toISOString()
+          }
+        } : favoritesData;
+
+        set({
+          favoritesByUser: updatedFavoritesByUser,
+          favoritesData: updatedFavoritesData
         });
       },
 
-      // ✅ VÉRIFIER SI C'EST UN FAVORI
-      isFavorite: (listingId) => {
+      // ✅ RETIRER UN FAVORI
+      removeFavorite: (listingId: string) => {
         const { currentUserId, favoritesByUser } = get();
         
+        if (!currentUserId) {
+          console.warn('⚠️ Tentative de retrait favori sans utilisateur connecté');
+          return;
+        }
+
+        console.log('💔 Retrait favori:', listingId, 'pour utilisateur:', currentUserId);
+
+        const userFavorites = favoritesByUser[currentUserId] || [];
+        const updatedUserFavorites = userFavorites.filter(id => id !== listingId);
+
+        set({
+          favoritesByUser: {
+            ...favoritesByUser,
+            [currentUserId]: updatedUserFavorites
+          }
+        });
+      },
+
+      // ✅ VÉRIFIER SI EN FAVORI
+      isFavorite: (listingId: string) => {
+        const { currentUserId, favoritesByUser } = get();
         if (!currentUserId) return false;
         
         const userFavorites = favoritesByUser[currentUserId] || [];
         return userFavorites.includes(listingId);
       },
 
-      // ✅ RÉCUPÉRER LES IDs DES FAVORIS
+      // ✅ RÉCUPÉRER LES FAVORIS DE L'UTILISATEUR ACTUEL
       getFavorites: () => {
         const { currentUserId, favoritesByUser } = get();
-        
         if (!currentUserId) return [];
         
         return favoritesByUser[currentUserId] || [];
       },
 
-      // ✅ RÉCUPÉRER LES DONNÉES COMPLÈTES DES FAVORIS
+      // ✅ RÉCUPÉRER LES DONNÉES DES FAVORIS
       getFavoriteListings: () => {
         const { currentUserId, favoritesByUser, favoritesData } = get();
-        
         if (!currentUserId) return [];
-        
+
         const userFavorites = favoritesByUser[currentUserId] || [];
-        
         return userFavorites
           .map(id => favoritesData[id])
-          .filter(Boolean) // Filtrer les undefined
-          .sort((a, b) => new Date(b.addedAt).getTime() - new Date(a.addedAt).getTime());
+          .filter(Boolean) // Filtrer les favoris sans données
+          .sort((a, b) => new Date(b.addedAt).getTime() - new Date(a.addedAt).getTime()); // Trier par date d'ajout
+      },
+
+      // ✅ RÉCUPÉRER LES FAVORIS D'UN UTILISATEUR SPÉCIFIQUE
+      getUserFavorites: (userId: string) => {
+        const { favoritesByUser } = get();
+        return favoritesByUser[userId] || [];
       },
 
       // ✅ VIDER LES FAVORIS DE L'UTILISATEUR ACTUEL
       clearUserFavorites: () => {
-        const { currentUserId } = get();
+        const { currentUserId, favoritesByUser } = get();
         
-        if (!currentUserId) return;
+        if (!currentUserId) {
+          console.warn('⚠️ Tentative de nettoyage favoris sans utilisateur connecté');
+          return;
+        }
 
-        console.log('🧹 Nettoyage favoris pour user:', currentUserId);
+        console.log('🧹 Nettoyage favoris utilisateur:', currentUserId);
 
-        set(prev => ({
+        set({
           favoritesByUser: {
-            ...prev.favoritesByUser,
+            ...favoritesByUser,
             [currentUserId]: []
           }
-        }));
+        });
       },
 
-      // ✅ VIDER TOUS LES FAVORIS (DANGER)
+      // ✅ VIDER TOUS LES FAVORIS (UTILISÉ LORS DE LA DÉCONNEXION)
       clearAllFavorites: () => {
-        console.log('💀 Nettoyage COMPLET des favoris');
+        console.log('🧹 Nettoyage complet favoris');
+        
         set({
           favoritesByUser: {},
           favoritesData: {},
+          currentUserId: null
         });
       },
 
@@ -211,27 +201,30 @@ export const useFavoritesStore = create<FavoritesState & FavoritesActions>()(
       debugFavorites: () => {
         const state = get();
         console.log('🔍 === DEBUG FAVORIS ===');
-        console.log('- Current User ID:', state.currentUserId);
-        console.log('- Favorites by user:', state.favoritesByUser);
-        console.log('- Favorites data keys:', Object.keys(state.favoritesData));
-        
-        if (state.currentUserId) {
-          const userFavs = state.favoritesByUser[state.currentUserId] || [];
-          console.log(`- Favoris pour ${state.currentUserId}:`, userFavs);
-        }
+        console.log('currentUserId:', state.currentUserId);
+        console.log('favoritesByUser:', state.favoritesByUser);
+        console.log('favoritesData keys:', Object.keys(state.favoritesData));
+        console.log('Current user favorites:', state.getFavorites());
+        console.log('Current user listings:', state.getFavoriteListings().length);
+        console.log('======================');
       }
     }),
     {
-      name: 'senmarket-favorites',
-      // ✅ GARDER SEULEMENT LES DONNÉES IMPORTANTES
+      name: 'senmarket-favorites', // ✅ NOM UNIQUE POUR LOCALSTORAGE
+      // ✅ CONFIGURATION PERSISTENCE
       partialize: (state) => ({
         favoritesByUser: state.favoritesByUser,
         favoritesData: state.favoritesData,
-        // Ne pas persister currentUserId - sera défini par l'auth
+        // currentUserId sera géré par l'auth store
       }),
+      // ✅ GESTION DES ERREURS DE PERSISTENCE
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          console.log('🔄 Favoris rechargés depuis localStorage');
+          console.log('- Utilisateurs avec favoris:', Object.keys(state.favoritesByUser));
+          console.log('- Données en cache:', Object.keys(state.favoritesData).length);
+        }
+      },
     }
   )
 );
-
-// ✅ TYPES POUR EXPORT
-export type { FavoriteListing };

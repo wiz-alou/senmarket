@@ -1,3 +1,7 @@
+// ✅ LAYOUT DÉJÀ CONFIGURÉ AVEC APPPROVIDERS
+// Votre layout.tsx est déjà correct !
+// AppProviders contient déjà AuthProvider et FavoritesInitializer
+
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
@@ -133,7 +137,7 @@ export default function RootLayout({
       </head>
       <body className={`${inter.className} antialiased min-h-screen bg-background font-sans`}>
         <ErrorBoundary>
-          {/* ✅ APPPROVIDERS MAINTENANT CONTIENT AUTHPROVIDER ET FAVORITESINITIALIZER */}
+          {/* ✅ APPPROVIDERS CONTIENT DÉJÀ AUTHPROVIDER ET FAVORITESINITIALIZER */}
           <AppProviders>
             <OfflineBanner />
             <div className="relative flex min-h-screen flex-col">
