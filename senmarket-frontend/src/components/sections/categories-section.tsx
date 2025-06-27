@@ -46,14 +46,6 @@ interface Category {
   active_sellers?: number
 }
 
-interface CategoryStats {
-  total_listings: number
-  active_listings: number
-  categories: Category[]
-  top_performing: Category[]
-  growth_categories: Category[]
-}
-
 export function CategoriesSection() {
   const router = useRouter()
   const [categories, setCategories] = useState<Category[]>([])
@@ -159,8 +151,8 @@ export function CategoriesSection() {
     return num.toString()
   }
 
-  // ✅ FONCTION CORRIGÉE - Utilise les vraies données SANS prix moyen
-  const fetchCategoriesWithStats = async (isRefresh = false) => {
+  // ✅ SOLUTION FINALE - Compter manuellement car le backend cherche 'published' au lieu de 'active'
+  const fetchCategoriesWithRealCounts = async (isRefresh = false) => {
     if (isRefresh) {
       setRefreshing(true)
     } else {
@@ -169,83 +161,98 @@ export function CategoriesSection() {
     setError(null)
     
     try {
-      console.log('🔄 Fetching REAL categories data...')
+      console.log('🔄 Fetching categories and listings separately...')
       
-      // Récupérer les catégories avec statistiques RÉELLES
-      const response = await fetch('http://localhost:8080/api/v1/categories/stats')
+      // 1. Récupérer les catégories
+      const categoriesResponse = await fetch('http://localhost:8080/api/v1/categories')
+      if (!categoriesResponse.ok) throw new Error(`Categories: ${categoriesResponse.status}`)
+      const categoriesData = await categoriesResponse.json()
       
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      // 2. Récupérer TOUTES les annonces (augmenter la limite)
+      const listingsResponse = await fetch('http://localhost:8080/api/v1/listings?limit=1000')
+      if (!listingsResponse.ok) throw new Error(`Listings: ${listingsResponse.status}`)
+      const listingsData = await listingsResponse.json()
+      
+      console.log('✅ Raw data received:')
+      console.log('  - Categories:', categoriesData)
+      console.log('  - Listings:', listingsData)
+      
+      if (!categoriesData.data || !listingsData.data) {
+        throw new Error('Invalid API response structure')
       }
       
-      const data = await response.json()
-      console.log('✅ Categories API response:', data)
-      console.log('📊 Analyzing category data...')
-      console.log('🔍 STRUCTURE COMPLÈTE:', JSON.stringify(data, null, 2))
-
-      if (data.data && Array.isArray(data.data)) {
-        // ✅ ENRICHISSEMENT BASÉ SUR LES VRAIES DONNÉES
-        const enrichedCategories = data.data.map((category: any, index: number) => {
-          // ✅ ESSAYER TOUTES LES VARIANTES POSSIBLES
-          const realListingsCount = parseInt(category.listing_count) || 
-                                   parseInt(category.listings_count) || 
-                                   parseInt(category.ListingCount) || 
-                                   parseInt(category.count) || 0
-          
-          console.log(`📊 Catégorie ${category.name}:`)
-          console.log(`   - listing_count: ${category.listing_count}`)
-          console.log(`   - listings_count: ${category.listings_count}`)  
-          console.log(`   - ListingCount: ${category.ListingCount}`)
-          console.log(`   - count: ${category.count}`)
-          console.log(`   - FINAL: ${realListingsCount} annonces`)
-          
-          return {
-            ...category,
-            listings_count: realListingsCount, // On garde listings_count pour le frontend
-            // ✅ SEUILS RÉALISTES pour le trending
-            is_trending: realListingsCount >= 2, // Trending si 2+ annonces
-            // ✅ CROISSANCE basée sur les vraies données
-            growth_rate: realListingsCount >= 5 ? '+18%' : 
-                        realListingsCount >= 3 ? '+12%' : 
-                        realListingsCount >= 1 ? '+8%' : '+0%',
-            // ✅ PLUS DE PRIX MOYEN - Complètement supprimé
-            total_views: realListingsCount * (15 + Math.floor(Math.random() * 10)), // 15-25 vues par annonce
-            active_sellers: realListingsCount > 0 ? Math.max(1, Math.floor(realListingsCount * 0.8)) : 0 // 80% ratio
-          }
-        })
-
-        // Trier par popularité (nombre d'annonces RÉEL)
-        enrichedCategories.sort((a: Category, b: Category) => b.listings_count - a.listings_count)
-
-        setCategories(enrichedCategories)
-        setLastUpdated(new Date().toLocaleTimeString('fr-SN'))
-        console.log('📊 FINAL Enhanced categories loaded:', enrichedCategories.map(c => `${c.name}: ${c.listings_count} annonces`))
-      } else {
-        throw new Error('Format de données invalide')
+      // 3. Extraire les listings de la structure imbriquée
+      let allListings = []
+      if (Array.isArray(listingsData.data)) {
+        allListings = listingsData.data
+      } else if (listingsData.data.listings && Array.isArray(listingsData.data.listings)) {
+        allListings = listingsData.data.listings
+      } else if (listingsData.data.data && Array.isArray(listingsData.data.data)) {
+        allListings = listingsData.data.data
       }
+      
+      console.log('📊 Extracted listings:', allListings.length)
+      console.log('📊 Sample listing:', allListings[0])
+      
+      // 4. Compter par catégorie (toutes les annonces actives)
+      const categoryListingCounts: { [key: string]: number } = {}
+      const statusAnalysis: { [key: string]: number } = {}
+      
+      allListings.forEach((listing: any) => {
+        // Analyser les statuts
+        statusAnalysis[listing.status] = (statusAnalysis[listing.status] || 0) + 1
+        
+        // Compter seulement les annonces 'active' (vos vraies annonces publiées)
+        if (listing.status === 'active' && listing.category_id) {
+          categoryListingCounts[listing.category_id] = (categoryListingCounts[listing.category_id] || 0) + 1
+        }
+      })
+      
+      console.log('📊 Status analysis:', statusAnalysis)
+      console.log('📊 Category counts:', categoryListingCounts)
+      
+      // 5. Enrichir les catégories avec les vrais counts
+      const enrichedCategories = categoriesData.data.map((category: any) => {
+        const realCount = categoryListingCounts[category.id] || 0
+        
+        console.log(`📊 ${category.name}: ${realCount} annonces actives`)
+        
+        return {
+          ...category,
+          listings_count: realCount,
+          is_trending: realCount >= 2,
+          growth_rate: realCount >= 5 ? '+18%' : 
+                      realCount >= 3 ? '+12%' : 
+                      realCount >= 1 ? '+8%' : '+0%',
+          total_views: realCount * (15 + Math.floor(Math.random() * 10)),
+          active_sellers: realCount > 0 ? Math.max(1, Math.floor(realCount * 0.8)) : 0
+        }
+      })
+
+      // Trier par popularité
+      enrichedCategories.sort((a: Category, b: Category) => b.listings_count - a.listings_count)
+
+      setCategories(enrichedCategories)
+      setLastUpdated(new Date().toLocaleTimeString('fr-SN'))
+      
+      const totalListings = enrichedCategories.reduce((sum, cat) => sum + cat.listings_count, 0)
+      console.log('✅ Final results:')
+      console.log(`  - Total active listings: ${totalListings}`)
+      enrichedCategories.forEach(cat => {
+        console.log(`  - ${cat.name}: ${cat.listings_count} annonces`)
+      })
+      
     } catch (error) {
       console.error('❌ Error fetching categories:', error)
-      setError('Erreur lors du chargement des catégories')
+      setError(`Erreur: ${error}`)
       
-      // ✅ DONNÉES DE FALLBACK COHÉRENTES AVEC LA RÉALITÉ - SANS PRIX MOYEN
+      // Fallback data
       setCategories([
         {
           id: '1', slug: 'electronics', name: 'Électronique', icon: 'fa-laptop',
           description: 'Smartphones, ordinateurs, TV', sort_order: 1,
-          listings_count: 2, is_trending: true, growth_rate: '+8%',
-          total_views: 24, active_sellers: 1
-        },
-        {
-          id: '2', slug: 'vehicles', name: 'Véhicules', icon: 'fa-car',
-          description: 'Voitures, motos, camions', sort_order: 2,
-          listings_count: 1, is_trending: false, growth_rate: '+0%',
-          total_views: 8, active_sellers: 1
-        },
-        {
-          id: '3', slug: 'real-estate', name: 'Immobilier', icon: 'fa-home',
-          description: 'Appartements, villas, terrains', sort_order: 3,
-          listings_count: 0, is_trending: false, growth_rate: '+0%',
-          total_views: 0, active_sellers: 0
+          listings_count: 1, is_trending: false, growth_rate: '+8%',
+          total_views: 15, active_sellers: 1
         }
       ])
       setLastUpdated(new Date().toLocaleTimeString('fr-SN'))
@@ -256,11 +263,11 @@ export function CategoriesSection() {
   }
 
   useEffect(() => {
-    fetchCategoriesWithStats()
+    fetchCategoriesWithRealCounts()
     
     // Refresh automatique toutes les 2 minutes
     const interval = setInterval(() => {
-      fetchCategoriesWithStats(true)
+      fetchCategoriesWithRealCounts(true)
     }, 120000)
     
     return () => clearInterval(interval)
@@ -274,7 +281,7 @@ export function CategoriesSection() {
   const totalViews = categories.reduce((sum, cat) => sum + (cat.total_views || 0), 0)
   const totalSellers = categories.reduce((sum, cat) => sum + (cat.active_sellers || 0), 0)
 
-  // Loading state amélioré
+  // Loading state
   if (loading && categories.length === 0) {
     return (
       <section id="categories-section" className="py-20 lg:py-24 bg-white">
@@ -315,7 +322,7 @@ export function CategoriesSection() {
             <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
             <h3 className="text-xl font-semibold text-slate-900 mb-2">Erreur de chargement</h3>
             <p className="text-slate-600 mb-6">{error}</p>
-            <Button onClick={() => fetchCategoriesWithStats()} variant="outline">
+            <Button onClick={() => fetchCategoriesWithRealCounts()} variant="outline">
               <RefreshCw className="h-4 w-4 mr-2" />
               Réessayer
             </Button>
@@ -343,7 +350,7 @@ export function CategoriesSection() {
               <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
               <span className="text-xs">Mis à jour: {lastUpdated}</span>
               <button 
-                onClick={() => fetchCategoriesWithStats(true)}
+                onClick={() => fetchCategoriesWithRealCounts(true)}
                 disabled={refreshing}
                 className="ml-1 p-1 hover:bg-blue-200 rounded-full transition-colors disabled:opacity-50"
               >
@@ -373,7 +380,7 @@ export function CategoriesSection() {
             dans {categories.length} catégories soigneusement organisées pour faciliter vos recherches.
           </motion.p>
 
-          {/* Métriques rapides - Affichées seulement si on a des données */}
+          {/* Métriques rapides */}
           {totalListings > 0 && (
             <motion.div 
               initial={{ opacity: 0, y: 20 }}
@@ -398,12 +405,12 @@ export function CategoriesSection() {
           )}
         </div>
 
-        {/* Grille des catégories avec animations */}
+        {/* Grille des catégories */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
           {categories.map((category, index) => {
             const IconComponent = iconMapping[category.icon] || Package
             const colors = getColorClasses(category.slug)
-            const maxListings = Math.max(...categories.map(c => c.listings_count), 1) // Éviter division par 0
+            const maxListings = Math.max(...categories.map(c => c.listings_count), 1)
             const popularityPercentage = Math.round((category.listings_count / maxListings) * 100)
             
             return (
@@ -418,10 +425,10 @@ export function CategoriesSection() {
                 className={`group cursor-pointer rounded-2xl p-6 transition-all duration-300 hover:shadow-xl hover:shadow-blue-100 border-2 ${colors.bg} ${colors.border} relative overflow-hidden`}
               >
                 
-                {/* Background gradient subtil */}
+                {/* Background gradient */}
                 <div className={`absolute inset-0 bg-gradient-to-br ${colors.gradient} opacity-0 group-hover:opacity-5 transition-opacity duration-300`} />
                 
-                {/* Badges trending et croissance */}
+                {/* Badges */}
                 <div className="absolute top-4 right-4 flex flex-col gap-1">
                   {category.is_trending && category.listings_count > 0 && (
                     <Badge className="bg-red-100 text-red-700 text-xs px-2 py-1 animate-pulse">
@@ -429,7 +436,7 @@ export function CategoriesSection() {
                     </Badge>
                   )}
                   {category.listings_count > 0 && (
-                    <Badge className={`text-xs px-2 py-1 bg-green-100 text-green-700`}>
+                    <Badge className="text-xs px-2 py-1 bg-green-100 text-green-700">
                       {category.growth_rate}
                     </Badge>
                   )}
@@ -452,17 +459,17 @@ export function CategoriesSection() {
                     {category.description}
                   </p>
                   
-                  {/* Statistiques enrichies - SANS PRIX MOYEN */}
+                  {/* Statistiques */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-sm">
                       <div className="flex items-center space-x-1 text-slate-600">
                         <Package className="h-4 w-4" />
-                        <span>{formatNumber(category.listings_count)} annonces</span>
+                        <span className="font-semibold text-lg">
+                          {formatNumber(category.listings_count)} annonces
+                        </span>
                       </div>
                       <ArrowRight className={`h-4 w-4 ${colors.secondary} group-hover:translate-x-1 transition-transform`} />
                     </div>
-
-                    {/* ✅ SECTION PRIX MOYEN COMPLÈTEMENT SUPPRIMÉE */}
 
                     <div className="grid grid-cols-2 gap-2 text-xs text-slate-500">
                       <div className="flex items-center gap-1">
@@ -476,7 +483,7 @@ export function CategoriesSection() {
                     </div>
                   </div>
 
-                  {/* Barre de progression - Affichée seulement si on a des données */}
+                  {/* Barre de progression */}
                   {totalListings > 0 && (
                     <div className="pt-3 border-t border-gray-200">
                       <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
@@ -502,4 +509,4 @@ export function CategoriesSection() {
       </div>
     </section>
   )
-}   
+}

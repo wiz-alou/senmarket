@@ -559,7 +559,7 @@ export function HeroSection() {
                   </Button>
                   
                   {/* Indicateur de temps si en mode auto */}
-                  {showAllPhases && autoPlay && (
+                  {/* {showAllPhases && autoPlay && (
                     <div className="mt-2 text-xs text-slate-500 flex items-center justify-center gap-2">
                       <Clock className="h-3 w-3" />
                       Changement automatique toutes les 15 secondes
@@ -572,7 +572,7 @@ export function HeroSection() {
                         {autoPlay ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
                       </Button>
                     </div>
-                  )}
+                  )} */}
                 </div>
 
                 {/* Vue complète des phases (si activée) */}
