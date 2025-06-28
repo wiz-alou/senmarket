@@ -94,22 +94,39 @@ func (ctrl *UserController) GetCurrentUser(c *gin.Context) {
    responses.SendSuccess(c, result, "Profil utilisateur récupéré")
 }
 
-// GetUserByPhone récupère un utilisateur par téléphone
+// GetUserByPhone récupère un utilisateur par téléphone (DANS user_controller.go)
 func (ctrl *UserController) GetUserByPhone(c *gin.Context) {
-   phone := c.Query("phone")
-   if phone == "" {
-   	responses.SendBadRequest(c, "Numéro de téléphone requis", nil)
-   	return
-   }
-   
-   query := &queries.GetUserByPhoneQuery{Phone: phone}
-   result, err := ctrl.getUserHandler.HandleGetUserByPhone(c.Request.Context(), query)
-   if err != nil {
-   	responses.SendDomainError(c, err)
-   	return
-   }
-   
-   responses.SendSuccess(c, result, "Utilisateur trouvé")
+	phone := c.Query("phone")
+	if phone == "" {
+		responses.SendBadRequest(c, "Numéro de téléphone requis", nil)
+		return
+	}
+	
+	// 🔧 CORRIGÉ: Validation simple du téléphone sans région
+	// Pas besoin de validator complexe, juste vérifier le format de base
+	if len(phone) < 8 {
+		responses.SendValidationError(c, "Format de téléphone invalide", map[string]string{
+			"suggestion": "Utilisez le format +221XXXXXXXXX ou 0XXXXXXXX",
+		})
+		return
+	}
+	
+	// 🔧 SIMPLIFIÉE: Query sans validation région
+	query := &queries.GetUserByPhoneQuery{Phone: phone}
+	result, err := ctrl.getUserHandler.HandleGetUserByPhone(c.Request.Context(), query)
+	if err != nil {
+		// Si utilisateur non trouvé, c'est normal
+		if err.Error() == "utilisateur non trouvé" || err.Error() == "Utilisateur non trouvé" {
+			responses.SendNotFound(c, "Aucun utilisateur trouvé avec ce numéro")
+			return
+		}
+		
+		// Autres erreurs
+		responses.SendDomainError(c, err)
+		return
+	}
+	
+	responses.SendSuccess(c, result, "Utilisateur trouvé")
 }
 
 // VerifyUser vérifie un utilisateur avec un code

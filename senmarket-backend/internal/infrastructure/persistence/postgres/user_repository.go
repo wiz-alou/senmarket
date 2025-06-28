@@ -11,21 +11,35 @@ import (
 	"github.com/google/uuid"
 )
 
-// UserModel modèle de base de données pour les utilisateurs
+// UserModel modèle compatible avec ta table existante
 type UserModel struct {
-	ID               string     `gorm:"primaryKey;type:varchar(36)"`
-	Phone            string     `gorm:"uniqueIndex;not null;type:varchar(20)"`
-	Email            *string    `gorm:"type:varchar(255)"`
-	Region           string     `gorm:"not null;type:varchar(10)"`
+	ID               string     `gorm:"primaryKey;type:uuid;default:gen_random_uuid()"`
+	Phone            string     `gorm:"uniqueIndex;not null;type:text"`
+	Email            *string    `gorm:"type:text"`
+	Region           string     `gorm:"not null;type:text"`
+	
+	// 🔧 AJOUT: Champs de l'ancienne table avec valeurs par défaut
+	FirstName        string     `gorm:"not null;type:text;default:''"`
+	LastName         string     `gorm:"not null;type:text;default:''"`
+	PasswordHash     string     `gorm:"not null;type:text;default:''"`
+	AvatarURL        *string    `gorm:"type:text"`
+	
+	// États
 	IsVerified       bool       `gorm:"default:false"`
 	IsActive         bool       `gorm:"default:true"`
+	IsPremium        bool       `gorm:"default:false"`
+	
+	// Quotas
 	FreeListingsLeft int        `gorm:"default:3"`
 	PaidListings     int        `gorm:"default:0"`
 	TotalListings    int        `gorm:"default:0"`
+	
+	// Timestamps
 	CreatedAt        time.Time  `gorm:"autoCreateTime"`
 	UpdatedAt        time.Time  `gorm:"autoUpdateTime"`
 	LastLoginAt      *time.Time
 	VerifiedAt       *time.Time
+	DeletedAt        *time.Time
 }
 
 // TableName retourne le nom de la table
@@ -75,7 +89,7 @@ func (u *UserModel) ToEntity() (*entities.User, error) {
 func (u *UserModel) FromEntity(user *entities.User) {
 	u.ID = user.ID
 	u.Phone = user.GetPhoneNumber()
-	u.Region = user.GetRegionName()
+	u.Region = user.GetRegionCode()
 	u.IsVerified = user.IsVerified
 	u.IsActive = user.IsActive
 	u.FreeListingsLeft = user.FreeListingsLeft
@@ -86,85 +100,96 @@ func (u *UserModel) FromEntity(user *entities.User) {
 	u.LastLoginAt = user.LastLoginAt
 	u.VerifiedAt = user.VerifiedAt
 	
-	email := user.GetEmailAddress()
-	if email != "" {
+	// 🔧 NOUVEAU: Valeurs par défaut pour les champs requis
+	u.FirstName = ""
+	u.LastName = ""
+	u.PasswordHash = ""
+	u.IsPremium = false
+	
+	// Ajouter l'email si présent
+	if user.Email != nil {
+		email := user.GetEmailAddress()
 		u.Email = &email
 	}
 }
 
-// UserRepository implémentation PostgreSQL du repository utilisateur
+// UserRepository implémentation PostgreSQL
 type UserRepository struct {
-	*BaseRepository
+	db *gorm.DB
 }
 
-// NewUserRepository crée un nouveau repository utilisateur
+// NewUserRepository crée un nouveau repository
 func NewUserRepository(db *gorm.DB) repositories.UserRepository {
-	return &UserRepository{
-		BaseRepository: NewBaseRepository(db),
-	}
+	return &UserRepository{db: db}
 }
 
 // Create crée un nouvel utilisateur
 func (r *UserRepository) Create(ctx context.Context, user *entities.User) error {
+	// Générer un ID si pas présent
 	if user.ID == "" {
 		user.ID = uuid.New().String()
 	}
 	
-	model := &UserModel{}
-	model.FromEntity(user)
+	// Convertir en modèle
+	userModel := &UserModel{}
+	userModel.FromEntity(user)
 	
-	if err := r.db.WithContext(ctx).Create(model).Error; err != nil {
+	// Sauvegarder en base
+	if err := r.db.WithContext(ctx).Create(userModel).Error; err != nil {
 		return err
 	}
 	
 	return nil
 }
 
-// GetByID récupère un utilisateur par son ID
+// GetByID récupère un utilisateur par ID
 func (r *UserRepository) GetByID(ctx context.Context, id string) (*entities.User, error) {
-	var model UserModel
-	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&model).Error; err != nil {
+	var userModel UserModel
+	
+	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&userModel).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return nil, nil
+			return nil, entities.ErrUserNotFound
 		}
 		return nil, err
 	}
 	
-	return model.ToEntity()
+	return userModel.ToEntity()
 }
 
-// GetByPhone récupère un utilisateur par son téléphone
+// GetByPhone récupère un utilisateur par téléphone
 func (r *UserRepository) GetByPhone(ctx context.Context, phone string) (*entities.User, error) {
-	var model UserModel
-	if err := r.db.WithContext(ctx).Where("phone = ?", phone).First(&model).Error; err != nil {
+	var userModel UserModel
+	
+	if err := r.db.WithContext(ctx).Where("phone = ?", phone).First(&userModel).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return nil, nil
+			return nil, entities.ErrUserNotFound
 		}
 		return nil, err
 	}
 	
-	return model.ToEntity()
+	return userModel.ToEntity()
 }
 
-// GetByEmail récupère un utilisateur par son email
+// GetByEmail récupère un utilisateur par email
 func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*entities.User, error) {
-	var model UserModel
-	if err := r.db.WithContext(ctx).Where("email = ?", email).First(&model).Error; err != nil {
+	var userModel UserModel
+	
+	if err := r.db.WithContext(ctx).Where("email = ?", email).First(&userModel).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return nil, nil
+			return nil, entities.ErrUserNotFound
 		}
 		return nil, err
 	}
 	
-	return model.ToEntity()
+	return userModel.ToEntity()
 }
 
 // Update met à jour un utilisateur
 func (r *UserRepository) Update(ctx context.Context, user *entities.User) error {
-	model := &UserModel{}
-	model.FromEntity(user)
+	userModel := &UserModel{}
+	userModel.FromEntity(user)
 	
-	if err := r.db.WithContext(ctx).Save(model).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("id = ?", user.ID).Updates(userModel).Error; err != nil {
 		return err
 	}
 	

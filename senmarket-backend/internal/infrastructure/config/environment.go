@@ -4,6 +4,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"time"  // 🔐 AJOUTÉ: Import manquant
 )
 
 // Environment configuration de l'environnement
@@ -11,14 +12,29 @@ type Environment struct {
 	Environment string
 	Port        string
 	Debug       bool
+	
+	// 🔐 JWT Configuration
+	JWTSecret string        `json:"jwt_secret"`
+	JWTExpiry time.Duration `json:"jwt_expiry"`
 }
 
 // LoadEnvironment charge la configuration de l'environnement
 func LoadEnvironment() *Environment {
+	// JWT Configuration
+	jwtSecret := getEnv("JWT_SECRET", "senmarket-dev-secret-2025")
+	jwtExpiryStr := getEnv("JWT_EXPIRY", "24h")
+	jwtExpiry, err := time.ParseDuration(jwtExpiryStr)
+	if err != nil {
+		jwtExpiry = 24 * time.Hour // Fallback
+	}
+	
+	// 🔐 CORRIGÉ: Retourner l'environnement avec tous les champs
 	env := &Environment{
 		Environment: getEnv("ENVIRONMENT", "development"),
 		Port:        getEnv("PORT", "8080"),
 		Debug:       getEnvAsBool("DEBUG", true),
+		JWTSecret:   jwtSecret,   // 🔐 AJOUTÉ
+		JWTExpiry:   jwtExpiry,   // 🔐 AJOUTÉ
 	}
 	
 	return env

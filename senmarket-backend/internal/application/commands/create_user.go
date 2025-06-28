@@ -18,14 +18,14 @@ type CreateUserCommand struct {
 
 // CreateUserHandler handler pour créer un utilisateur
 type CreateUserHandler struct {
-	userRepo      repositories.UserRepository
+	userRepo       repositories.UserRepository
 	eventPublisher events.EventPublisher
 }
 
 // NewCreateUserHandler crée un nouveau handler
 func NewCreateUserHandler(userRepo repositories.UserRepository, eventPublisher events.EventPublisher) *CreateUserHandler {
 	return &CreateUserHandler{
-		userRepo:      userRepo,
+		userRepo:       userRepo,
 		eventPublisher: eventPublisher,
 	}
 }
@@ -59,11 +59,13 @@ func (h *CreateUserHandler) Handle(ctx context.Context, cmd *CreateUserCommand) 
 		return nil, err
 	}
 	
-	// Publier l'événement
-	event := events.NewUserCreatedEvent(user.ID, user.GetPhoneNumber(), user.GetRegionName(), user.FreeListingsLeft)
-	if err := h.eventPublisher.Publish(ctx, event); err != nil {
-		// Log l'erreur mais ne pas faire échouer la commande
-		// TODO: Implement proper logging
+	// 🔧 CORRIGÉ: Publier l'événement SEULEMENT si eventPublisher n'est pas nil
+	if h.eventPublisher != nil {
+		event := events.NewUserCreatedEvent(user.ID, user.GetPhoneNumber(), user.GetRegionName(), user.FreeListingsLeft)
+		if err := h.eventPublisher.Publish(ctx, event); err != nil {
+			// Log l'erreur mais ne pas faire échouer la commande
+			// TODO: Implement proper logging
+		}
 	}
 	
 	return &CreateUserResult{

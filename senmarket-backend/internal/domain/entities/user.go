@@ -156,3 +156,12 @@ type UserListingStats struct {
 	TotalContacts    int64   `json:"total_contacts"`
 	SuccessRate      float64 `json:"success_rate"`
 }
+
+// GetRegionCode retourne le code de la région
+func (u *User) GetRegionCode() string {
+	if u.Region == nil {
+		return ""
+	}
+	return u.Region.GetCode()
+}
+

@@ -3,6 +3,7 @@ package container
 
 import (
 	"log"
+	"time"
 	"gorm.io/gorm"
 	"github.com/redis/go-redis/v9"
 	"github.com/minio/minio-go/v7"
@@ -53,7 +54,7 @@ type Container struct {
 	// PricingService  services.PricingService
 	
 	// Application Services
-	AuthService         services.AuthService
+	AuthService         services.AuthService              // 🔐 NOUVEAU
 	ImageService        services.ImageService
 	AnalyticsService    services.AnalyticsApplicationService
 	NotificationService services.NotificationApplicationService
@@ -170,8 +171,22 @@ func (c *Container) initInfrastructureServices() {
 
 // initApplicationServices initialise les services d'application
 func (c *Container) initApplicationServices() {
-	// Auth Service
-	c.AuthService = services.NewAuthService(c.UserRepository)
+	// 🔐 NOUVEAU: Auth Service avec JWT
+	jwtSecret := "senmarket-dev-secret-2025" // TODO: Récupérer depuis config
+	if c.Config.JWTSecret != "" {
+		jwtSecret = c.Config.JWTSecret
+	}
+	
+	jwtExpiry := 24 * time.Hour // TODO: Récupérer depuis config
+	if c.Config.JWTExpiry > 0 {
+		jwtExpiry = c.Config.JWTExpiry
+	}
+	
+	c.AuthService = services.NewAuthService(
+		c.UserRepository,
+		jwtSecret,
+		jwtExpiry,
+	)
 	
 	// Image Service
 	c.ImageService = services.NewImageService()
@@ -252,7 +267,6 @@ func (c *Container) initQueryHandlers() {
 	c.GetUserStatsHandler = queries.NewGetUserStatsHandler(
 		c.UserRepository,
 		c.ListingRepository,
-		nil, // quotaService - TODO: implémenter
 	)
 	
 	// Get Categories Handler
@@ -275,7 +289,8 @@ func (c *Container) initQueryHandlers() {
 
 // initMiddleware initialise les middlewares
 func (c *Container) initMiddleware() {
-	c.AuthMiddleware = middleware.NewAuthMiddleware()
+	// 🔐 NOUVEAU: AuthMiddleware avec le service d'authentification
+	c.AuthMiddleware = middleware.NewAuthMiddleware(c.AuthService)
 	
 	log.Println("🛡️ Middlewares initialisés")
 }

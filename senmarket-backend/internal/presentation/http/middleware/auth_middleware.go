@@ -2,22 +2,27 @@
 package middleware
 
 import (
+	// "net/http"
 	"strings"
+
 	"github.com/gin-gonic/gin"
+	"senmarket/internal/application/services"
 	"senmarket/internal/presentation/http/responses"
 )
 
-// AuthMiddleware middleware d'authentification JWT
+// AuthMiddleware middleware d'authentification
 type AuthMiddleware struct {
-	// TODO: Ajouter JWTService quand il sera migré
+	authService services.AuthService
 }
 
 // NewAuthMiddleware crée un nouveau middleware d'authentification
-func NewAuthMiddleware() *AuthMiddleware {
-	return &AuthMiddleware{}
+func NewAuthMiddleware(authService services.AuthService) *AuthMiddleware {
+	return &AuthMiddleware{
+		authService: authService,
+	}
 }
 
-// RequireAuth vérifie que l'utilisateur est authentifié
+// RequireAuth middleware qui requiert une authentification
 func (m *AuthMiddleware) RequireAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token := m.extractToken(c)
@@ -27,32 +32,40 @@ func (m *AuthMiddleware) RequireAuth() gin.HandlerFunc {
 			return
 		}
 		
-		// TODO: Valider le token JWT
-		// Pour l'instant, on simule une validation
-		userID := m.validateToken(token)
-		if userID == "" {
-			responses.SendUnauthorized(c, "Token invalide")
+		claims, err := m.authService.ValidateToken(token)
+		if err != nil {
+			responses.SendUnauthorized(c, "Token invalide: "+err.Error())
 			c.Abort()
 			return
 		}
 		
-		// Ajouter l'ID utilisateur au contexte
-		c.Set("user_id", userID)
-		c.Set("token", token)
+		// Injecter les informations utilisateur dans le contexte
+		c.Set("user_id", claims.UserID)
+		c.Set("user_phone", claims.Phone)
+		c.Set("user_region", claims.Region)
+		c.Set("user_verified", claims.IsVerified)
+		c.Set("user_active", claims.IsActive)
+		c.Set("user_claims", claims)
 		
 		c.Next()
 	}
 }
 
-// OptionalAuth authentification optionnelle
+// OptionalAuth middleware d'authentification optionnelle
 func (m *AuthMiddleware) OptionalAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token := m.extractToken(c)
 		if token != "" {
-			userID := m.validateToken(token)
-			if userID != "" {
-				c.Set("user_id", userID)
-				c.Set("token", token)
+			claims, err := m.authService.ValidateToken(token)
+			if err == nil {
+				// Token valide, injecter les infos
+				c.Set("user_id", claims.UserID)
+				c.Set("user_phone", claims.Phone)
+				c.Set("user_region", claims.Region)
+				c.Set("user_verified", claims.IsVerified)
+				c.Set("user_active", claims.IsActive)
+				c.Set("user_claims", claims)
+				c.Set("authenticated", true)
 			}
 		}
 		
@@ -60,23 +73,21 @@ func (m *AuthMiddleware) OptionalAuth() gin.HandlerFunc {
 	}
 }
 
-// RequireAdmin vérifie que l'utilisateur est administrateur
-func (m *AuthMiddleware) RequireAdmin() gin.HandlerFunc {
+// RequireVerified middleware qui requiert un utilisateur vérifié
+func (m *AuthMiddleware) RequireVerified() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// TODO: Vérifier les permissions admin
-		// Pour l'instant, on simule
+		// D'abord vérifier l'auth
+		m.RequireAuth()(c)
 		
-		userID := c.GetString("user_id")
-		if userID == "" {
-			responses.SendUnauthorized(c, "Authentification requise")
-			c.Abort()
+		// Si déjà abort, ne pas continuer
+		if c.IsAborted() {
 			return
 		}
 		
-		// TODO: Vérifier si l'utilisateur est admin
-		isAdmin := m.checkAdminPermissions(userID)
-		if !isAdmin {
-			responses.SendForbidden(c, "Permissions administrateur requises")
+		// Vérifier si l'utilisateur est vérifié
+		verified, exists := c.Get("user_verified")
+		if !exists || !verified.(bool) {
+			responses.SendForbidden(c, "Compte non vérifié")
 			c.Abort()
 			return
 		}
@@ -85,34 +96,77 @@ func (m *AuthMiddleware) RequireAdmin() gin.HandlerFunc {
 	}
 }
 
-// extractToken extrait le token du header Authorization
+// RequireAdmin middleware qui requiert des privilèges admin
+func (m *AuthMiddleware) RequireAdmin() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// D'abord vérifier l'auth
+		m.RequireAuth()(c)
+		
+		// Si déjà abort, ne pas continuer
+		if c.IsAborted() {
+			return
+		}
+		
+		// TODO: Implémenter la logique admin
+		// Pour l'instant, tous les utilisateurs vérifiés sont admins en dev
+		verified, exists := c.Get("user_verified")
+		if !exists || !verified.(bool) {
+			responses.SendForbidden(c, "Privilèges administrateur requis")
+			c.Abort()
+			return
+		}
+		
+		c.Next()
+	}
+}
+
+// extractToken extrait le token JWT de la requête
 func (m *AuthMiddleware) extractToken(c *gin.Context) string {
+	// 1. Vérifier l'en-tête Authorization
 	authHeader := c.GetHeader("Authorization")
-	if authHeader == "" {
+	if authHeader != "" {
+		// Format: "Bearer <token>"
+		parts := strings.SplitN(authHeader, " ", 2)
+		if len(parts) == 2 && strings.ToLower(parts[0]) == "bearer" {
+			return parts[1]
+		}
+	}
+	
+	// 2. Vérifier le query parameter (pour les WebSocket ou cas spéciaux)
+	token := c.Query("token")
+	if token != "" {
+		return token
+	}
+	
+	// 3. Vérifier le cookie (optionnel)
+	cookie, err := c.Cookie("auth_token")
+	if err == nil && cookie != "" {
+		return cookie
+	}
+	
+	return ""
+}
+
+// GetUserID helper pour récupérer l'ID utilisateur depuis le contexte
+func GetUserID(c *gin.Context) string {
+	userID, exists := c.Get("user_id")
+	if !exists {
 		return ""
 	}
-	
-	// Format: "Bearer <token>"
-	if strings.HasPrefix(authHeader, "Bearer ") {
-		return authHeader[7:]
-	}
-	
-	return ""
+	return userID.(string)
 }
 
-// validateToken valide un token JWT (simulation)
-func (m *AuthMiddleware) validateToken(token string) string {
-	// TODO: Implémenter la validation JWT réelle
-	// Pour l'instant, on simule en retournant un userID fixe
-	if token == "valid-token" {
-		return "user-123"
+// GetUserClaims helper pour récupérer les claims utilisateur
+func GetUserClaims(c *gin.Context) *services.UserClaims {
+	claims, exists := c.Get("user_claims")
+	if !exists {
+		return nil
 	}
-	return ""
+	return claims.(*services.UserClaims)
 }
 
-// checkAdminPermissions vérifie les permissions admin (simulation)
-func (m *AuthMiddleware) checkAdminPermissions(userID string) bool {
-	// TODO: Implémenter la vérification des permissions réelles
-	// Pour l'instant, on simule
-	return userID == "admin-user"
+// IsAuthenticated vérifie si l'utilisateur est authentifié
+func IsAuthenticated(c *gin.Context) bool {
+	_, exists := c.Get("user_id")
+	return exists
 }

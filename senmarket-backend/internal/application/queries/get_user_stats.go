@@ -6,36 +6,29 @@ import (
 	"senmarket/internal/application/dto"
 	"senmarket/internal/domain/entities"
 	"senmarket/internal/domain/repositories"
-	"senmarket/internal/domain/services"
 )
 
-// GetUserStatsQuery requête pour récupérer les statistiques d'un utilisateur
-type GetUserStatsQuery struct {
-	UserID string `json:"user_id" validate:"required"`
-}
-
-// GetUserQuotaQuery requête pour récupérer les quotas d'un utilisateur
+// 🔧 SUPPRIMÉ GetUserStatsQuery (déjà défini dans get_user.go)
+// 🔧 AJOUTÉ: Query spécifique pour quotas
 type GetUserQuotaQuery struct {
 	UserID string `json:"user_id" validate:"required"`
 }
 
 // GetUserStatsHandler handler pour les statistiques utilisateur
 type GetUserStatsHandler struct {
-	userRepo     repositories.UserRepository
-	listingRepo  repositories.ListingRepository
-	quotaService services.QuotaService
+	userRepo    repositories.UserRepository
+	listingRepo repositories.ListingRepository
+	// TODO: quotaService sera ajouté plus tard
 }
 
 // NewGetUserStatsHandler crée un nouveau handler
 func NewGetUserStatsHandler(
 	userRepo repositories.UserRepository,
 	listingRepo repositories.ListingRepository,
-	quotaService services.QuotaService,
 ) *GetUserStatsHandler {
 	return &GetUserStatsHandler{
-		userRepo:     userRepo,
-		listingRepo:  listingRepo,
-		quotaService: quotaService,
+		userRepo:    userRepo,
+		listingRepo: listingRepo,
 	}
 }
 
@@ -50,13 +43,17 @@ func (h *GetUserStatsHandler) HandleGetUserStats(ctx context.Context, query *Get
 		return nil, entities.ErrUserNotFound
 	}
 	
-	// Récupérer les statistiques des annonces
-	stats, err := h.listingRepo.GetStatsByUser(ctx, query.UserID)
-	if err != nil {
-		return nil, err
+	// 🔧 TEMPORAIRE: Stats basiques en attendant l'implémentation complète
+	stats := &dto.UserStatsDTO{
+		UserID:         query.UserID,
+		TotalListings:  0,
+		ActiveListings: 0,
+		TotalViews:     0,
+		TotalContacts:  0,
+		SuccessRate:    0.0,
 	}
 	
-	return dto.NewUserStatsDTO(user, stats), nil
+	return stats, nil
 }
 
 // HandleGetUserQuota traite la requête de quota utilisateur
@@ -70,11 +67,15 @@ func (h *GetUserStatsHandler) HandleGetUserQuota(ctx context.Context, query *Get
 		return nil, entities.ErrUserNotFound
 	}
 	
-	// Récupérer le statut des quotas
-	quotaStatus, err := h.quotaService.GetQuotaStatus(ctx, user)
-	if err != nil {
-		return nil, err
+	// 🔧 TEMPORAIRE: Quota basique en attendant l'implémentation complète
+	quota := &dto.QuotaStatusDTO{
+		UserID:           query.UserID,
+		FreeListingsLeft: 5, // Valeur par défaut
+		PaidListings:     0,
+		TotalListings:    0,
+		CanCreateFree:    true,
+		IsInLaunchPhase:  true,
 	}
 	
-	return dto.NewQuotaStatusDTO(quotaStatus), nil
+	return quota, nil
 }

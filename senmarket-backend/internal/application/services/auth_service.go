@@ -3,69 +3,83 @@ package services
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 	"senmarket/internal/domain/entities"
 	"senmarket/internal/domain/repositories"
-	"time"
 )
 
-// AuthService service d'authentification de la couche application
+// AuthService service d'authentification
 type AuthService interface {
-	// AuthenticateUser authentifie un utilisateur
-	AuthenticateUser(ctx context.Context, phone string) (*AuthResult, error)
+	// Login authentifie un utilisateur et retourne un JWT
+	Login(ctx context.Context, phone string) (*LoginResponse, error)
 	
-	// GenerateToken génère un token JWT
-	GenerateToken(ctx context.Context, userID string) (*TokenResult, error)
+	// ValidateToken valide un JWT et retourne les claims
+	ValidateToken(tokenString string) (*UserClaims, error)
 	
-	// ValidateToken valide un token JWT
-	ValidateToken(ctx context.Context, token string) (*TokenClaims, error)
+	// RefreshToken génère un nouveau token à partir d'un refresh token
+	RefreshToken(ctx context.Context, refreshToken string) (*LoginResponse, error)
 	
-	// RefreshToken renouvelle un token
-	RefreshToken(ctx context.Context, refreshToken string) (*TokenResult, error)
-	
-	// RevokeToken révoque un token
-	RevokeToken(ctx context.Context, token string) error
-}
-
-// AuthResult résultat d'authentification
-type AuthResult struct {
-	UserID      string    `json:"user_id"`
-	IsVerified  bool      `json:"is_verified"`
-	NeedsVerification bool `json:"needs_verification"`
-	LastLoginAt time.Time `json:"last_login_at"`
-}
-
-// TokenResult résultat de génération de token
-type TokenResult struct {
-	AccessToken  string    `json:"access_token"`
-	RefreshToken string    `json:"refresh_token"`
-	ExpiresAt    time.Time `json:"expires_at"`
-	TokenType    string    `json:"token_type"`
-}
-
-// TokenClaims claims du token JWT
-type TokenClaims struct {
-	UserID    string    `json:"user_id"`
-	Phone     string    `json:"phone"`
-	IsVerified bool     `json:"is_verified"`
-	IssuedAt  time.Time `json:"issued_at"`
-	ExpiresAt time.Time `json:"expires_at"`
+	// GenerateTokenForUser génère un token pour un utilisateur donné
+	GenerateTokenForUser(user *entities.User) (*LoginResponse, error)
 }
 
 // AuthServiceImpl implémentation du service d'authentification
 type AuthServiceImpl struct {
-	userRepo repositories.UserRepository
-	// TODO: Ajouter JWTService quand on l'aura migré
+	userRepo   repositories.UserRepository
+	jwtSecret  string
+	jwtExpiry  time.Duration
 }
 
 // NewAuthService crée un nouveau service d'authentification
-func NewAuthService(userRepo repositories.UserRepository) AuthService {
+func NewAuthService(userRepo repositories.UserRepository, jwtSecret string, jwtExpiry time.Duration) AuthService {
+	if jwtSecret == "" {
+		jwtSecret = "senmarket-dev-secret-2025" // Valeur par défaut pour dev
+	}
+	if jwtExpiry == 0 {
+		jwtExpiry = 24 * time.Hour // 24h par défaut
+	}
+	
 	return &AuthServiceImpl{
-		userRepo: userRepo,
+		userRepo:  userRepo,
+		jwtSecret: jwtSecret,
+		jwtExpiry: jwtExpiry,
 	}
 }
 
-// AuthenticateUser authentifie un utilisateur
-func (s *AuthServiceImpl) AuthenticateUser(ctx context.Context, phone string) (*AuthResult, error) {
+// UserClaims claims JWT pour l'utilisateur
+type UserClaims struct {
+	UserID     string `json:"user_id"`
+	Phone      string `json:"phone"`
+	Region     string `json:"region"`
+	IsVerified bool   `json:"is_verified"`
+	IsActive   bool   `json:"is_active"`
+	jwt.RegisteredClaims
+}
+
+// LoginResponse réponse de connexion
+type LoginResponse struct {
+	Token        string    `json:"token"`
+	RefreshToken string    `json:"refresh_token"`
+	ExpiresAt    time.Time `json:"expires_at"`
+	User         *UserInfo `json:"user"`
+}
+
+// UserInfo informations utilisateur simplifiées
+type UserInfo struct {
+	ID         string `json:"id"`
+	Phone      string `json:"phone"`
+	Region     string `json:"region"`
+	IsVerified bool   `json:"is_verified"`
+	IsActive   bool   `json:"is_active"`
+}
+
+// Login authentifie un utilisateur
+func (s *AuthServiceImpl) Login(ctx context.Context, phone string) (*LoginResponse, error) {
+	// Rechercher l'utilisateur par téléphone
 	user, err := s.userRepo.GetByPhone(ctx, phone)
 	if err != nil {
 		return nil, err
@@ -74,37 +88,133 @@ func (s *AuthServiceImpl) AuthenticateUser(ctx context.Context, phone string) (*
 		return nil, entities.ErrUserNotFound
 	}
 	
-	// Mettre à jour la dernière connexion
-	user.UpdateLastLogin()
-	if err := s.userRepo.Update(ctx, user); err != nil {
-		return nil, err
+	// Vérifier que l'utilisateur est actif
+	if !user.IsActive {
+		return nil, errors.New("compte désactivé")
 	}
 	
-	return &AuthResult{
-		UserID:            user.ID,
-		IsVerified:        user.IsVerified,
-		NeedsVerification: !user.IsVerified,
-		LastLoginAt:       *user.LastLoginAt,
+	// Générer les tokens
+	return s.GenerateTokenForUser(user)
+}
+
+// GenerateTokenForUser génère un token pour un utilisateur
+func (s *AuthServiceImpl) GenerateTokenForUser(user *entities.User) (*LoginResponse, error) {
+	now := time.Now()
+	expiresAt := now.Add(s.jwtExpiry)
+	
+	// Créer les claims
+	claims := &UserClaims{
+		UserID:     user.ID,
+		Phone:      user.GetPhoneNumber(),
+		Region:     user.GetRegionName(),
+		IsVerified: user.IsVerified,
+		IsActive:   user.IsActive,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   user.ID,
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(expiresAt),
+			NotBefore: jwt.NewNumericDate(now),
+			Issuer:    "senmarket-api",
+			Audience:  jwt.ClaimStrings{"senmarket-web", "senmarket-mobile"},
+		},
+	}
+	
+	// Créer le token
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	
+	// Signer le token
+	tokenString, err := token.SignedString([]byte(s.jwtSecret))
+	if err != nil {
+		return nil, fmt.Errorf("erreur génération token: %w", err)
+	}
+	
+	// Générer refresh token (plus long)
+	refreshClaims := &jwt.RegisteredClaims{
+		Subject:   user.ID,
+		IssuedAt:  jwt.NewNumericDate(now),
+		ExpiresAt: jwt.NewNumericDate(now.Add(7 * 24 * time.Hour)), // 7 jours
+		NotBefore: jwt.NewNumericDate(now),
+		Issuer:    "senmarket-api",
+	}
+	
+	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaims)
+	refreshTokenString, err := refreshToken.SignedString([]byte(s.jwtSecret))
+	if err != nil {
+		return nil, fmt.Errorf("erreur génération refresh token: %w", err)
+	}
+	
+	// Mettre à jour le last login
+	user.UpdateLastLogin()
+	s.userRepo.Update(context.Background(), user)
+	
+	return &LoginResponse{
+		Token:        tokenString,
+		RefreshToken: refreshTokenString,
+		ExpiresAt:    expiresAt,
+		User: &UserInfo{
+			ID:         user.ID,
+			Phone:      user.GetPhoneNumber(),
+			Region:     user.GetRegionName(),
+			IsVerified: user.IsVerified,
+			IsActive:   user.IsActive,
+		},
 	}, nil
 }
 
-// Les autres méthodes seront implémentées plus tard
-func (s *AuthServiceImpl) GenerateToken(ctx context.Context, userID string) (*TokenResult, error) {
-	// TODO: Implémenter avec JWT
-	return nil, nil
+// ValidateToken valide un JWT
+func (s *AuthServiceImpl) ValidateToken(tokenString string) (*UserClaims, error) {
+	// Parser le token
+	token, err := jwt.ParseWithClaims(tokenString, &UserClaims{}, func(token *jwt.Token) (interface{}, error) {
+		// Vérifier la méthode de signature
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("méthode de signature inattendue: %v", token.Header["alg"])
+		}
+		return []byte(s.jwtSecret), nil
+	})
+	
+	if err != nil {
+		return nil, fmt.Errorf("token invalide: %w", err)
+	}
+	
+	// Extraire les claims
+	claims, ok := token.Claims.(*UserClaims)
+	if !ok || !token.Valid {
+		return nil, errors.New("claims invalides")
+	}
+	
+	// Vérifications supplémentaires
+	if time.Now().After(claims.ExpiresAt.Time) {
+		return nil, errors.New("token expiré")
+	}
+	
+	return claims, nil
 }
 
-func (s *AuthServiceImpl) ValidateToken(ctx context.Context, token string) (*TokenClaims, error) {
-	// TODO: Implémenter avec JWT
-	return nil, nil
-}
-
-func (s *AuthServiceImpl) RefreshToken(ctx context.Context, refreshToken string) (*TokenResult, error) {
-	// TODO: Implémenter avec JWT
-	return nil, nil
-}
-
-func (s *AuthServiceImpl) RevokeToken(ctx context.Context, token string) error {
-	// TODO: Implémenter avec JWT
-	return nil
+// RefreshToken génère un nouveau token
+func (s *AuthServiceImpl) RefreshToken(ctx context.Context, refreshToken string) (*LoginResponse, error) {
+	// Parser le refresh token
+	token, err := jwt.ParseWithClaims(refreshToken, &jwt.RegisteredClaims{}, func(token *jwt.Token) (interface{}, error) {
+		return []byte(s.jwtSecret), nil
+	})
+	
+	if err != nil {
+		return nil, fmt.Errorf("refresh token invalide: %w", err)
+	}
+	
+	claims, ok := token.Claims.(*jwt.RegisteredClaims)
+	if !ok || !token.Valid {
+		return nil, errors.New("refresh token invalide")
+	}
+	
+	// Récupérer l'utilisateur
+	user, err := s.userRepo.GetByID(ctx, claims.Subject)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, entities.ErrUserNotFound
+	}
+	
+	// Générer nouveau token
+	return s.GenerateTokenForUser(user)
 }

@@ -3,6 +3,7 @@ package responses
 
 import (
 	"net/http"
+	"strings"
 	"github.com/gin-gonic/gin"
 	"senmarket/internal/presentation/http/validators"
 )
@@ -31,6 +32,9 @@ const (
 	ErrorPaymentFailed    ErrorCode = "PAYMENT_FAILED"
 	ErrorQuotaExceeded    ErrorCode = "QUOTA_EXCEEDED"
 	ErrorInsufficientFunds ErrorCode = "INSUFFICIENT_FUNDS"
+	ErrorInvalidRegion    ErrorCode = "INVALID_REGION"
+	ErrorInvalidPhone     ErrorCode = "INVALID_PHONE"
+	ErrorInvalidEmail     ErrorCode = "INVALID_EMAIL"
 )
 
 // SendError envoie une réponse d'erreur
@@ -111,20 +115,88 @@ func SendServiceUnavailable(c *gin.Context, message string) {
 	SendError(c, http.StatusServiceUnavailable, ErrorServiceUnavailable, message, nil)
 }
 
-// SendDomainError envoie une erreur métier spécifique
+// 🔧 CORRIGÉ: Mapping amélioré des erreurs domain vers HTTP
 func SendDomainError(c *gin.Context, err error) {
-	// TODO: Mapper les erreurs domain vers les codes HTTP appropriés
-	switch err.Error() {
-	case "utilisateur non trouvé":
-		SendNotFound(c, err.Error())
-	case "annonce non trouvée":
-		SendNotFound(c, err.Error())
-	case "quota dépassé":
-		SendBadRequest(c, err.Error(), nil)
-	case "fonds insuffisants":
-		SendBadRequest(c, err.Error(), nil)
+	errorMessage := err.Error()
+	
+	// 🎯 Mapping spécifique pour les erreurs de validation ValueObjects
+	switch {
+	case strings.Contains(errorMessage, "région"):
+		SendValidationError(c, "Région invalide", map[string]string{
+			"error": errorMessage,
+			"suggestion": "Utilisez un code région valide (DK, TH, SL, etc.)",
+		})
+		return
+		
+	case strings.Contains(errorMessage, "téléphone"):
+		SendValidationError(c, "Format de téléphone invalide", map[string]string{
+			"error": errorMessage,
+			"suggestion": "Utilisez le format +221XXXXXXXXX",
+		})
+		return
+		
+	case strings.Contains(errorMessage, "email"):
+		SendValidationError(c, "Format d'email invalide", map[string]string{
+			"error": errorMessage,
+			"suggestion": "Utilisez un format email valide",
+		})
+		return
+		
+	case strings.Contains(errorMessage, "devise"):
+		SendValidationError(c, "Devise non supportée", map[string]string{
+			"error": errorMessage,
+			"suggestion": "Utilisez XOF, EUR, ou USD",
+		})
+		return
+	}
+	
+	// 🔧 Mapping classique pour les erreurs métier
+	switch errorMessage {
+	case "utilisateur non trouvé", "Utilisateur non trouvé":
+		SendNotFound(c, "Utilisateur non trouvé")
+		
+	case "annonce non trouvée", "Annonce non trouvée":
+		SendNotFound(c, "Annonce non trouvée")
+		
+	case "catégorie non trouvée", "Catégorie non trouvée":
+		SendNotFound(c, "Catégorie non trouvée")
+		
+	case "paiement non trouvé", "Paiement non trouvé":
+		SendNotFound(c, "Paiement non trouvé")
+		
+	case "quota dépassé", "Quota dépassé":
+		SendBadRequest(c, "Quota dépassé", map[string]string{
+			"suggestion": "Mettez à niveau votre compte ou attendez la réinitialisation",
+		})
+		
+	case "fonds insuffisants", "Fonds insuffisants":
+		SendBadRequest(c, "Fonds insuffisants", map[string]string{
+			"suggestion": "Rechargez votre compte",
+		})
+		
+	case "utilisateur déjà existant", "Utilisateur déjà existant":
+		SendConflict(c, "Utilisateur déjà existant", nil)
+		
+	case "annonce déjà existante", "Annonce déjà existante":
+		SendConflict(c, "Annonce déjà existante", nil)
+		
+	case "non autorisé", "Non autorisé":
+		SendUnauthorized(c, "Accès non autorisé")
+		
+	case "interdit", "Interdit":
+		SendForbidden(c, "Accès interdit")
+		
+	// 🔧 NOUVEAU: Gestion des erreurs de validation génériques
 	default:
-		SendInternalError(c, "Une erreur est survenue", err.Error())
+		// Si l'erreur contient "invalide", "vide", "requis" -> Validation Error
+		if strings.Contains(strings.ToLower(errorMessage), "invalide") ||
+		   strings.Contains(strings.ToLower(errorMessage), "vide") ||
+		   strings.Contains(strings.ToLower(errorMessage), "requis") {
+			SendValidationError(c, "Validation échouée", errorMessage)
+		} else {
+			// Vraies erreurs internes
+			SendInternalError(c, "Une erreur est survenue", errorMessage)
+		}
 	}
 }
 

@@ -8,7 +8,7 @@ import (
 	"senmarket/internal/domain/repositories"
 )
 
-// GetUserQuery requête pour récupérer un utilisateur
+// GetUserQuery requête pour récupérer un utilisateur par ID
 type GetUserQuery struct {
 	UserID string `json:"user_id" validate:"required"`
 }
@@ -16,9 +16,10 @@ type GetUserQuery struct {
 // GetUserByPhoneQuery requête pour récupérer un utilisateur par téléphone
 type GetUserByPhoneQuery struct {
 	Phone string `json:"phone" validate:"required"`
+	// 🔧 SUPPRIMÉ: Region - pas nécessaire pour recherche par téléphone
 }
 
-// GetUserHandler handler pour récupérer un utilisateur
+// GetUserHandler handler pour les requêtes utilisateur
 type GetUserHandler struct {
 	userRepo repositories.UserRepository
 }
@@ -45,6 +46,7 @@ func (h *GetUserHandler) HandleGetUser(ctx context.Context, query *GetUserQuery)
 
 // HandleGetUserByPhone traite la requête de récupération d'utilisateur par téléphone
 func (h *GetUserHandler) HandleGetUserByPhone(ctx context.Context, query *GetUserByPhoneQuery) (*dto.UserDTO, error) {
+	// 🔧 CORRIGÉ: Plus de validation région, juste le téléphone
 	user, err := h.userRepo.GetByPhone(ctx, query.Phone)
 	if err != nil {
 		return nil, err
@@ -54,4 +56,9 @@ func (h *GetUserHandler) HandleGetUserByPhone(ctx context.Context, query *GetUse
 	}
 	
 	return dto.NewUserDTO(user), nil
+}
+
+// GetUserStatsQuery requête pour récupérer les statistiques d'un utilisateur
+type GetUserStatsQuery struct {
+	UserID string `json:"user_id" validate:"required"`
 }

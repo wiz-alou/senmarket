@@ -55,6 +55,33 @@ var regions = map[RegionCode]string{
 func NewRegion(code string) (*Region, error) {
 	code = strings.ToUpper(strings.TrimSpace(code))
 	
+	// 🔧 CORRECTION TEMPORAIRE: Permettre les codes vides pour la migration
+	if code == "" {
+		return &Region{
+			Code:     "",
+			Name:     "Non spécifié",
+			IsActive: false,
+		}, nil
+	}
+	
+	regionCode := RegionCode(code)
+	name, exists := regions[regionCode]
+	
+	if !exists {
+		return nil, errors.New("code région invalide pour le Sénégal")
+	}
+	
+	return &Region{
+		Code:     code,
+		Name:     name,
+		IsActive: true,
+	}, nil
+}
+
+// NewRegionStrict crée une nouvelle région avec validation stricte (pour les créations)
+func NewRegionStrict(code string) (*Region, error) {
+	code = strings.ToUpper(strings.TrimSpace(code))
+	
 	if code == "" {
 		return nil, errors.New("code région vide")
 	}
@@ -80,12 +107,19 @@ func GetAllRegions() map[RegionCode]string {
 
 // IsValidRegionCode vérifie si un code région est valide
 func IsValidRegionCode(code string) bool {
+	if code == "" {
+		return false
+	}
 	_, exists := regions[RegionCode(strings.ToUpper(code))]
 	return exists
 }
 
 // GetRegionName retourne le nom de la région par son code
 func GetRegionName(code string) (string, error) {
+	if code == "" {
+		return "Non spécifié", nil
+	}
+	
 	name, exists := regions[RegionCode(strings.ToUpper(code))]
 	if !exists {
 		return "", errors.New("code région invalide")
@@ -106,4 +140,14 @@ func (r *Region) GetCode() string {
 // GetName retourne le nom de la région
 func (r *Region) GetName() string {
 	return r.Name
+}
+
+// IsEmpty vérifie si la région est vide
+func (r *Region) IsEmpty() bool {
+	return r.Code == ""
+}
+
+// IsValid vérifie si la région est valide et active
+func (r *Region) IsValid() bool {
+	return r.Code != "" && r.IsActive
 }
