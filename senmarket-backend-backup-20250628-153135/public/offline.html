@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SenMarket - Mode Hors Ligne</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+        
+        .container {
+            text-align: center;
+            max-width: 400px;
+            padding: 2rem;
+        }
+        
+        .logo {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin-bottom: 1rem;
+            color: #fff;
+        }
+        
+        .offline-icon {
+            font-size: 4rem;
+            margin-bottom: 1.5rem;
+            opacity: 0.8;
+        }
+        
+        h1 {
+            font-size: 1.8rem;
+            margin-bottom: 1rem;
+            font-weight: 600;
+        }
+        
+        p {
+            font-size: 1.1rem;
+            line-height: 1.6;
+            margin-bottom: 2rem;
+            opacity: 0.9;
+        }
+        
+        .features {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin: 2rem 0;
+            backdrop-filter: blur(10px);
+        }
+        
+        .features h3 {
+            margin-bottom: 1rem;
+            font-size: 1.2rem;
+        }
+        
+        .features ul {
+            list-style: none;
+            text-align: left;
+        }
+        
+        .features li {
+            padding: 0.5rem 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .features li:last-child {
+            border-bottom: none;
+        }
+        
+        .features li::before {
+            content: "✓ ";
+            color: #4ade80;
+            font-weight: bold;
+            margin-right: 0.5rem;
+        }
+        
+        .retry-btn {
+            background: #fff;
+            color: #667eea;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .retry-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+        }
+        
+        .footer {
+            margin-top: 2rem;
+            font-size: 0.9rem;
+            opacity: 0.7;
+        }
+        
+        @media (max-width: 480px) {
+            .container {
+                padding: 1rem;
+            }
+            
+            .logo {
+                font-size: 2rem;
+            }
+            
+            h1 {
+                font-size: 1.5rem;
+            }
+            
+            p {
+                font-size: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">🇸🇳 SenMarket</div>
+        
+        <div class="offline-icon">📡</div>
+        
+        <h1>Mode Hors Ligne</h1>
+        
+        <p>
+            Pas de connexion internet ? Pas de problème !<br>
+            SenMarket fonctionne même hors ligne.
+        </p>
+        
+        <div class="features">
+            <h3>Ce que vous pouvez faire :</h3>
+            <ul>
+                <li>Consulter vos annonces sauvegardées</li>
+                <li>Voir vos images en cache</li>
+                <li>Préparer de nouvelles annonces</li>
+                <li>Consulter vos contacts récents</li>
+                <li>Naviguer dans l'historique</li>
+            </ul>
+        </div>
+        
+        <button class="retry-btn" onclick="retry()">
+            🔄 Réessayer la connexion
+        </button>
+        
+        <div class="footer">
+            Vos données seront synchronisées<br>
+            dès que la connexion sera rétablie
+        </div>
+    </div>
+
+    <script>
+        function retry() {
+            // Vérifier la connexion et recharger
+            if (navigator.onLine) {
+                window.location.reload();
+            } else {
+                // Animation du bouton si toujours offline
+                const btn = document.querySelector('.retry-btn');
+                btn.textContent = '❌ Toujours hors ligne';
+                setTimeout(() => {
+                    btn.textContent = '🔄 Réessayer la connexion';
+                }, 2000);
+            }
+        }
+        
+        // Écouter le retour de connexion
+        window.addEventListener('online', () => {
+            window.location.reload();
+        });
+        
+        // Afficher le statut de connexion
+        window.addEventListener('load', () => {
+            if (navigator.onLine) {
+                retry();
+            }
+        });
+    </script>
+</body>
+</html>
