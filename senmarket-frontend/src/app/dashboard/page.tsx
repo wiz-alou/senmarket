@@ -132,6 +132,109 @@ export default function DashboardPage() {
     fetchDashboardData()
   }, [isHydrated, isAuthenticated, user, token, router])
 
+  // 🚀 FONCTION POUR RÉCUPÉRER TOUTES LES ANNONCES VIA PAGINATION
+  const fetchAllMyListings = async (headers: Record<string, string>): Promise<Listing[]> => {
+    let allListings: Listing[] = []
+    let page = 1
+    let hasMore = true
+    const limit = 50 // Batch de 50 par requête pour optimiser
+    let totalExpected = 0
+    let requestCount = 0
+    
+    console.log('📊 Début récupération paginée des annonces...')
+    
+    while (hasMore && requestCount < 100) { // Sécurité : max 100 requêtes = 5000 annonces max
+      try {
+        console.log(`📄 Requête page ${page} (limit: ${limit})...`)
+        requestCount++
+        
+        const response = await fetch(
+          `http://localhost:8080/api/v1/listings/my?page=${page}&limit=${limit}`, 
+          { headers }
+        )
+        
+        if (!response.ok) {
+          if (response.status === 401) {
+            throw new Error('Session expirée')
+          }
+          console.warn(`⚠️ Erreur page ${page}: ${response.status}`)
+          break
+        }
+        
+        const data = await response.json()
+        console.log(`📄 Réponse page ${page}:`, {
+          status: data.success,
+          listingsCount: data.data?.listings?.length || 0,
+          pagination: data.data?.pagination
+        })
+        
+        // Extraire les annonces avec vérifications multiples
+        const pageListings = data.data?.listings || 
+                            data.listings || 
+                            data.data || 
+                            data || 
+                            []
+        
+        if (!Array.isArray(pageListings)) {
+          console.warn(`⚠️ Page ${page}: données non-tableau`, typeof pageListings)
+          break
+        }
+        
+        // Ajouter à la collection
+        allListings = [...allListings, ...pageListings]
+        
+        // Vérifier pagination
+        const pagination = data.data?.pagination
+        if (pagination) {
+          totalExpected = pagination.total || 0
+          hasMore = pagination.has_next || false
+          
+          console.log(`📊 Page ${page}: ${pageListings.length} annonces | Total actuel: ${allListings.length}/${totalExpected} | Plus de pages: ${hasMore}`)
+        } else {
+          // Pas de pagination dans la réponse - arrêter si page vide
+          hasMore = pageListings.length === limit
+          console.log(`📊 Page ${page}: ${pageListings.length} annonces | Pas d'info pagination | Continue: ${hasMore}`)
+        }
+        
+        // Sécurité : arrêter si page vide
+        if (pageListings.length === 0) {
+          console.log('📄 Page vide détectée - arrêt')
+          break
+        }
+        
+        page++
+        
+        // Délai court pour éviter de surcharger l'API
+        if (hasMore && page % 10 === 0) {
+          console.log('⏳ Pause de 100ms après 10 requêtes...')
+          await new Promise(resolve => setTimeout(resolve, 100))
+        }
+        
+      } catch (error) {
+        console.error(`❌ Erreur page ${page}:`, error)
+        break
+      }
+    }
+    
+    // Vérification finale et logs
+    if (requestCount >= 100) {
+      console.warn('⚠️ Limite de 100 requêtes atteinte - arrêt forcé')
+    }
+    
+    // Déduplication au cas où (par ID)
+    const uniqueListings = allListings.filter((listing, index, arr) => 
+      arr.findIndex(l => l.id === listing.id) === index
+    )
+    
+    if (uniqueListings.length !== allListings.length) {
+      console.warn(`⚠️ ${allListings.length - uniqueListings.length} doublons supprimés`)
+    }
+    
+    console.log(`✅ Récupération terminée: ${uniqueListings.length} annonces uniques en ${requestCount} requêtes`)
+    
+    return uniqueListings
+  }
+
   // ✅ RÉCUPÉRATION DES DONNÉES
   const fetchDashboardData = async () => {
     if (!token || !user) {
@@ -158,42 +261,20 @@ export default function DashboardPage() {
         'Content-Type': 'application/json'
       }
 
-      // 1. Mes annonces
+      // 🆕 1. MES ANNONCES - RÉCUPÉRATION COMPLÈTE AVEC PAGINATION
       let userListings: Listing[] = []
       try {
-        console.log('📝 Chargement des annonces...')
-        const listingsRes = await fetch('http://localhost:8080/api/v1/listings/my', { headers })
-        console.log('📝 Réponse listings status:', listingsRes.status)
-        
-        if (listingsRes.ok) {
-          const listingsData = await listingsRes.json()
-          console.log('📝 Données brutes reçues:', listingsData)
-          
-          // ✅ VÉRIFICATIONS MULTIPLES POUR TROUVER LE TABLEAU
-          userListings = listingsData.data?.listings || 
-                        listingsData.listings || 
-                        listingsData.data || 
-                        listingsData || 
-                        []
-          
-          // ✅ VÉRIFICATION FINALE QUE C'EST UN TABLEAU
-          if (!Array.isArray(userListings)) {
-            console.warn('⚠️ userListings n\'est pas un tableau:', typeof userListings, userListings)
-            userListings = []
-          }
-          
-          console.log('✅ Annonces traitées:', userListings.length)
-          setListings(userListings)
-        } else if (listingsRes.status === 401) {
+        console.log('📝 Chargement de TOUTES les annonces...')
+        userListings = await fetchAllMyListings(headers)
+        console.log(`✅ ${userListings.length} annonces récupérées au total`)
+        setListings(userListings)
+      } catch (error) {
+        console.warn('⚠️ Erreur listings:', error)
+        if (error instanceof Error && error.message.includes('Session expirée')) {
           logout()
           router.push('/auth/login?redirect=/dashboard')
           return
-        } else {
-          console.warn('⚠️ Erreur chargement annonces:', listingsRes.status)
-          setListings([])
         }
-      } catch (error) {
-        console.warn('⚠️ Erreur listings:', error)
         setListings([])
       }
 
@@ -205,6 +286,10 @@ export default function DashboardPage() {
           const contactsData = await contactsRes.json()
           userContacts = contactsData.data || contactsData || []
           setContacts(userContacts)
+        } else if (contactsRes.status === 401) {
+          logout()
+          router.push('/auth/login?redirect=/dashboard')
+          return
         }
       } catch (error) {
         console.warn('⚠️ Erreur contacts:', error)
@@ -238,6 +323,33 @@ export default function DashboardPage() {
         logout()
         router.push('/auth/login?redirect=/dashboard')
       }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 🔄 FONCTION POUR RAFRAÎCHIR UNIQUEMENT LES ANNONCES
+  const refreshListingsOnly = async () => {
+    const currentToken = token || localStorage.getItem('senmarket_token')
+    if (!currentToken) return
+    
+    const headers = {
+      'Authorization': `Bearer ${currentToken}`,
+      'Content-Type': 'application/json'
+    }
+    
+    try {
+      setLoading(true)
+      const userListings = await fetchAllMyListings(headers)
+      setListings(userListings)
+      
+      // Recalculer les stats avec les nouvelles annonces
+      calculateStatsFromData(userListings, contacts, payments)
+      
+      toast.success(`${userListings.length} annonces mises à jour`)
+    } catch (error) {
+      console.error('Erreur refresh listings:', error)
+      toast.error('Erreur lors du rafraîchissement')
     } finally {
       setLoading(false)
     }
@@ -466,7 +578,7 @@ export default function DashboardPage() {
                     <Plus className="h-5 w-5 mr-2" />
                     Nouvelle annonce
                   </Button>
-                  <Button variant="outline" onClick={() => { syncWithLocalStorage(); fetchDashboardData() }} className="border-blue-200 text-blue-600 hover:bg-blue-50 px-4 py-3 rounded-xl">
+                  <Button variant="outline" onClick={refreshListingsOnly} className="border-blue-200 text-blue-600 hover:bg-blue-50 px-4 py-3 rounded-xl" title="Rafraîchir toutes les annonces">
                     <Download className="h-5 w-5" />
                   </Button>
                 </div>
@@ -891,6 +1003,11 @@ export default function DashboardPage() {
                         <Button variant="outline" onClick={() => { syncWithLocalStorage(); fetchDashboardData() }} className="border-blue-200 text-blue-600 hover:bg-blue-50">
                           <Download className="h-4 w-4 mr-2" />
                           Rafraîchir les données
+                        </Button>
+                        
+                        <Button variant="outline" onClick={refreshListingsOnly} className="border-green-200 text-green-600 hover:bg-green-50">
+                          <Package className="h-4 w-4 mr-2" />
+                          Rafraîchir annonces
                         </Button>
                         
                         <Button variant="outline" onClick={() => { logout(); router.push('/') }} className="border-red-200 text-red-600 hover:bg-red-50">

@@ -46,15 +46,7 @@ export function Footer() {
         { name: "Statistiques", href: "/dashboard" }
       ]
     },
-    compte: {
-      title: "Mon Compte",
-      links: [
-        { name: "Se Connecter", href: "/auth/login" },
-        { name: "S'inscrire", href: "/auth/register" },
-        { name: "Mon Profil", href: "/dashboard" },
-        { name: "Paramètres", href: "/dashboard" }
-      ]
-    },
+    
     support: {
       title: "Support & Aide",
       links: [
@@ -150,7 +142,7 @@ export function Footer() {
             <div className="space-y-3 mb-6">
               <div className="flex items-center text-slate-300">
                 <Phone className="h-4 w-4 mr-3 text-blue-400" />
-                <span>+221 77 XXX XX XX</span>
+                <span>+221 77 708 07 57</span>
               </div>
               <div className="flex items-center text-slate-300">
                 <Mail className="h-4 w-4 mr-3 text-blue-400" />
@@ -281,43 +273,7 @@ export function Footer() {
           ))}
         </div>
 
-        {/* Payment Methods */}
-        <div className="border-t border-slate-800 pt-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-            
-            {/* Payment Methods */}
-            <div>
-              <h4 className="font-semibold text-white mb-4 flex items-center">
-                <Smartphone className="h-4 w-4 mr-2 text-green-400" />
-                Méthodes de Paiement Acceptées
-              </h4>
-              <div className="flex items-center space-x-4">
-                {paymentMethods.map((method, index) => (
-                  <div 
-                    key={index}
-                    className="bg-slate-800 rounded-lg px-4 py-2 flex items-center space-x-2"
-                  >
-                    <span className="text-lg">{method.logo}</span>
-                    <span className="text-sm font-medium text-white">{method.name}</span>
-                  </div>
-                ))}
-              </div>
-              <p className="text-xs text-slate-400 mt-2">
-                Paiements sécurisés avec les leaders du mobile money au Sénégal
-              </p>
-            </div>
 
-            {/* Phase de lancement */}
-            <div className="text-center md:text-right">
-              <div className="bg-gradient-to-r from-green-500/20 to-blue-500/20 rounded-xl p-6 border border-green-500/30">
-                <h4 className="font-bold text-green-400 mb-2">🎉 Phase de Lancement Active</h4>
-                <p className="text-slate-300 mb-2">Publications gratuites pendant encore</p>
-                <div className="text-2xl font-bold text-white mb-1">65 jours</div>
-                <p className="text-xs text-slate-400">Ensuite 200 FCFA par annonce</p>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Bottom Bar */}
