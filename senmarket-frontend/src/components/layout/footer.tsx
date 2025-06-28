@@ -29,11 +29,11 @@ export function Footer() {
       title: "Marketplace",
       links: [
         { name: "Toutes les Annonces", href: "/listings" },
-        { name: "Véhicules", href: "/listings?category=vehicles" },
-        { name: "Immobilier", href: "/listings?category=real-estate" },
-        { name: "Électronique", href: "/listings?category=electronics" },
-        { name: "Mode & Beauté", href: "/listings?category=fashion" },
-        { name: "Services", href: "/listings?category=services" }
+        { name: "Véhicules", href: "/listings?category=vehicules" },
+        { name: "Immobilier", href: "/listings?category=immobilier" },
+        { name: "Électronique", href: "/listings?category=electronique" },
+        { name: "Mode & Beauté", href: "/listings?category=mode" },
+        { name: "Mes Favoris", href: "/favorites" }
       ]
     },
     vendeurs: {
@@ -41,32 +41,27 @@ export function Footer() {
       links: [
         { name: "Publier une Annonce", href: "/sell" },
         { name: "Dashboard Vendeur", href: "/dashboard" },
-        { name: "Guide du Vendeur", href: "/help/seller-guide" },
-        { name: "Conseils & Astuces", href: "/help/tips" },
-        { name: "Formation Gratuite", href: "/help/training" },
-        { name: "Success Stories", href: "/about/success-stories" }
+        { name: "Mes Annonces", href: "/dashboard" },
+        { name: "Mes Contacts", href: "/dashboard" },
+        { name: "Statistiques", href: "/dashboard" }
       ]
     },
-    entreprise: {
-      title: "Solutions Entreprise",
+    compte: {
+      title: "Mon Compte",
       links: [
-        { name: "SenMarket Business", href: "/business" },
-        { name: "API pour Développeurs", href: "/developers" },
-        { name: "Intégrations ERP", href: "/business/integrations" },
-        { name: "Comptes Entreprise", href: "/business/enterprise" },
-        { name: "Partenariats", href: "/business/partnerships" },
-        { name: "Solutions sur Mesure", href: "/business/custom" }
+        { name: "Se Connecter", href: "/auth/login" },
+        { name: "S'inscrire", href: "/auth/register" },
+        { name: "Mon Profil", href: "/dashboard" },
+        { name: "Paramètres", href: "/dashboard" }
       ]
     },
     support: {
       title: "Support & Aide",
       links: [
-        { name: "Centre d'Aide", href: "/help" },
-        { name: "FAQ", href: "/help/faq" },
-        { name: "Sécurité", href: "/help/security" },
-        { name: "Signaler un Problème", href: "/help/report" },
-        { name: "Contact Support", href: "/contact" },
-        { name: "Statut des Services", href: "https://status.senmarket.sn", external: true }
+        { name: "Nous Contacter", href: "/contact" },
+        { name: "Centre d'Aide", href: "/contact" },
+        { name: "FAQ", href: "/contact" },
+        { name: "Signaler un Problème", href: "/contact" }
       ]
     },
     legal: {
@@ -74,10 +69,8 @@ export function Footer() {
       links: [
         { name: "Conditions d'Utilisation", href: "/legal/terms" },
         { name: "Politique de Confidentialité", href: "/legal/privacy" },
-        { name: "Conditions de Vente", href: "/legal/sales-terms" },
         { name: "Politique de Remboursement", href: "/legal/refund" },
-        { name: "Résolution des Litiges", href: "/legal/disputes" },
-        { name: "Conformité GDPR", href: "/legal/gdpr" }
+        { name: "Support Client", href: "/contact" }
       ]
     }
   };
@@ -118,15 +111,13 @@ export function Footer() {
   const paymentMethods = [
     { name: "Orange Money", logo: "🍊" },
     { name: "Wave", logo: "🌊" },
-    { name: "Free Money", logo: "💚" },
-    { name: "Visa", logo: "💳" },
-    { name: "Mastercard", logo: "💳" }
+    { name: "Free Money", logo: "💚" }
   ];
 
   const certifications = [
-    { name: "ISO 27001", description: "Sécurité Information" },
-    { name: "PCI DSS", description: "Sécurité Paiements" },
-    { name: "GDPR", description: "Protection Données" }
+    { name: "Sécurité SSL", description: "Chiffrement 256-bit" },
+    { name: "GDPR", description: "Protection Données" },
+    { name: "SMS Twilio", description: "Vérifications sécurisées" }
   ];
 
   return (
@@ -159,7 +150,7 @@ export function Footer() {
             <div className="space-y-3 mb-6">
               <div className="flex items-center text-slate-300">
                 <Phone className="h-4 w-4 mr-3 text-blue-400" />
-                <span>+221 77 708 07 57</span>
+                <span>+221 77 XXX XX XX</span>
               </div>
               <div className="flex items-center text-slate-300">
                 <Mail className="h-4 w-4 mr-3 text-blue-400" />
@@ -192,7 +183,7 @@ export function Footer() {
           <div className="lg:col-span-2">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
               
-              {/* Stats */}
+              {/* Stats Réelles */}
               <div className="bg-slate-800/50 rounded-xl p-6">
                 <h4 className="font-semibold text-blue-400 mb-4 flex items-center">
                   <Award className="h-4 w-4 mr-2" />
@@ -200,15 +191,15 @@ export function Footer() {
                 </h4>
                 <div className="space-y-3">
                   <div>
-                    <div className="text-2xl font-bold text-white">50,000+</div>
-                    <div className="text-sm text-slate-400">Utilisateurs Actifs</div>
+                    <div className="text-2xl font-bold text-white">2K+</div>
+                    <div className="text-sm text-slate-400">Utilisateurs Enregistrés</div>
                   </div>
                   <div>
-                    <div className="text-2xl font-bold text-white">125,000+</div>
+                    <div className="text-2xl font-bold text-white">50+</div>
                     <div className="text-sm text-slate-400">Annonces Publiées</div>
                   </div>
                   <div>
-                    <div className="text-2xl font-bold text-white">98.5%</div>
+                    <div className="text-2xl font-bold text-white">98%</div>
                     <div className="text-sm text-slate-400">Satisfaction Client</div>
                   </div>
                 </div>
@@ -243,22 +234,22 @@ export function Footer() {
                   <div className="flex items-center">
                     <div className="w-3 h-3 bg-green-400 rounded-full mr-3"></div>
                     <div>
-                      <div className="text-sm font-medium text-white">24/7 Disponible</div>
-                      <div className="text-xs text-slate-400">Support technique</div>
+                      <div className="text-sm font-medium text-white">Phase Lancement</div>
+                      <div className="text-xs text-slate-400">65 jours gratuits</div>
                     </div>
                   </div>
                   <div className="flex items-center">
                     <div className="w-3 h-3 bg-blue-400 rounded-full mr-3"></div>
                     <div>
-                      <div className="text-sm font-medium text-white">&lt; 2h Réponse</div>
-                      <div className="text-xs text-slate-400">Temps moyen</div>
+                      <div className="text-sm font-medium text-white">Support Réactif</div>
+                      <div className="text-xs text-slate-400">Réponse rapide</div>
                     </div>
                   </div>
                   <div className="flex items-center">
                     <div className="w-3 h-3 bg-yellow-400 rounded-full mr-3"></div>
                     <div>
-                      <div className="text-sm font-medium text-white">99% Résolution</div>
-                      <div className="text-xs text-slate-400">Premier contact</div>
+                      <div className="text-sm font-medium text-white">Cloud Native</div>
+                      <div className="text-xs text-slate-400">MinIO + Redis</div>
                     </div>
                   </div>
                 </div>
@@ -290,9 +281,43 @@ export function Footer() {
           ))}
         </div>
 
-        {/* App Download & Payment Methods */}
+        {/* Payment Methods */}
+        <div className="border-t border-slate-800 pt-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+            
+            {/* Payment Methods */}
+            <div>
+              <h4 className="font-semibold text-white mb-4 flex items-center">
+                <Smartphone className="h-4 w-4 mr-2 text-green-400" />
+                Méthodes de Paiement Acceptées
+              </h4>
+              <div className="flex items-center space-x-4">
+                {paymentMethods.map((method, index) => (
+                  <div 
+                    key={index}
+                    className="bg-slate-800 rounded-lg px-4 py-2 flex items-center space-x-2"
+                  >
+                    <span className="text-lg">{method.logo}</span>
+                    <span className="text-sm font-medium text-white">{method.name}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-slate-400 mt-2">
+                Paiements sécurisés avec les leaders du mobile money au Sénégal
+              </p>
+            </div>
 
-
+            {/* Phase de lancement */}
+            <div className="text-center md:text-right">
+              <div className="bg-gradient-to-r from-green-500/20 to-blue-500/20 rounded-xl p-6 border border-green-500/30">
+                <h4 className="font-bold text-green-400 mb-2">🎉 Phase de Lancement Active</h4>
+                <p className="text-slate-300 mb-2">Publications gratuites pendant encore</p>
+                <div className="text-2xl font-bold text-white mb-1">65 jours</div>
+                <p className="text-xs text-slate-400">Ensuite 200 FCFA par annonce</p>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Bottom Bar */}
@@ -305,17 +330,15 @@ export function Footer() {
               © {currentYear} SenMarket. Tous droits réservés. 
               <span className="mx-2">•</span>
               Fièrement développé au Sénégal 🇸🇳
+              <span className="mx-2">•</span>
+              Version 3.1.0 Cloud-Native
             </div>
 
             {/* Language & Region */}
             <div className="flex items-center space-x-4">
               <div className="flex items-center text-slate-400 text-sm">
                 <Globe className="h-4 w-4 mr-2" />
-                <select className="bg-transparent border-none text-slate-400 focus:outline-none">
-                  <option>Français (Sénégal)</option>
-                  <option>Wolof (Sénégal)</option>
-                  <option>English (Senegal)</option>
-                </select>
+                <span>Français (Sénégal)</span>
               </div>
               
               <div className="text-slate-400 text-sm">
@@ -327,4 +350,4 @@ export function Footer() {
       </div>
     </footer>
   );
-}
+};
