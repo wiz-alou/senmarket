@@ -39,14 +39,15 @@ func main() {
 	// Créer le routeur
 	router := gin.New()
 
-	// 🔐 CORRIGÉ: Configuration des routes avec AuthService
+	// ⭐ CORRIGÉ: Configuration des routes avec TwilioService
 	routerConfig := &routes.RouterConfig{
 		UserController:    app.UserController,
 		ListingController: app.ListingController,
 		PaymentController: app.PaymentController,
 		HealthController:  app.HealthController,
 		AuthMiddleware:    app.AuthMiddleware,
-		AuthService:       app.AuthService,  // 🔐 AJOUTÉ !!!
+		AuthService:       app.AuthService,
+		TwilioService:     app.TwilioService, // ⭐ AJOUTÉ !
 	}
 
 	routes.SetupRoutes(router, routerConfig)
@@ -67,6 +68,7 @@ func main() {
 		log.Printf("📍 Health check: http://localhost:%s/health", app.Config.Port)
 		log.Printf("📚 API v1: http://localhost:%s/api/v1", app.Config.Port)
 		log.Printf("🔐 JWT Auth disponible: http://localhost:%s/api/v1/auth/login", app.Config.Port)
+		log.Printf("📱 SMS Test disponible: http://localhost:%s/api/v1/test-sms", app.Config.Port) // ⭐ NOUVEAU
 		
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("❌ Erreur serveur: %v", err)

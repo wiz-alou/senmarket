@@ -4,6 +4,7 @@ package container
 import (
 	"log"
 	"time"
+	
 	"gorm.io/gorm"
 	"github.com/redis/go-redis/v9"
 	"github.com/minio/minio-go/v7"
@@ -33,8 +34,8 @@ import (
 // Container conteneur d'injection de dépendances
 type Container struct {
 	// Configuration
-	Config *config.Environment
-	DBConfig *config.DatabaseConfig
+	Config      *config.Environment
+	DBConfig    *config.DatabaseConfig
 	RedisConfig *config.RedisConfig
 	MinIOConfig *config.MinIOConfig
 	
@@ -44,23 +45,19 @@ type Container struct {
 	MinIOClient *minio.Client
 	
 	// Repositories
-	UserRepository     repositories.UserRepository
-	ListingRepository  repositories.ListingRepository
-	PaymentRepository  repositories.PaymentRepository
-	CacheRepository    repositories.CacheRepository
-	
-	// Domain Services (interfaces - seront implémentés plus tard)
-	// QuotaService    services.QuotaService
-	// PricingService  services.PricingService
+	UserRepository    repositories.UserRepository
+	ListingRepository repositories.ListingRepository
+	PaymentRepository repositories.PaymentRepository
+	CacheRepository   repositories.CacheRepository
 	
 	// Application Services
-	AuthService         services.AuthService              // 🔐 NOUVEAU
+	AuthService         services.AuthService
 	ImageService        services.ImageService
 	AnalyticsService    services.AnalyticsApplicationService
 	NotificationService services.NotificationApplicationService
 	
-	// Infrastructure Services
-	SMSService     sms.SMSProvider
+	// Infrastructure Services - AVEC VOTRE TWILIO SERVICE
+	TwilioService  *sms.TwilioService       // ⭐ VOTRE SERVICE
 	EmailService   email.EmailProvider
 	PaymentService payments.PaymentProvider
 	StorageService storage.StorageProvider
@@ -96,6 +93,8 @@ type Container struct {
 
 // NewContainer crée un nouveau container avec toutes les dépendances
 func NewContainer(db *gorm.DB, redisClient *redis.Client, minioClient *minio.Client) *Container {
+	log.Println("🏗️ Création du container...")
+	
 	container := &Container{
 		DB:          db,
 		Redis:       redisClient,
@@ -138,47 +137,36 @@ func (c *Container) initRepositories() {
 
 // initInfrastructureServices initialise les services d'infrastructure
 func (c *Container) initInfrastructureServices() {
-	// SMS Service
-	c.SMSService = sms.NewTwilioSMSService(
-		"", // TODO: Récupérer depuis env
-		"", // TODO: Récupérer depuis env
-		"", // TODO: Récupérer depuis env
-	)
+	log.Println("🔧 Initialisation des services d'infrastructure...")
 	
-	// Email Service
-	c.EmailService = email.NewSMTPEmailService(
-		"", // TODO: Récupérer depuis env
-		587, // TODO: Récupérer depuis env
-		"", "", "", "",
-	)
-	
-	// Payment Service - Orange Money par défaut
-	c.PaymentService = payments.NewOrangeMoneyService(
-		"", // TODO: Récupérer depuis env
-		"", // TODO: Récupérer depuis env
-		"", // TODO: Récupérer depuis env
-	)
+	// ⭐ VOTRE SERVICE TWILIO SMS
+	c.TwilioService = sms.NewTwilioService()
 	
 	// Storage Service
-	c.StorageService = storage.NewMinIOService(
-		c.MinIOClient,
-		c.MinIOConfig.Endpoint,
-		c.MinIOConfig.UseSSL,
-	)
+	if c.MinIOClient != nil && c.MinIOConfig != nil {
+		c.StorageService = storage.NewMinIOService(
+			c.MinIOClient,
+			c.MinIOConfig.Endpoint,
+			c.MinIOConfig.UseSSL,
+		)
+	}
 	
-	log.Println("🔧 Services d'infrastructure initialisés")
+	log.Println("✅ Services d'infrastructure initialisés")
+	log.Printf("📱 Twilio SMS configuré: %v", c.TwilioService.IsConfigured())
 }
 
 // initApplicationServices initialise les services d'application
 func (c *Container) initApplicationServices() {
-	// 🔐 NOUVEAU: Auth Service avec JWT
-	jwtSecret := "senmarket-dev-secret-2025" // TODO: Récupérer depuis config
-	if c.Config.JWTSecret != "" {
+	log.Println("🎯 Initialisation des services d'application...")
+	
+	// AuthService avec JWT
+	jwtSecret := "senmarket-dev-secret-2025"
+	if c.Config != nil && c.Config.JWTSecret != "" {
 		jwtSecret = c.Config.JWTSecret
 	}
 	
-	jwtExpiry := 24 * time.Hour // TODO: Récupérer depuis config
-	if c.Config.JWTExpiry > 0 {
+	jwtExpiry := 24 * time.Hour
+	if c.Config != nil && c.Config.JWTExpiry > 0 {
 		jwtExpiry = c.Config.JWTExpiry
 	}
 	
@@ -188,22 +176,25 @@ func (c *Container) initApplicationServices() {
 		jwtExpiry,
 	)
 	
-	// Image Service
-	c.ImageService = services.NewImageService()
-	
-	// Analytics Service - sera implémenté plus tard
-	// c.AnalyticsService = services.NewAnalyticsApplicationService(...)
-	
-	// Notification Service - sera implémenté plus tard
-	// c.NotificationService = services.NewNotificationApplicationService(...)
-	
-	log.Println("📱 Services d'application initialisés")
+	log.Println("✅ Services d'application initialisés")
 }
 
 // initCommandHandlers initialise les handlers de commandes
 func (c *Container) initCommandHandlers() {
 	// Create User Handler
 	c.CreateUserHandler = commands.NewCreateUserHandler(
+		c.UserRepository,
+		nil, // eventPublisher - TODO: implémenter
+	)
+	
+	// Verify User Handler
+	c.VerifyUserHandler = commands.NewVerifyUserHandler(
+		c.UserRepository,
+		nil, // eventPublisher - TODO: implémenter
+	)
+	
+	// Update Quota Handler
+	c.UpdateQuotaHandler = commands.NewUpdateQuotaHandler(
 		c.UserRepository,
 		nil, // eventPublisher - TODO: implémenter
 	)
@@ -233,18 +224,6 @@ func (c *Container) initCommandHandlers() {
 	// Process Payment Handler
 	c.ProcessPaymentHandler = commands.NewProcessPaymentHandler(
 		c.PaymentRepository,
-		c.UserRepository,
-		nil, // eventPublisher - TODO: implémenter
-	)
-	
-	// Verify User Handler
-	c.VerifyUserHandler = commands.NewVerifyUserHandler(
-		c.UserRepository,
-		nil, // eventPublisher - TODO: implémenter
-	)
-	
-	// Update Quota Handler
-	c.UpdateQuotaHandler = commands.NewUpdateQuotaHandler(
 		c.UserRepository,
 		nil, // eventPublisher - TODO: implémenter
 	)
@@ -289,7 +268,7 @@ func (c *Container) initQueryHandlers() {
 
 // initMiddleware initialise les middlewares
 func (c *Container) initMiddleware() {
-	// 🔐 NOUVEAU: AuthMiddleware avec le service d'authentification
+	// AuthMiddleware avec le service d'authentification
 	c.AuthMiddleware = middleware.NewAuthMiddleware(c.AuthService)
 	
 	log.Println("🛡️ Middlewares initialisés")
@@ -322,8 +301,8 @@ func (c *Container) initControllers() {
 		c.GetPaymentsHandler,
 	)
 	
-	// Health Controller
-	c.HealthController = controllers.NewHealthController()
+	// ⭐ Health Controller CORRIGÉ
+	c.HealthController = controllers.NewHealthController(c.TwilioService)
 	
 	log.Println("🎮 Controllers initialisés")
 }

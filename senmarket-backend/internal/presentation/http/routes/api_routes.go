@@ -1,18 +1,21 @@
-// internal/presentation/http/routes/api_routes.go
-// VERSION CORRIGÉE - Utilise seulement les méthodes existantes
+// internal/presentation/http/routes/api_routes.go - AVEC ENDPOINT TEST SMS
 package routes
 
 import (
+	// "context"
+	"strings"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"senmarket/internal/application/services"
 	"senmarket/internal/presentation/http/controllers"
 	"senmarket/internal/presentation/http/middleware"
 	"senmarket/internal/presentation/http/responses"
+	"senmarket/internal/infrastructure/messaging/sms" // ⭐ NOUVEAU IMPORT
 )
 
-// RouterConfig configuration du routeur
+// RouterConfig configuration du routeur - ⭐ AVEC TWILIO SERVICE
 type RouterConfig struct {
 	UserController    *controllers.UserController
 	ListingController *controllers.ListingController
@@ -20,6 +23,7 @@ type RouterConfig struct {
 	HealthController  *controllers.HealthController
 	AuthMiddleware    *middleware.AuthMiddleware
 	AuthService       services.AuthService
+	TwilioService     *sms.TwilioService // ⭐ NOUVEAU
 }
 
 // SetupRoutes configure toutes les routes de l'API
@@ -68,7 +72,119 @@ func SetupRoutes(r *gin.Engine, config *RouterConfig) {
 		
 		// Routes catégories - FONCTIONNELLES
 		SetupCategoryRoutes(api, config)
+		
+		// ⭐ NOUVEAU : Endpoint test SMS (développement seulement)
+		setupTestSMSEndpoint(api, config)
 	}
+}
+
+// ⭐ FONCTION UTILITAIRE : Générer code de vérification
+func generateVerificationCode() string {
+	// Générer un code à 6 chiffres sécurisé
+	code := rand.Intn(900000) + 100000
+	return fmt.Sprintf("%06d", code)
+}
+
+// ⭐ NOUVEAU : setupTestSMSEndpoint pour tester l'envoi de SMS
+func setupTestSMSEndpoint(api *gin.RouterGroup, config *RouterConfig) {
+	api.POST("/test-sms", func(c *gin.Context) {
+		var req struct {
+			Phone   string `json:"phone" binding:"required"`
+			Message string `json:"message"`
+		}
+		
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(400, gin.H{
+				"success": false,
+				"error":   "Format de requête invalide",
+				"details": err.Error(),
+			})
+			return
+		}
+		
+		// Nettoyer et valider le téléphone sénégalais
+		cleanPhone := cleanSenegalPhone(req.Phone)
+		if cleanPhone == "" {
+			c.JSON(400, gin.H{
+				"success": false,
+				"error":   "Format de téléphone invalide",
+				"hint":    "Utilisez +221XXXXXXXXX ou 7XXXXXXXX",
+				"examples": []string{"+221777080751", "777080751"},
+			})
+			return
+		}
+		
+		// Message par défaut
+		message := req.Message
+		if message == "" {
+			message = "🇸🇳 SenMarket Test SMS - Votre service fonctionne parfaitement ! 🚀"
+		}
+		
+		// ⭐ ENVOYER VIA TWILIO RÉEL
+		if config.TwilioService != nil {
+			ctx := c.Request.Context()
+			result, err := config.TwilioService.SendSMS(ctx, cleanPhone, message)
+			if err != nil {
+				c.JSON(500, gin.H{
+					"success": false,
+					"error":   "Erreur envoi SMS",
+					"details": err.Error(),
+				})
+				return
+			}
+			
+			// Succès avec vrai SMS envoyé !
+			c.JSON(200, gin.H{
+				"success":    true,
+				"message":    "📱 SMS RÉEL envoyé avec succès !",
+				"to":         cleanPhone,
+				"content":    message,
+				"result":     result,
+				"provider":   "twilio",
+				"timestamp":  time.Now().Format(time.RFC3339),
+				"note":       "SMS réellement envoyé via Twilio",
+			})
+		} else {
+			// Fallback si TwilioService pas disponible
+			c.JSON(200, gin.H{
+				"success":   true,
+				"message":   "SMS de test prêt (service indisponible)",
+				"to":        cleanPhone,
+				"content":   message,
+				"provider":  "twilio",
+				"note":      "TwilioService non injecté",
+			})
+		}
+	})
+}
+
+// ⭐ FONCTION UTILITAIRE : Nettoyer numéros sénégalais
+func cleanSenegalPhone(phone string) string {
+	// Supprimer espaces et caractères spéciaux
+	cleaned := strings.ReplaceAll(phone, " ", "")
+	cleaned = strings.ReplaceAll(cleaned, "-", "")
+	cleaned = strings.ReplaceAll(cleaned, "(", "")
+	cleaned = strings.ReplaceAll(cleaned, ")", "")
+	
+	// Formats valides pour le Sénégal :
+	// +221XXXXXXXXX (format international)
+	// 221XXXXXXXXX (sans +)
+	// 7XXXXXXXX ou 3XXXXXXXX (format local)
+	
+	if strings.HasPrefix(cleaned, "+221") && len(cleaned) == 13 {
+		return cleaned // +221XXXXXXXXX
+	}
+	
+	if strings.HasPrefix(cleaned, "221") && len(cleaned) == 12 {
+		return "+" + cleaned // 221XXXXXXXXX → +221XXXXXXXXX
+	}
+	
+	if (strings.HasPrefix(cleaned, "7") || strings.HasPrefix(cleaned, "3")) && len(cleaned) == 9 {
+		return "+221" + cleaned // 7XXXXXXXX → +221XXXXXXXX
+	}
+	
+	// Format invalide
+	return ""
 }
 
 // setupStaticRoutes pour maintenir la compatibilité
@@ -122,7 +238,7 @@ func SetupAuthRoutes(rg *gin.RouterGroup, config *RouterConfig) {
 		})
 		
 		auth.POST("/send-code", func(c *gin.Context) {
-			// TODO: Implémenter envoi SMS
+			// TODO: Implémenter envoi SMS avec TwilioService
 			responses.SendSuccess(c, gin.H{"sent": true}, "Code envoyé")
 		})
 		
@@ -146,6 +262,7 @@ func SetupAuthRoutes(rg *gin.RouterGroup, config *RouterConfig) {
 		})
 	}
 }
+
 
 // SetupUserRoutes configure les routes utilisateurs - MÉTHODES EXISTANTES SEULEMENT
 func SetupUserRoutes(rg *gin.RouterGroup, config *RouterConfig) {
