@@ -1,9 +1,8 @@
-// internal/infrastructure/persistence/postgres/listing_repository.go
+// internal/infrastructure/persistence/postgres/listing_repository.go - MISE À JOUR
 package postgres
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 	"time"
 	"senmarket/internal/domain/entities"
@@ -11,28 +10,29 @@ import (
 	"senmarket/internal/domain/valueobjects"
 	"gorm.io/gorm"
 	"github.com/google/uuid"
+	"github.com/lib/pq" // 🔧 AJOUTÉ: Pour PostgreSQL arrays
 )
 
 // ListingModel modèle de base de données pour les annonces
 type ListingModel struct {
-	ID            string     `gorm:"primaryKey;type:varchar(36)"`
-	UserID        string     `gorm:"not null;type:varchar(36);index"`
-	CategoryID    string     `gorm:"not null;type:varchar(36);index"`
-	Title         string     `gorm:"not null;type:varchar(100)"`
-	Description   string     `gorm:"type:text"`
-	PriceAmount   float64    `gorm:"not null;default:0"`
-	PriceCurrency string     `gorm:"not null;default:'XOF';type:varchar(3)"`
-	Images        string     `gorm:"type:text"` // JSON array
-	Region        string     `gorm:"not null;type:varchar(10);index"`
-	Location      string     `gorm:"type:varchar(255)"`
-	Status        string     `gorm:"not null;default:'draft';type:varchar(20);index"`
-	IsPromoted    bool       `gorm:"default:false;index"`
-	IsPaid        bool       `gorm:"default:false"`
-	ViewsCount    int64      `gorm:"default:0"`
-	ContactsCount int64      `gorm:"default:0"`
-	CreatedAt     time.Time  `gorm:"autoCreateTime;index"`
-	UpdatedAt     time.Time  `gorm:"autoUpdateTime"`
-	ExpiresAt     time.Time  `gorm:"index"`
+	ID            string         `gorm:"primaryKey;type:varchar(36)"`
+	UserID        string         `gorm:"not null;type:varchar(36);index"`
+	CategoryID    string         `gorm:"not null;type:varchar(36);index"`
+	Title         string         `gorm:"not null;type:varchar(100)"`
+	Description   string         `gorm:"type:text"`
+	PriceAmount   float64        `gorm:"not null;default:0"`
+	PriceCurrency string         `gorm:"not null;default:'XOF';type:varchar(3)"`
+	Images        pq.StringArray `gorm:"type:text[]"` // 🔧 CHANGÉ: de string vers pq.StringArray
+	Region        string         `gorm:"not null;type:varchar(10);index"`
+	Location      string         `gorm:"type:varchar(255)"`
+	Status        string         `gorm:"not null;default:'draft';type:varchar(20);index"`
+	IsPromoted    bool           `gorm:"default:false;index"`
+	IsPaid        bool           `gorm:"default:false"`
+	ViewsCount    int64          `gorm:"default:0"`
+	ContactsCount int64          `gorm:"default:0"`
+	CreatedAt     time.Time      `gorm:"autoCreateTime;index"`
+	UpdatedAt     time.Time      `gorm:"autoUpdateTime"`
+	ExpiresAt     time.Time      `gorm:"index"`
 	PromotedAt    *time.Time
 	SoldAt        *time.Time
 }
@@ -55,13 +55,9 @@ func (l *ListingModel) ToEntity() (*entities.Listing, error) {
 		return nil, err
 	}
 	
-	// Parser les images JSON
-	var images []string
-	if l.Images != "" {
-		if err := json.Unmarshal([]byte(l.Images), &images); err != nil {
-			images = []string{} // Fallback vers array vide
-		}
-	} else {
+	// 🔧 CHANGÉ: Convertir pq.StringArray en []string au lieu de parser JSON
+	images := []string(l.Images)
+	if images == nil {
 		images = []string{}
 	}
 	
@@ -112,15 +108,11 @@ func (l *ListingModel) FromEntity(listing *entities.Listing) error {
 	l.PromotedAt = listing.PromotedAt
 	l.SoldAt = listing.SoldAt
 	
-	// Convertir les images en JSON
-	if len(listing.Images) > 0 {
-		imagesJSON, err := json.Marshal(listing.Images)
-		if err != nil {
-			return err
-		}
-		l.Images = string(imagesJSON)
+	// 🔧 CHANGÉ: Convertir []string en pq.StringArray au lieu de JSON
+	if listing.Images != nil {
+		l.Images = pq.StringArray(listing.Images)
 	} else {
-		l.Images = ""
+		l.Images = pq.StringArray{} // Array vide
 	}
 	
 	return nil

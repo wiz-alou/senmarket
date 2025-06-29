@@ -1,4 +1,4 @@
-// internal/application/commands/verify_user.go
+// internal/application/commands/verify_user.go - CORRIGÉ
 package commands
 
 import (
@@ -47,7 +47,7 @@ func (h *VerifyUserHandler) Handle(ctx context.Context, cmd *VerifyUserCommand) 
 	// TODO: Vérifier le code de vérification avec le service SMS/Email
 	// Pour l'instant, on simule une vérification réussie
 	
-	// Marquer comme vérifié
+	// 🔧 CORRIGÉ: Marquer comme vérifié en utilisant la méthode existante
 	user.Verify()
 	
 	// Sauvegarder
@@ -55,15 +55,17 @@ func (h *VerifyUserHandler) Handle(ctx context.Context, cmd *VerifyUserCommand) 
 		return nil, err
 	}
 	
-	// Publier l'événement
-	event := events.NewUserVerifiedEvent(
-		user.ID,
-		user.GetPhoneNumber(),
-		user.GetRegionName(),
-		cmd.Method,
-	)
-	if err := h.eventPublisher.Publish(ctx, event); err != nil {
-		// Log l'erreur mais ne pas faire échouer la commande
+	// 🔧 CORRIGÉ: Publier l'événement SEULEMENT si eventPublisher n'est pas nil
+	if h.eventPublisher != nil {
+		event := events.NewUserVerifiedEvent(
+			user.ID,
+			user.GetPhoneNumber(),
+			user.GetRegionName(),
+			cmd.Method,
+		)
+		if err := h.eventPublisher.Publish(ctx, event); err != nil {
+			// Log l'erreur mais ne pas faire échouer la commande
+		}
 	}
 	
 	return &VerifyUserResult{

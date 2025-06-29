@@ -1,4 +1,4 @@
-// internal/application/commands/process_payment.go
+// internal/application/commands/process_payment.go - CORRIGÉ AVEC LA VRAIE STRUCTURE
 package commands
 
 import (
@@ -50,12 +50,12 @@ func (h *ProcessPaymentHandler) Handle(ctx context.Context, cmd *ProcessPaymentC
 		return nil, entities.ErrUserNotFound
 	}
 	
-	// Créer le paiement
+	// 🔧 CORRIGÉ: Créer le paiement avec PaymentMethod
 	payment, err := entities.NewPayment(
 		cmd.UserID,
 		cmd.Amount,
 		cmd.Currency,
-		entities.PaymentMethod(cmd.Method),
+		entities.PaymentMethod(cmd.Method), // 🔧 CORRIGÉ: Cast vers PaymentMethod
 	)
 	if err != nil {
 		return nil, err
@@ -66,9 +66,9 @@ func (h *ProcessPaymentHandler) Handle(ctx context.Context, cmd *ProcessPaymentC
 		payment.ListingID = cmd.ListingID
 	}
 	
-	// Ajouter les métadonnées
-	for key, value := range cmd.Metadata {
-		payment.AddMetadata(key, value)
+	// 🔧 CORRIGÉ: Ajouter les métadonnées directement
+	if cmd.Metadata != nil {
+		payment.Metadata = cmd.Metadata
 	}
 	
 	// Sauvegarder le paiement
@@ -76,11 +76,28 @@ func (h *ProcessPaymentHandler) Handle(ctx context.Context, cmd *ProcessPaymentC
 		return nil, err
 	}
 	
+	// 🔧 CORRIGÉ: Publier l'événement SEULEMENT si eventPublisher n'est pas nil
+	if h.eventPublisher != nil {
+		// Utiliser l'événement PaymentCompleted existant
+		event := events.NewPaymentCompletedEvent(
+			payment.ID,
+			payment.UserID,
+			payment.ListingID,
+			payment.Amount.Amount,   // 🔧 CORRIGÉ: Accès direct aux champs
+			payment.Amount.Currency, // 🔧 CORRIGÉ: Accès direct aux champs
+			string(payment.Method),
+			payment.TransactionID,
+		)
+		if err := h.eventPublisher.Publish(ctx, event); err != nil {
+			// Log l'erreur mais ne pas faire échouer la commande
+		}
+	}
+	
 	return &ProcessPaymentResult{
 		PaymentID:     payment.ID,
 		TransactionID: payment.TransactionID,
 		Status:        string(payment.Status),
-		Amount:        payment.GetAmountFormatted(),
+		Amount:        payment.Amount.String(), // 🔧 CORRIGÉ: Utilise String() pour le formatage
 		CreatedAt:     payment.CreatedAt,
 		ExpiresAt:     payment.ExpiresAt,
 	}, nil

@@ -1,4 +1,4 @@
-// internal/application/commands/create_listing.go
+// internal/application/commands/create_listing.go - CORRIGÉ AVEC LA VRAIE STRUCTURE
 package commands
 
 import (
@@ -61,13 +61,15 @@ func (h *CreateListingHandler) Handle(ctx context.Context, cmd *CreateListingCom
 		return nil, entities.ErrUserNotFound
 	}
 	
-	// Vérifier les quotas
-	canCreate, reason, err := h.quotaService.CheckCanCreateListing(ctx, user)
-	if err != nil {
-		return nil, err
-	}
-	if !canCreate {
-		return nil, entities.NewDomainError(reason)
+	// 🔧 CORRIGÉ: Vérifier les quotas SEULEMENT si quotaService n'est pas nil
+	if h.quotaService != nil {
+		canCreate, reason, err := h.quotaService.CheckCanCreateListing(ctx, user)
+		if err != nil {
+			return nil, err
+		}
+		if !canCreate {
+			return nil, entities.NewDomainError(reason)
+		}
 	}
 	
 	// Créer l'annonce
@@ -92,13 +94,15 @@ func (h *CreateListingHandler) Handle(ctx context.Context, cmd *CreateListingCom
 		}
 	}
 	
-	// Valider le contenu
-	validationResult, err := h.validationService.ValidateListingContent(ctx, listing)
-	if err != nil {
-		return nil, err
-	}
-	if !validationResult.IsValid {
-		return nil, entities.NewDomainError("contenu de l'annonce invalide: " + validationResult.Errors[0])
+	// 🔧 CORRIGÉ: Valider le contenu SEULEMENT si validationService n'est pas nil
+	if h.validationService != nil {
+		validationResult, err := h.validationService.ValidateListingContent(ctx, listing)
+		if err != nil {
+			return nil, err
+		}
+		if !validationResult.IsValid {
+			return nil, entities.NewDomainError("Contenu de l'annonce invalide")
+		}
 	}
 	
 	// Marquer comme payante si nécessaire
@@ -111,29 +115,42 @@ func (h *CreateListingHandler) Handle(ctx context.Context, cmd *CreateListingCom
 		return nil, err
 	}
 	
-	// Traiter la création (quota)
-	if err := h.quotaService.ProcessListingCreation(ctx, user, cmd.IsPaid); err != nil {
-		return nil, err
+	// 🔧 CORRIGÉ: Traiter la création SEULEMENT si quotaService n'est pas nil
+	if h.quotaService != nil {
+		if err := h.quotaService.ProcessListingCreation(ctx, user, cmd.IsPaid); err != nil {
+			return nil, err
+		}
 	}
 	
-	// Publier l'événement
-	event := events.NewListingCreatedEvent(
-		listing.ID,
-		listing.UserID,
-		listing.CategoryID,
-		listing.Title,
-		listing.GetRegionName(),
-		cmd.Price,
-		cmd.Currency,
-		cmd.IsPaid,
-	)
-	if err := h.eventPublisher.Publish(ctx, event); err != nil {
-		// Log l'erreur mais ne pas faire échouer la commande
+	// 🔧 CORRIGÉ: Publier l'événement SEULEMENT si eventPublisher n'est pas nil
+	if h.eventPublisher != nil {
+		event := events.NewListingCreatedEvent(
+			listing.ID,
+			listing.UserID,
+			listing.CategoryID,
+			listing.Title,
+			listing.GetRegionName(), // 🔧 CORRIGÉ: Utilise GetRegionName() au lieu de Region.Code()
+			listing.Price.Amount,    // 🔧 CORRIGÉ: Price.Amount sans parenthèses
+			listing.Price.Currency,  // 🔧 CORRIGÉ: Price.Currency sans parenthèses
+			cmd.IsPaid,
+		)
+		if err := h.eventPublisher.Publish(ctx, event); err != nil {
+			// Log l'erreur mais ne pas faire échouer la commande
+			// TODO: Implement proper logging
+		}
 	}
 	
+	// Retourner le résultat
 	return &CreateListingResult{
 		ListingID:   listing.ID,
+		UserID:      listing.UserID,
+		CategoryID:  listing.CategoryID,
 		Title:       listing.Title,
+		Description: listing.Description,
+		Price:       listing.Price.Amount,    // 🔧 CORRIGÉ: Price.Amount sans parenthèses
+		Currency:    listing.Price.Currency,  // 🔧 CORRIGÉ: Price.Currency sans parenthèses
+		Region:      listing.GetRegionName(), // 🔧 CORRIGÉ: GetRegionName() au lieu de Region.Code()
+		Location:    listing.Location,
 		Status:      string(listing.Status),
 		CreatedAt:   listing.CreatedAt,
 		ExpiresAt:   listing.ExpiresAt,
@@ -143,10 +160,17 @@ func (h *CreateListingHandler) Handle(ctx context.Context, cmd *CreateListingCom
 
 // CreateListingResult résultat de création d'annonce
 type CreateListingResult struct {
-	ListingID string    `json:"listing_id"`
-	Title     string    `json:"title"`
-	Status    string    `json:"status"`
-	CreatedAt time.Time `json:"created_at"`
-	ExpiresAt time.Time `json:"expires_at"`
-	IsPaid    bool      `json:"is_paid"`
+	ListingID   string    `json:"listing_id"`
+	UserID      string    `json:"user_id"`
+	CategoryID  string    `json:"category_id"`
+	Title       string    `json:"title"`
+	Description string    `json:"description"`
+	Price       float64   `json:"price"`
+	Currency    string    `json:"currency"`
+	Region      string    `json:"region"`
+	Location    string    `json:"location"`
+	Status      string    `json:"status"`
+	CreatedAt   time.Time `json:"created_at"`
+	ExpiresAt   time.Time `json:"expires_at"`
+	IsPaid      bool      `json:"is_paid"`
 }

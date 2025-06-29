@@ -1,4 +1,4 @@
-// internal/application/commands/publish_listing.go
+// internal/application/commands/publish_listing.go - CORRIGÉ
 package commands
 
 import (
@@ -61,16 +61,18 @@ func (h *PublishListingHandler) Handle(ctx context.Context, cmd *PublishListingC
 		return nil, err
 	}
 	
-	// Publier l'événement
-	event := events.NewListingPublishedEvent(
-		listing.ID,
-		listing.UserID,
-		listing.CategoryID,
-		listing.Title,
-		listing.ExpiresAt,
-	)
-	if err := h.eventPublisher.Publish(ctx, event); err != nil {
-		// Log l'erreur mais ne pas faire échouer la commande
+	// 🔧 CORRIGÉ: Publier l'événement SEULEMENT si eventPublisher n'est pas nil
+	if h.eventPublisher != nil {
+		event := events.NewListingPublishedEvent(
+			listing.ID,
+			listing.UserID,
+			listing.CategoryID,
+			listing.Title,
+			listing.ExpiresAt,
+		)
+		if err := h.eventPublisher.Publish(ctx, event); err != nil {
+			// Log l'erreur mais ne pas faire échouer la commande
+		}
 	}
 	
 	return &PublishListingResult{
@@ -88,3 +90,6 @@ type PublishListingResult struct {
 	PublishedAt time.Time `json:"published_at"`
 	ExpiresAt   time.Time `json:"expires_at"`
 }
+
+// =========================================================================
+

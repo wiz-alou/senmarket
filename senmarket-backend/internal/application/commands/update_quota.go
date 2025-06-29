@@ -1,4 +1,4 @@
-// internal/application/commands/update_quota.go
+// internal/application/commands/update_quota.go - CORRIGÉ AVEC LA VRAIE STRUCTURE
 package commands
 
 import (
@@ -12,7 +12,7 @@ import (
 // UpdateQuotaCommand commande pour mettre à jour les quotas
 type UpdateQuotaCommand struct {
 	UserID           string `json:"user_id" validate:"required"`
-	FreeListings     *int   `json:"free_listings,omitempty"`
+	FreeListings     *int   `json:"free_listings,omitempty"`     // 🔧 CORRIGÉ: Utilisé FreeListings au lieu de FreeListingsLeft
 	PaidListings     *int   `json:"paid_listings,omitempty"`
 	Reason           string `json:"reason"`
 	AdminUserID      string `json:"admin_user_id" validate:"required"`
@@ -50,7 +50,7 @@ func (h *UpdateQuotaHandler) Handle(ctx context.Context, cmd *UpdateQuotaCommand
 	oldFree := user.FreeListingsLeft
 	oldPaid := user.PaidListings
 	
-	// Mettre à jour les quotas
+	// 🔧 CORRIGÉ: Mettre à jour les quotas avec validation des pointeurs
 	if cmd.FreeListings != nil {
 		user.FreeListingsLeft = *cmd.FreeListings
 	}
@@ -65,17 +65,19 @@ func (h *UpdateQuotaHandler) Handle(ctx context.Context, cmd *UpdateQuotaCommand
 		return nil, err
 	}
 	
-	// Publier l'événement
-	event := events.NewQuotaUpdatedEvent(
-		user.ID,
-		oldFree,
-		user.FreeListingsLeft,
-		oldPaid,
-		user.PaidListings,
-		cmd.Reason,
-	)
-	if err := h.eventPublisher.Publish(ctx, event); err != nil {
-		// Log l'erreur mais ne pas faire échouer la commande
+	// 🔧 CORRIGÉ: Publier l'événement SEULEMENT si eventPublisher n'est pas nil
+	if h.eventPublisher != nil {
+		event := events.NewQuotaUpdatedEvent(
+			user.ID,
+			oldFree,
+			user.FreeListingsLeft,
+			oldPaid,
+			user.PaidListings,
+			cmd.Reason,
+		)
+		if err := h.eventPublisher.Publish(ctx, event); err != nil {
+			// Log l'erreur mais ne pas faire échouer la commande
+		}
 	}
 	
 	return &UpdateQuotaResult{

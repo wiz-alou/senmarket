@@ -3,10 +3,10 @@ package routes
 
 import (
 	"github.com/gin-gonic/gin"
-	"senmarket/internal/application/services"                     // 🔐 AJOUTÉ
+	"senmarket/internal/application/services"
 	"senmarket/internal/presentation/http/controllers"
 	"senmarket/internal/presentation/http/middleware"
-	"senmarket/internal/presentation/http/responses"              // 🔐 AJOUTÉ
+	"senmarket/internal/presentation/http/responses"
 )
 
 // RouterConfig configuration du routeur
@@ -16,7 +16,7 @@ type RouterConfig struct {
 	PaymentController *controllers.PaymentController
 	HealthController  *controllers.HealthController
 	AuthMiddleware    *middleware.AuthMiddleware
-	AuthService       services.AuthService                        // 🔐 AJOUTÉ
+	AuthService       services.AuthService
 }
 
 // SetupRoutes configure toutes les routes de l'API
@@ -27,7 +27,7 @@ func SetupRoutes(r *gin.Engine, config *RouterConfig) {
 	r.Use(middleware.RequestID())
 	r.Use(middleware.RateLimit())
 	
-	// 🔐 NOUVEAU: Injecter le service d'auth dans toutes les routes
+	// Injecter le service d'auth dans toutes les routes
 	r.Use(func(c *gin.Context) {
 		c.Set("auth_service", config.AuthService)
 		c.Next()
@@ -39,7 +39,7 @@ func SetupRoutes(r *gin.Engine, config *RouterConfig) {
 	r.GET("/health/live", config.HealthController.LivenessCheck)
 	r.GET("/health/metrics", config.HealthController.MetricsCheck)
 	
-	// 🔧 AJOUT: Routes statiques manquantes (compatibilité avec l'ancienne architecture)
+	// Routes statiques pour compatibilité
 	setupStaticRoutes(r)
 	
 	// API v1
@@ -57,12 +57,11 @@ func SetupRoutes(r *gin.Engine, config *RouterConfig) {
 		// Routes paiements
 		SetupPaymentRoutes(api, config)
 		
-		// 🔧 AJOUT: Routes statiques dans le groupe API aussi
-		setupAPIStaticRoutes(api)
+		// 🔧 SUPPRIMÉ: setupAPIStaticRoutes(api) - causait le conflit
 	}
 }
 
-// 🔧 NOUVEAU: Routes statiques pour maintenir la compatibilité
+// setupStaticRoutes pour maintenir la compatibilité (régions seulement)
 func setupStaticRoutes(r *gin.Engine) {
 	// Route regions directe (comme dans l'ancienne architecture)
 	r.GET("/api/v1/regions", func(c *gin.Context) {
@@ -84,12 +83,9 @@ func setupStaticRoutes(r *gin.Engine) {
 		}
 		responses.SendSuccess(c, regions, "Régions du Sénégal")
 	})
-}
-
-// 🔧 NOUVEAU: Routes API statiques 
-func setupAPIStaticRoutes(api *gin.RouterGroup) {
-	// Categories statiques (temporaire, en attendant le controller)
-	api.GET("/categories", func(c *gin.Context) {
+	
+	// Route categories statique
+	r.GET("/api/v1/categories", func(c *gin.Context) {
 		categories := []map[string]interface{}{
 			{"id": 1, "name": "Véhicules", "slug": "vehicules", "icon": "car"},
 			{"id": 2, "name": "Immobilier", "slug": "immobilier", "icon": "home"},
@@ -102,29 +98,6 @@ func setupAPIStaticRoutes(api *gin.RouterGroup) {
 		}
 		responses.SendSuccess(c, categories, "Catégories disponibles")
 	})
-	
-	// Listings temporaires (vide, mais structure correcte)
-	api.GET("/listings", func(c *gin.Context) {
-		responses.SendSuccess(c, gin.H{
-			"listings": []map[string]interface{}{},
-			"pagination": gin.H{
-				"page":  1,
-				"limit": 20,
-				"total": 0,
-				"pages": 0,
-			},
-		}, "Liste des annonces")
-	})
-	
-	// Featured listings temporaires
-	api.GET("/listings/featured", func(c *gin.Context) {
-		responses.SendSuccess(c, []map[string]interface{}{}, "Annonces en vedette")
-	})
-	
-	// Recent listings temporaires  
-	api.GET("/listings/recent", func(c *gin.Context) {
-		responses.SendSuccess(c, []map[string]interface{}{}, "Annonces récentes")
-	})
 }
 
 // SetupAuthRoutes configure les routes d'authentification
@@ -133,7 +106,7 @@ func SetupAuthRoutes(rg *gin.RouterGroup, config *RouterConfig) {
 	{
 		auth.POST("/register", config.UserController.CreateUser)
 		
-		// 🔐 NOUVEAU: Login JWT complet
+		// Login JWT complet
 		auth.POST("/login", func(c *gin.Context) {
 			var req struct {
 				Phone string `json:"phone" validate:"required"`
@@ -162,7 +135,7 @@ func SetupAuthRoutes(rg *gin.RouterGroup, config *RouterConfig) {
 		
 		auth.POST("/verify", config.UserController.VerifyUser)
 		
-		// 🔐 NOUVEAU: Refresh token
+		// Refresh token
 		auth.POST("/refresh", func(c *gin.Context) {
 			var req struct {
 				RefreshToken string `json:"refresh_token" validate:"required"`
@@ -183,7 +156,7 @@ func SetupAuthRoutes(rg *gin.RouterGroup, config *RouterConfig) {
 			responses.SendSuccess(c, loginResponse, "Token rafraîchi")
 		})
 		
-		// 🔐 NOUVEAU: Logout et profil
+		// Logout et profil
 		auth.POST("/logout", config.AuthMiddleware.RequireAuth(), func(c *gin.Context) {
 			// Pour JWT, le logout côté serveur est optionnel
 			// Le client supprime simplement le token
@@ -230,15 +203,20 @@ func SetupUserRoutes(rg *gin.RouterGroup, config *RouterConfig) {
 	}
 }
 
-// SetupListingRoutes configure les routes annonces
+// SetupListingRoutes configure les routes annonces - VERSION CORRIGÉE
 func SetupListingRoutes(rg *gin.RouterGroup, config *RouterConfig) {
 	listings := rg.Group("/listings")
 	
-	// Appliquer rate limiting spécifique aux annonces
+	// Rate limiting spécifique aux annonces
 	listings.Use(middleware.RateLimitByEndpoint(50, 60))
 	
 	{
-		// Routes protégées pour création
+		// 🔧 AJOUTÉ: Routes publiques manquantes
+		listings.GET("", config.ListingController.GetListings)           // GET /api/v1/listings
+		listings.GET("/:id", config.ListingController.GetListing)        // GET /api/v1/listings/:id
+		listings.GET("/search", config.ListingController.SearchListings) // GET /api/v1/listings/search
+		
+		// Routes protégées pour création/modification
 		protected := listings.Group("", config.AuthMiddleware.RequireAuth())
 		{
 			protected.POST("", config.ListingController.CreateListing)
