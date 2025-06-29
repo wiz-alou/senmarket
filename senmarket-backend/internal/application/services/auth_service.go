@@ -8,14 +8,18 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/crypto/bcrypt" // ⭐ IMPORT AJOUTÉ
 	"senmarket/internal/domain/entities"
 	"senmarket/internal/domain/repositories"
 )
 
 // AuthService service d'authentification
 type AuthService interface {
-	// Login authentifie un utilisateur et retourne un JWT
+	// Login authentifie un utilisateur et retourne un JWT (sans password - pour compatibility)
 	Login(ctx context.Context, phone string) (*LoginResponse, error)
+	
+	// ⭐ NOUVEAU : LoginWithPassword avec vérification mot de passe
+	LoginWithPassword(ctx context.Context, phone string, password string) (*LoginResponse, error)
 	
 	// ValidateToken valide un JWT et retourne les claims
 	ValidateToken(tokenString string) (*UserClaims, error)
@@ -95,6 +99,43 @@ func (s *AuthServiceImpl) Login(ctx context.Context, phone string) (*LoginRespon
 	
 	// Générer les tokens
 	return s.GenerateTokenForUser(user)
+}
+
+// ⭐ SOLUTION : LoginWithPassword en utilisant le Repository pour accéder au PasswordHash
+func (s *AuthServiceImpl) LoginWithPassword(ctx context.Context, phone string, password string) (*LoginResponse, error) {
+	// 1. Rechercher l'utilisateur par téléphone
+	user, err := s.userRepo.GetByPhone(ctx, phone)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, entities.ErrUserNotFound
+	}
+	
+	// 2. ⭐ SOLUTION : Récupérer le PasswordHash via une méthode spéciale du Repository
+	passwordHash, err := s.userRepo.GetPasswordHash(ctx, user.ID)
+	if err != nil {
+		return nil, fmt.Errorf("erreur récupération mot de passe: %w", err)
+	}
+	
+	// 3. Vérifier le mot de passe
+	if !s.checkPassword(password, passwordHash) {
+		return nil, errors.New("mot de passe incorrect")
+	}
+	
+	// 4. Vérifier que l'utilisateur est actif
+	if !user.IsActive {
+		return nil, errors.New("compte désactivé")
+	}
+	
+	// 5. Générer les tokens
+	return s.GenerateTokenForUser(user)
+}
+
+// ⭐ MÉTHODE DE VÉRIFICATION BCRYPT CORRIGÉE
+func (s *AuthServiceImpl) checkPassword(password, hash string) bool {
+	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
+	return err == nil
 }
 
 // GenerateTokenForUser génère un token pour un utilisateur

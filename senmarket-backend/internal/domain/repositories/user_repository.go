@@ -26,6 +26,9 @@ type UserRepository interface {
 	// Delete supprime un utilisateur
 	Delete(ctx context.Context, id string) error
 	
+	// ⭐ NOUVELLE MÉTHODE : GetPasswordHash pour authentification sécurisée
+	GetPasswordHash(ctx context.Context, userID string) (string, error)
+	
 	// List retourne une liste paginée d'utilisateurs
 	List(ctx context.Context, offset, limit int) ([]*entities.User, error)
 	

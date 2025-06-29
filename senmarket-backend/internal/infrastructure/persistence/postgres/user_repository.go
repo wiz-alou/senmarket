@@ -184,6 +184,23 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*entitie
 	return userModel.ToEntity()
 }
 
+// ⭐ NOUVELLE MÉTHODE : GetPasswordHash pour authentification sécurisée
+func (r *UserRepository) GetPasswordHash(ctx context.Context, userID string) (string, error) {
+	var passwordHash string
+	
+	if err := r.db.WithContext(ctx).Model(&UserModel{}).
+		Select("password_hash").
+		Where("id = ?", userID).
+		Scan(&passwordHash).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return "", entities.ErrUserNotFound
+		}
+		return "", err
+	}
+	
+	return passwordHash, nil
+}
+
 // Update met à jour un utilisateur
 func (r *UserRepository) Update(ctx context.Context, user *entities.User) error {
 	userModel := &UserModel{}

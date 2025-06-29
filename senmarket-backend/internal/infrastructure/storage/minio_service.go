@@ -5,7 +5,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"time"
+
 	"github.com/minio/minio-go/v7"
 )
 
@@ -14,6 +16,7 @@ type MinIOService struct {
 	client   *minio.Client
 	endpoint string
 	useSSL   bool
+	bucket   string // ⭐ NOUVEAU : bucket par défaut
 }
 
 // NewMinIOService crée un nouveau service MinIO
@@ -22,7 +25,103 @@ func NewMinIOService(client *minio.Client, endpoint string, useSSL bool) Storage
 		client:   client,
 		endpoint: endpoint,
 		useSSL:   useSSL,
+		bucket:   "senmarket-images", // ⭐ NOUVEAU : bucket par défaut
 	}
+}
+
+// ⭐ NOUVELLE MÉTHODE : IsHealthy vérifie la santé de MinIO
+func (s *MinIOService) IsHealthy(ctx context.Context) bool {
+	if s.client == nil {
+		return false
+	}
+	
+	// Test 1: Vérifier que MinIO répond
+	if !s.checkMinIOConnection(ctx) {
+		return false
+	}
+	
+	// Test 2: Vérifier que le bucket existe ou peut être créé
+	if !s.checkBucketExists(ctx) {
+		return false
+	}
+	
+	return true
+}
+
+// ⭐ NOUVELLE MÉTHODE : checkMinIOConnection teste la connexion HTTP à MinIO
+func (s *MinIOService) checkMinIOConnection(ctx context.Context) bool {
+	// Construire l'URL de health check MinIO
+	scheme := "http"
+	if s.useSSL {
+		scheme = "https"
+	}
+	
+	healthURL := fmt.Sprintf("%s://%s/minio/health/live", scheme, s.endpoint)
+	
+	// Créer une requête HTTP avec timeout
+	client := &http.Client{
+		Timeout: 3 * time.Second,
+	}
+	
+	req, err := http.NewRequestWithContext(ctx, "GET", healthURL, nil)
+	if err != nil {
+		return false
+	}
+	
+	// Faire la requête
+	resp, err := client.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	
+	// MinIO health endpoint retourne 200 si OK
+	return resp.StatusCode == http.StatusOK
+}
+
+// ⭐ NOUVELLE MÉTHODE : checkBucketExists vérifie que le bucket par défaut existe
+func (s *MinIOService) checkBucketExists(ctx context.Context) bool {
+	if s.client == nil {
+		return false
+	}
+	
+	// Utiliser BucketExists de MinIO SDK
+	exists, err := s.client.BucketExists(ctx, s.bucket)
+	if err != nil {
+		return false
+	}
+	
+	// Si le bucket n'existe pas, essayer de le créer
+	if !exists {
+		err = s.client.MakeBucket(ctx, s.bucket, minio.MakeBucketOptions{})
+		if err != nil {
+			return false
+		}
+	}
+	
+	return true
+}
+
+// ⭐ NOUVELLE MÉTHODE : GetStatus retourne le statut détaillé
+func (s *MinIOService) GetStatus(ctx context.Context) map[string]interface{} {
+	status := map[string]interface{}{
+		"provider": "minio",
+		"endpoint": s.endpoint,
+		"bucket":   s.bucket,
+		"ssl":      s.useSSL,
+	}
+	
+	if s.IsHealthy(ctx) {
+		status["status"] = "up"
+		status["message"] = "MinIO opérationnel"
+		status["configured"] = true
+	} else {
+		status["status"] = "down"
+		status["message"] = "MinIO non accessible"
+		status["configured"] = s.client != nil
+	}
+	
+	return status
 }
 
 // UploadFile upload un fichier vers MinIO

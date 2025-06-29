@@ -1,18 +1,22 @@
 // internal/presentation/http/routes/api_routes.go - AVEC ENDPOINT TEST SMS
 package routes
 
+
 import (
-	// "context"
-	"strings"
+	"crypto/rand" // ⭐ NOUVEAU
+	"fmt"         // ⭐ NOUVEAU
+	"math/big"    // ⭐ NOUVEAU
+	mathRand "math/rand" // ⭐ NOUVEAU - alias correct en Go
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"senmarket/internal/application/services"
+	"senmarket/internal/infrastructure/messaging/sms" // ⭐ NOUVEAU IMPORT
 	"senmarket/internal/presentation/http/controllers"
 	"senmarket/internal/presentation/http/middleware"
 	"senmarket/internal/presentation/http/responses"
-	"senmarket/internal/infrastructure/messaging/sms" // ⭐ NOUVEAU IMPORT
 )
 
 // RouterConfig configuration du routeur - ⭐ AVEC TWILIO SERVICE
@@ -78,12 +82,7 @@ func SetupRoutes(r *gin.Engine, config *RouterConfig) {
 	}
 }
 
-// ⭐ FONCTION UTILITAIRE : Générer code de vérification
-func generateVerificationCode() string {
-	// Générer un code à 6 chiffres sécurisé
-	code := rand.Intn(900000) + 100000
-	return fmt.Sprintf("%06d", code)
-}
+
 
 // ⭐ NOUVEAU : setupTestSMSEndpoint pour tester l'envoi de SMS
 func setupTestSMSEndpoint(api *gin.RouterGroup, config *RouterConfig) {
@@ -216,33 +215,201 @@ func SetupAuthRoutes(rg *gin.RouterGroup, config *RouterConfig) {
 	auth := rg.Group("/auth")
 	auth.Use(middleware.RateLimitByEndpoint(20, 300)) // 20 req/5min
 	{
+		// ⭐ ENHANCED : POST /register avec SMS Twilio RÉEL - CORRIGÉ
 		auth.POST("/register", func(c *gin.Context) {
+			var req struct {
+				Phone    string `json:"phone" binding:"required"`
+				Region   string `json:"region" binding:"required"` 
+				Password string `json:"password" binding:"required,min=6"`
+			}
+			
+			if err := c.ShouldBindJSON(&req); err != nil {
+				responses.SendError(c, 400, responses.ErrorBadRequest, "Données invalides", err.Error())
+				return
+			}
+
+			// Nettoyer et valider le numéro sénégalais
+			cleanPhone := cleanSenegalPhone(req.Phone)
+			if cleanPhone == "" {
+				responses.SendError(c, 400, responses.ErrorInvalidPhone, "Numéro de téléphone invalide", 
+					"Utilisez le format sénégalais: +221777080751 ou 777080751")
+				return
+			}
+
+			// Vérifier que l'utilisateur n'existe pas déjà
+			authService := c.MustGet("auth_service").(services.AuthService)
+			
+			// TODO: Utiliser AuthService.CheckUserExists() quand disponible
+			// Pour l'instant, continuer l'inscription
+			_ = authService // Utiliser la variable pour éviter l'erreur
+			
+			// Générer un code de vérification sécurisé
+			verificationCode, err := generateSecureCode()
+			if err != nil {
+				responses.SendError(c, 500, responses.ErrorInternalServer, "Erreur génération code", err.Error())
+				return
+			}
+
+			// ⭐ MESSAGE SMS PROFESSIONNEL SÉNÉGAL
+			message := fmt.Sprintf("🇸🇳 SenMarket: Votre code de vérification est %s. Valable 10 minutes. Ne le partagez jamais.", verificationCode)
+
+			// ⭐ ENVOYER VIA TWILIO RÉEL
+			var smsSuccess bool
+			
+			if config.TwilioService != nil {
+				ctx := c.Request.Context()
+				result, err := config.TwilioService.SendSMS(ctx, cleanPhone, message)
+				if err != nil {
+					// Log l'erreur mais ne pas bloquer l'inscription
+					fmt.Printf("⚠️ Erreur SMS lors de l'inscription vers %s: %v\n", cleanPhone, err)
+					smsSuccess = false
+				} else {
+					fmt.Printf("✅ SMS d'inscription envoyé avec succès vers %s - ID: %s\n", cleanPhone, result.MessageID)
+					smsSuccess = true
+				}
+			} else {
+				smsSuccess = false
+			}
+
+			// TODO: Intégrer avec votre UserController existant
+			// Préparer les données pour CreateUser
+			c.Set("phone", cleanPhone)
+			c.Set("region", req.Region)
+			c.Set("password", req.Password)
+			c.Set("verification_code", verificationCode)
+			
+			// Appeler votre méthode existante (modifiée pour gérer les codes SMS)
 			config.UserController.CreateUser(c)
+			
+			// Si CreateUser a réussi, ajouter les infos SMS à la réponse
+			if c.Writer.Status() == 200 || c.Writer.Status() == 201 {
+				// La réponse a déjà été envoyée par CreateUser, on ajoute juste les logs
+				fmt.Printf("📱 Utilisateur créé avec SMS: %s, Code: %s, Envoyé: %v\n", cleanPhone, verificationCode, smsSuccess)
+			}
 		})
-		
-		auth.POST("/login", func(c *gin.Context) {
-			// TODO: Implémenter login complet via AuthService
-			responses.SendSuccess(c, gin.H{
-				"token": "jwt_token_here",
-				"user": gin.H{
-					"id": "user_id_here",
-					"phone": "+221777080751",
-					"region": "DK",
-				},
-			}, "Connexion réussie")
+
+		// ⭐ ENHANCED : POST /send-code pour renvoyer un code - CORRIGÉ
+		auth.POST("/send-code", func(c *gin.Context) {
+			var req struct {
+				Phone string `json:"phone" binding:"required"`
+			}
+			
+			if err := c.ShouldBindJSON(&req); err != nil {
+				responses.SendError(c, 400, responses.ErrorBadRequest, "Données invalides", err.Error())
+				return
+			}
+
+			// Nettoyer et valider le numéro
+			cleanPhone := cleanSenegalPhone(req.Phone)
+			if cleanPhone == "" {
+				responses.SendError(c, 400, responses.ErrorInvalidPhone, "Numéro de téléphone invalide", 
+					"Utilisez le format sénégalais: +221777080751 ou 777080751")
+				return
+			}
+
+			// TODO: Vérifier que l'utilisateur existe déjà
+			// authService := c.MustGet("auth_service").(services.AuthService)
+
+			// Générer un nouveau code
+			verificationCode, err := generateSecureCode()
+			if err != nil {
+				responses.SendError(c, 500, responses.ErrorInternalServer, "Erreur génération code", err.Error())
+				return
+			}
+
+			// ⭐ MESSAGE SMS OPTIMISÉ POUR RENVOI
+			message := fmt.Sprintf("🇸🇳 SenMarket: Nouveau code de vérification: %s. Valable 10 min.", verificationCode)
+
+			// ⭐ ENVOYER VIA TWILIO
+			if config.TwilioService != nil {
+				ctx := c.Request.Context()
+				result, err := config.TwilioService.SendSMS(ctx, cleanPhone, message)
+				if err != nil {
+					responses.SendError(c, 500, responses.ErrorInternalServer, "Erreur envoi SMS", err.Error())
+					return
+				}
+				fmt.Printf("✅ Code de vérification renvoyé avec succès vers %s - ID: %s\n", cleanPhone, result.MessageID)
+				
+				responses.SendSuccess(c, gin.H{
+					"message":      "Code de vérification renvoyé",
+					"phone":        cleanPhone,
+					"expires_in":   600, // 10 minutes
+					"sms_result":   result,
+					"debug": gin.H{
+						"generated_code": verificationCode, // ⚠️ À SUPPRIMER EN PRODUCTION
+					},
+				}, "Nouveau code envoyé par SMS")
+			} else {
+				responses.SendSuccess(c, gin.H{
+					"message":      "Code de vérification simulé",
+					"phone":        cleanPhone,
+					"expires_in":   600,
+					"mode":         "simulation",
+					"debug": gin.H{
+						"generated_code": verificationCode, // ⚠️ À SUPPRIMER EN PRODUCTION
+					},
+				}, "Code simulé (TwilioService non configuré)")
+			}
 		})
-		
+
+		// ⭐ VOTRE ENDPOINT VERIFY EXISTANT (garder tel quel ou légèrement modifier)
 		auth.POST("/verify", func(c *gin.Context) {
-			// TODO: Implémenter vérification SMS
+			// TODO: Utiliser votre logique de vérification existante
+			// Ou intégrer avec votre UserController.VerifyUser si elle existe
 			responses.SendSuccess(c, gin.H{"verified": true}, "Téléphone vérifié")
 		})
+
+		// ⭐ VOTRE ENDPOINT LOGIN EXISTANT (améliorer si nécessaire)
+auth.POST("/login", func(c *gin.Context) {
+    var req struct {
+        Phone    string `json:"phone" binding:"required"`
+        Password string `json:"password" binding:"required"`
+    }
+    
+    if err := c.ShouldBindJSON(&req); err != nil {
+        responses.SendError(c, 400, responses.ErrorBadRequest, "Données invalides", err.Error())
+        return
+    }
+
+    // Nettoyer le numéro de téléphone
+    cleanPhone := cleanSenegalPhone(req.Phone)
+    if cleanPhone == "" {
+        responses.SendError(c, 400, responses.ErrorInvalidPhone, "Format de téléphone invalide", nil)
+        return
+    }
+
+    // ⭐ UTILISER VOTRE AUTHSERVICE RÉEL
+    authService := c.MustGet("auth_service").(services.AuthService)
+    
+    // Authentifier l'utilisateur
+    ctx := c.Request.Context()
+    loginResponse, err := authService.Login(ctx, cleanPhone)
+    if err != nil {
+        // Gestion spécifique des erreurs
+        if err.Error() == "Utilisateur non trouvé" {
+            responses.SendError(c, 404, responses.ErrorUserNotFound, "Utilisateur non trouvé", nil)
+            return
+        }
+        if err.Error() == "compte désactivé" {
+            responses.SendError(c, 403, responses.ErrorForbidden, "Compte désactivé", nil)
+            return
+        }
+        
+        responses.SendError(c, 401, responses.ErrorUnauthorized, "Identifiants invalides", nil)
+        return
+    }
+
+    // ⭐ RETOURNER LE VRAI TOKEN JWT
+    responses.SendSuccess(c, gin.H{
+        "token":        loginResponse.Token,        // ⭐ VRAI JWT !
+        "refresh_token": loginResponse.RefreshToken, // ⭐ REFRESH TOKEN
+        "expires_at":   loginResponse.ExpiresAt,    // ⭐ EXPIRATION
+        "user":         loginResponse.User,         // ⭐ VRAIES DONNÉES USER
+        "expires_in":   int64(loginResponse.ExpiresAt.Sub(time.Now()).Seconds()),
+    }, "Connexion réussie")
+})
 		
-		auth.POST("/send-code", func(c *gin.Context) {
-			// TODO: Implémenter envoi SMS avec TwilioService
-			responses.SendSuccess(c, gin.H{"sent": true}, "Code envoyé")
-		})
-		
-		// Routes protégées auth
+		// ⭐ VOS ROUTES PROTÉGÉES EXISTANTES (garder tel quel)
 		auth.GET("/me", config.AuthMiddleware.RequireAuth(), func(c *gin.Context) {
 			userID := middleware.GetUserID(c)
 			claims := middleware.GetUserClaims(c)
@@ -257,10 +424,27 @@ func SetupAuthRoutes(rg *gin.RouterGroup, config *RouterConfig) {
 		})
 		
 		auth.PUT("/profile", config.AuthMiddleware.RequireAuth(), func(c *gin.Context) {
-			// TODO: Implémenter mise à jour profil
+			// TODO: Utiliser votre logique existante
 			responses.SendSuccess(c, gin.H{"updated": true}, "Profil mis à jour")
 		})
 	}
+}
+
+// ⭐ REMPLACEZ votre fonction generateVerificationCode() par cette version CORRIGÉE
+func generateVerificationCode() string {
+	// Générer un code à 6 chiffres sécurisé
+	code := mathRand.Intn(900000) + 100000
+	return fmt.Sprintf("%06d", code)
+}
+
+// ⭐ AJOUTEZ cette fonction utilitaire CORRIGÉE à votre api_routes.go
+func generateSecureCode() (string, error) {
+	// Générer un nombre entre 100000 et 999999
+	n, err := rand.Int(rand.Reader, big.NewInt(900000))
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%06d", n.Int64()+100000), nil
 }
 
 

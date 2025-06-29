@@ -135,20 +135,21 @@ func (c *Container) initRepositories() {
 	log.Println("🗄️ Repositories initialisés")
 }
 
-// initInfrastructureServices initialise les services d'infrastructure
+// ⭐ SECTION MODIFIÉE : initInfrastructureServices
 func (c *Container) initInfrastructureServices() {
 	log.Println("🔧 Initialisation des services d'infrastructure...")
 	
-	// ⭐ VOTRE SERVICE TWILIO SMS
+	// ⭐ VOTRE SERVICE TWILIO SMS (ne pas toucher)
 	c.TwilioService = sms.NewTwilioService()
 	
-	// Storage Service
+	// ⭐ Storage Service (ne pas toucher)
 	if c.MinIOClient != nil && c.MinIOConfig != nil {
 		c.StorageService = storage.NewMinIOService(
 			c.MinIOClient,
 			c.MinIOConfig.Endpoint,
 			c.MinIOConfig.UseSSL,
 		)
+		log.Printf("✅ MinIO Storage configuré: %s", c.MinIOConfig.Endpoint) // ⭐ JUSTE CETTE LIGNE AJOUTÉE
 	}
 	
 	log.Println("✅ Services d'infrastructure initialisés")
@@ -274,9 +275,9 @@ func (c *Container) initMiddleware() {
 	log.Println("🛡️ Middlewares initialisés")
 }
 
-// initControllers initialise les controllers
+// ⭐ SECTION MODIFIÉE : initControllers
 func (c *Container) initControllers() {
-	// User Controller
+	// User Controller (ne pas toucher)
 	c.UserController = controllers.NewUserController(
 		c.CreateUserHandler,
 		c.VerifyUserHandler,
@@ -285,7 +286,7 @@ func (c *Container) initControllers() {
 		c.GetUserStatsHandler,
 	)
 	
-	// Listing Controller
+	// Listing Controller (ne pas toucher)
 	c.ListingController = controllers.NewListingController(
 		c.CreateListingHandler,
 		c.UpdateListingHandler,
@@ -295,14 +296,22 @@ func (c *Container) initControllers() {
 		c.SearchListingsHandler,
 	)
 	
-	// Payment Controller
+	// Payment Controller (ne pas toucher)
 	c.PaymentController = controllers.NewPaymentController(
 		c.ProcessPaymentHandler,
 		c.GetPaymentsHandler,
 	)
 	
-	// ⭐ Health Controller CORRIGÉ
-	c.HealthController = controllers.NewHealthController(c.TwilioService)
+	// ⭐ SEULE MODIFICATION : Health Controller avec type assertion sécurisée
+	var minioService *storage.MinIOService
+	if c.StorageService != nil {
+		// Type assertion sécurisée
+		if ms, ok := c.StorageService.(*storage.MinIOService); ok {
+			minioService = ms
+		}
+	}
+	
+	c.HealthController = controllers.NewHealthController(c.TwilioService, minioService)
 	
 	log.Println("🎮 Controllers initialisés")
 }

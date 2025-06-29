@@ -2,33 +2,38 @@
 package controllers
 
 import (
+	"context"
 	"net/http"
 	"time"
+
 	"github.com/gin-gonic/gin"
+	"senmarket/internal/infrastructure/messaging/sms"
+	"senmarket/internal/infrastructure/storage"
 	"senmarket/internal/presentation/http/responses"
-	"senmarket/internal/infrastructure/messaging/sms" // ⭐ NOUVEAU IMPORT
 )
 
 // HealthController contrôleur pour les vérifications de santé
 type HealthController struct {
 	BaseController
-	startTime     time.Time
-	twilioService *sms.TwilioService // ⭐ NOUVEAU FIELD
+	startTime      time.Time
+	twilioService  *sms.TwilioService
+	storageService *storage.MinIOService // ⭐ Type spécifique, pas interface
 }
 
-// ⭐ MODIFIÉ : NewHealthController avec TwilioService en paramètre
-func NewHealthController(twilioService *sms.TwilioService) *HealthController {
+// ⭐ CONSTRUCTEUR MODIFIÉ pour accepter nil
+func NewHealthController(twilioService *sms.TwilioService, storageService *storage.MinIOService) *HealthController {
 	return &HealthController{
-		startTime:     time.Now(),
-		twilioService: twilioService, // ⭐ INJECTION
+		startTime:      time.Now(),
+		twilioService:  twilioService,
+		storageService: storageService, // ⭐ Peut être nil
 	}
 }
 
-// ⭐ MODIFIÉ : HealthCheck avec vérification Twilio
+// ⭐ HealthCheck AVEC VÉRIFICATION TWILIO + MINIO
 func (ctrl *HealthController) HealthCheck(c *gin.Context) {
 	uptime := time.Since(ctrl.startTime)
 	
-	// ⭐ NOUVEAU : Récupérer le status Twilio
+	// ⭐ Vérification Twilio SMS (ne pas toucher)
 	var twilioStatus map[string]interface{}
 	if ctrl.twilioService != nil {
 		twilioStatus = ctrl.twilioService.GetStatus()
@@ -40,6 +45,40 @@ func (ctrl *HealthController) HealthCheck(c *gin.Context) {
 		}
 	}
 	
+	// ⭐ NOUVEAU : Vérification MinIO avec NIL check
+	var storageStatus map[string]interface{}
+	if ctrl.storageService != nil {
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
+		defer cancel()
+		
+		if ctrl.storageService.IsHealthy(ctx) {
+			storageStatus = map[string]interface{}{
+				"provider":   "minio",
+				"status":     "up",
+				"endpoint":   "minio:9000",
+				"bucket":     "senmarket-images",
+				"configured": true,
+				"message":    "MinIO opérationnel",
+			}
+		} else {
+			storageStatus = map[string]interface{}{
+				"provider":   "minio",
+				"status":     "down",
+				"configured": true,
+				"message":    "MinIO non accessible",
+			}
+		}
+	} else {
+		// Si StorageService est nil
+		storageStatus = map[string]interface{}{
+			"provider":   "minio",
+			"status":     "not_configured",
+			"configured": false,
+			"message":    "Service MinIO non initialisé",
+		}
+	}
+	
+	// ⭐ Réponse avec vos données existantes + MinIO
 	health := map[string]interface{}{
 		"status":    "healthy",
 		"timestamp": time.Now().Format(time.RFC3339),
@@ -47,74 +86,111 @@ func (ctrl *HealthController) HealthCheck(c *gin.Context) {
 		"version":   "1.0.0",
 		"service":   "senmarket-api",
 		"checks": map[string]interface{}{
-			"twilio_sms": twilioStatus, // ⭐ AJOUTÉ !
+			"twilio_sms": twilioStatus, // ⭐ Existant
+		},
+		"services": map[string]interface{}{
+			"storage": storageStatus, // ⭐ NOUVEAU MinIO
 		},
 	}
 	
 	responses.SendSuccess(c, health, "Service is healthy")
 }
 
-// ReadinessCheck vérification de préparation (prêt à recevoir du trafic)
+// ReadinessCheck vérifie si l'application est prête
 func (ctrl *HealthController) ReadinessCheck(c *gin.Context) {
-	// Vérifier les dépendances incluant SMS
-	smsStatus := "error"
+	checks := make(map[string]interface{})
+	allReady := true
+	
+	// Vérifier MinIO
+	if ctrl.storageService != nil {
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
+		defer cancel()
+		
+		if ctrl.storageService.IsHealthy(ctx) {
+			checks["storage"] = map[string]interface{}{
+				"status":  "ready",
+				"message": "MinIO prêt",
+			}
+		} else {
+			checks["storage"] = map[string]interface{}{
+				"status":  "not_ready",
+				"message": "MinIO non accessible",
+			}
+			allReady = false
+		}
+	}
+	
+	// Vérifier Twilio
 	if ctrl.twilioService != nil && ctrl.twilioService.IsConfigured() {
-		smsStatus = "ok"
+		checks["sms"] = map[string]interface{}{
+			"status":  "ready",
+			"message": "SMS Twilio prêt",
+		}
+	} else {
+		checks["sms"] = map[string]interface{}{
+			"status":  "not_configured",
+			"message": "SMS non configuré",
+		}
 	}
 	
-	readiness := map[string]interface{}{
-		"status":    "ready",
+	status := "ready"
+	if !allReady {
+		status = "not_ready"
+	}
+	
+	response := map[string]interface{}{
+		"status":    status,
+		"checks":    checks,
 		"timestamp": time.Now().Format(time.RFC3339),
-		"checks": map[string]string{
-			"database": "ok",
-			"redis":    "ok", 
-			"storage":  "ok",
-			"sms":      smsStatus, // ⭐ AJOUTÉ
-		},
 	}
 	
-	responses.SendSuccess(c, readiness, "Service is ready")
+	if allReady {
+		responses.SendSuccess(c, response, "Application ready")
+	} else {
+		c.JSON(http.StatusServiceUnavailable, response)
+	}
 }
 
-// LivenessCheck vérification de vivacité (le service fonctionne)
+// LivenessCheck vérifie si l'application est vivante
 func (ctrl *HealthController) LivenessCheck(c *gin.Context) {
-	liveness := map[string]interface{}{
+	uptime := time.Since(ctrl.startTime)
+	
+	response := map[string]interface{}{
 		"status":    "alive",
+		"uptime":    uptime.String(),
 		"timestamp": time.Now().Format(time.RFC3339),
-		"pid":       "placeholder", // TODO: Ajouter le PID réel
 	}
 	
-	c.JSON(http.StatusOK, liveness)
+	responses.SendSuccess(c, response, "Application alive")
 }
 
-// ⭐ MODIFIÉ : MetricsCheck avec métriques SMS
+// MetricsCheck retourne des métriques de performance
 func (ctrl *HealthController) MetricsCheck(c *gin.Context) {
-	// Métriques SMS
-	smsConfigured := false
-	if ctrl.twilioService != nil {
-		smsConfigured = ctrl.twilioService.IsConfigured()
-	}
+	uptime := time.Since(ctrl.startTime)
 	
+	// ⭐ NOUVEAU : Métriques détaillées avec MinIO
 	metrics := map[string]interface{}{
-		"uptime":    time.Since(ctrl.startTime).String(),
-		"timestamp": time.Now().Format(time.RFC3339),
-		"memory": map[string]interface{}{
-			// TODO: Ajouter les métriques mémoire réelles
-			"used":  "placeholder",
-			"total": "placeholder",
+		"uptime_seconds": uptime.Seconds(),
+		"uptime_human":   uptime.String(),
+		"version":        "1.0.0",
+		"go_version":     "1.23",
+		"services": map[string]interface{}{
+			"twilio_sms": map[string]interface{}{
+				"configured": ctrl.twilioService != nil && ctrl.twilioService.IsConfigured(),
+				"provider":   "twilio",
+			},
+			"storage": map[string]interface{}{
+				"configured": ctrl.storageService != nil,
+				"provider":   "minio",
+			},
 		},
-		"requests": map[string]interface{}{
-			// TODO: Ajouter les métriques de requêtes
-			"total":   "placeholder",
-			"success": "placeholder",
-			"errors":  "placeholder",
+		"endpoints": map[string]interface{}{
+			"health":    "/health",
+			"ready":     "/health/ready",
+			"live":      "/health/live",
+			"metrics":   "/health/metrics",
 		},
-		"sms": map[string]interface{}{
-			"provider":   "twilio",
-			"configured": smsConfigured,
-			"service":    "ready",
-		}, // ⭐ AJOUTÉ
 	}
 	
-	responses.SendSuccess(c, metrics, "Service metrics")
+	responses.SendSuccess(c, metrics, "Application metrics")
 }
