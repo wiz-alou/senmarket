@@ -1,61 +1,282 @@
 # ============================================
-# .gitignore
+# .gitignore - SenMarket Clean Architecture
 # ============================================
-# Binaries for programs and plugins
+
+# ============================================
+# BINAIRES ET EXECUTABLES
+# ============================================
+# Binaires Go
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
 
-# Test binary, built with `go test -c`
+# Binaires SenMarket spécifiques
+/senmarket
+/server
+/main
+/cmd/server/senmarket
+/cmd/server/server
+/cmd/server/main
+
+# Test binaries
 *.test
 
 # Output of the go coverage tool
 *.out
 
+# ============================================
+# ENVIRONNEMENT ET CONFIGURATION
+# ============================================
+# Environment variables
+.env
+.env.local
+.env.development
+.env.staging
+.env.production
+.env.test
+
+# Configuration locale
+config.local.yml
+config.local.json
+
+# ============================================
+# DEPENDENCIES ET WORKSPACE
+# ============================================
 # Dependency directories
 vendor/
 
 # Go workspace file
 go.work
+go.work.sum
 
-# Environment variables
-.env
-.env.local
-.env.production
-
-# IDE
+# ============================================
+# IDE ET ÉDITEURS
+# ============================================
+# Visual Studio Code
 .vscode/
+*.code-workspace
+
+# IntelliJ IDEA / GoLand
 .idea/
+*.iml
+*.ipr
+*.iws
+
+# Vim
 *.swp
 *.swo
+*~
 
-# OS
+# Emacs
+\#*\#
+.\#*
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# ============================================
+# SYSTÈME D'EXPLOITATION
+# ============================================
+# macOS
 .DS_Store
-Thumbs.db
+.AppleDouble
+.LSOverride
+Icon?
 
-# Logs
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+
+# ============================================
+# LOGS ET MONITORING
+# ============================================
+# Application logs
 *.log
 logs/
+log/
 
+# Debug files
+debug.log
+error.log
+access.log
+
+# Performance profiling
+*.prof
+*.pprof
+
+# ============================================
+# DONNÉES ET CACHE
+# ============================================
 # Runtime data
 tmp/
 temp/
+cache/
 
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Redis dump
+dump.rdb
+appendonly.aof
+
+# MinIO data (développement local)
+minio_data/
+.minio/
+
+# Cache Redis local
+redis_data/
+
+# ============================================
+# TESTS ET COVERAGE
+# ============================================
 # Coverage reports
 coverage.txt
 coverage.html
+coverage.out
+cover.html
+c.out
 
+# Test results
+test_results/
+*.xml
+
+# Benchmark results
+*.bench
+
+# ============================================
+# BUILD ET DÉPLOIEMENT
+# ============================================
 # Build outputs
 bin/
 dist/
 build/
+target/
 
-# Database
-*.db
-*.sqlite
+# Docker
+.docker/
+docker-compose.override.yml
 
-# MinIO data
-minio_data/.env
-.env
+# Kubernetes
+k8s-local/
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# ============================================
+# BACKUP ET ARCHIVES
+# ============================================
+# Backups
+*.backup
+*.bak
+backup/
+backups/
+
+# Archives
+*.tar.gz
+*.zip
+*.rar
+
+# ============================================
+# SÉCURITÉ
+# ============================================
+# Clés privées
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Tokens et secrets
+secrets/
+.secrets
+jwt_secret
+
+# ============================================
+# DÉVELOPPEMENT SPÉCIFIQUE SENMARKET
+# ============================================
+# Scripts de nettoyage temporaires
+cleanup_*.sh
+migrate_*.go
+
+# Anciennes sauvegardes d'architecture
+*-backup-*/
+old_architecture_*/
+
+# Fichiers de test temporaires
+test_*.tmp
+*.test.json
+
+# Uploads temporaires (développement)
+uploads/tmp/
+uploads/temp/
+
+# ============================================
+# DOCUMENTATION GÉNÉRÉE
+# ============================================
+# Documentation générée automatiquement
+docs/generated/
+api-docs/
+
+# Swagger UI
+swagger-ui/
+
+# ============================================
+# PERFORMANCE ET DEBUG
+# ============================================
+# Profiling
+cpu.prof
+mem.prof
+goroutine.prof
+
+# Debug dumps
+heap.out
+goroutine.out
+
+# ============================================
+# CI/CD
+# ============================================
+# GitHub Actions artifacts
+.github/workflows/artifacts/
+
+# Coverage badges
+coverage.svg
+
+# ============================================
+# MOBILE ET FRONTEND (SI AJOUTÉ PLUS TARD)
+# ============================================
+# Node.js (si frontend ajouté)
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# React Native (si app mobile)
+ios/build/
+android/build/
+
+# ============================================
+# FINAL - RÈGLES GLOBALES
+# ============================================
+# Ignorer tous les fichiers temporaires
+**/tmp/
+**/temp/
+**/cache/
+
+# Ignorer les logs partout
+**/*.log
+
+# Ignorer les binaires Go partout
+**/senmarket
+**/server
+**/main

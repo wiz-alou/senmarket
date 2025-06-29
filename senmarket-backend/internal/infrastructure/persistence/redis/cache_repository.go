@@ -215,3 +215,23 @@ func (r *CacheRepository) GetListLength(ctx context.Context, key string) (int64,
 func (r *CacheRepository) RemoveFromList(ctx context.Context, key string, count int64, value interface{}) (int64, error) {
    return r.client.LRem(ctx, key, count, value).Result()
 }
+
+
+// DelPattern supprime toutes les clés matchant un pattern (alias pour DeletePattern)
+func (r *CacheRepository) DelPattern(ctx context.Context, pattern string) error {
+	return r.DeletePattern(ctx, pattern)
+}
+
+// IncrEx incrémente avec TTL automatique
+func (r *CacheRepository) IncrEx(ctx context.Context, key string, ttl time.Duration) (int64, error) {
+	pipe := r.client.Pipeline()
+	incrCmd := pipe.Incr(ctx, key)
+	pipe.Expire(ctx, key, ttl)
+	_, err := pipe.Exec(ctx)
+	
+	if err != nil {
+		return 0, err
+	}
+	
+	return incrCmd.Val(), nil
+}

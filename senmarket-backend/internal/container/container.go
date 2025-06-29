@@ -86,9 +86,11 @@ type Container struct {
 	ListingController *controllers.ListingController
 	PaymentController *controllers.PaymentController
 	HealthController  *controllers.HealthController
+	CacheController   *controllers.CacheController  // ⭐ NOUVEAU
 	
 	// Middleware
-	AuthMiddleware *middleware.AuthMiddleware
+	AuthMiddleware  *middleware.AuthMiddleware
+	CacheMiddleware *middleware.CacheMiddleware    // ⭐ NOUVEAU
 }
 
 // NewContainer crée un nouveau container avec toutes les dépendances
@@ -272,6 +274,9 @@ func (c *Container) initMiddleware() {
 	// AuthMiddleware avec le service d'authentification
 	c.AuthMiddleware = middleware.NewAuthMiddleware(c.AuthService)
 	
+	// ⭐ NOUVEAU : CacheMiddleware avec le repository cache
+	c.CacheMiddleware = middleware.NewCacheMiddleware(c.CacheRepository.(*redisRepo.CacheRepository))
+	
 	log.Println("🛡️ Middlewares initialisés")
 }
 
@@ -312,6 +317,9 @@ func (c *Container) initControllers() {
 	}
 	
 	c.HealthController = controllers.NewHealthController(c.TwilioService, minioService)
+	
+	// ⭐ NOUVEAU : Cache Controller
+	c.CacheController = controllers.NewCacheController(c.CacheRepository.(*redisRepo.CacheRepository))
 	
 	log.Println("🎮 Controllers initialisés")
 }
