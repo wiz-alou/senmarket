@@ -1,4 +1,5 @@
 // internal/domain/valueobjects/region.go
+// VERSION CORRIGÉE - Accepte codes ET noms pour compatibilité
 package valueobjects
 
 import (
@@ -33,7 +34,7 @@ const (
 	RegionMatam       RegionCode = "MA"
 )
 
-// regions contient la liste des régions valides
+// regions contient la liste des régions valides (code -> nom)
 var regions = map[RegionCode]string{
 	RegionDakar:       "Dakar",
 	RegionThies:       "Thiès",
@@ -51,12 +52,33 @@ var regions = map[RegionCode]string{
 	RegionMatam:       "Matam",
 }
 
-// NewRegion crée une nouvelle région validée
-func NewRegion(code string) (*Region, error) {
-	code = strings.ToUpper(strings.TrimSpace(code))
+// 🔧 NOUVEAU : Mapping inverse (nom -> code) pour compatibilité
+var regionsByName = map[string]RegionCode{
+	"dakar":       RegionDakar,
+	"thiès":       RegionThies,
+	"thies":       RegionThies,
+	"saint-louis": RegionSaintLouis,
+	"diourbel":    RegionDiourbel,
+	"louga":       RegionLouga,
+	"fatick":      RegionFatick,
+	"kaolack":     RegionKaolack,
+	"kaffrine":    RegionKaffrine,
+	"kolda":       RegionKolda,
+	"ziguinchor":  RegionZiguinchor,
+	"sédhiou":     RegionSedhiou,
+	"sedhiou":     RegionSedhiou,
+	"tambacounda": RegionTambacounda,
+	"kédougou":    RegionKedougou,
+	"kedougou":    RegionKedougou,
+	"matam":       RegionMatam,
+}
+
+// NewRegion crée une nouvelle région validée - VERSION FLEXIBLE
+func NewRegion(input string) (*Region, error) {
+	input = strings.TrimSpace(input)
 	
-	// 🔧 CORRECTION TEMPORAIRE: Permettre les codes vides pour la migration
-	if code == "" {
+	// 🔧 Permettre les codes vides pour la migration
+	if input == "" {
 		return &Region{
 			Code:     "",
 			Name:     "Non spécifié",
@@ -64,21 +86,31 @@ func NewRegion(code string) (*Region, error) {
 		}, nil
 	}
 	
-	regionCode := RegionCode(code)
-	name, exists := regions[regionCode]
-	
-	if !exists {
-		return nil, errors.New("code région invalide pour le Sénégal")
+	// 🔧 NOUVEAU : Essayer d'abord comme CODE (DK, TH, etc.)
+	inputUpper := strings.ToUpper(input)
+	regionCode := RegionCode(inputUpper)
+	if name, exists := regions[regionCode]; exists {
+		return &Region{
+			Code:     inputUpper,
+			Name:     name,
+			IsActive: true,
+		}, nil
 	}
 	
-	return &Region{
-		Code:     code,
-		Name:     name,
-		IsActive: true,
-	}, nil
+	// 🔧 NOUVEAU : Essayer ensuite comme NOM (Dakar, Thiès, etc.)
+	inputLower := strings.ToLower(input)
+	if code, exists := regionsByName[inputLower]; exists {
+		return &Region{
+			Code:     string(code),
+			Name:     regions[code],
+			IsActive: true,
+		}, nil
+	}
+	
+	return nil, errors.New("code région invalide pour le Sénégal")
 }
 
-// NewRegionStrict crée une nouvelle région avec validation stricte (pour les créations)
+// NewRegionStrict crée une nouvelle région avec validation stricte (codes seulement)
 func NewRegionStrict(code string) (*Region, error) {
 	code = strings.ToUpper(strings.TrimSpace(code))
 	
@@ -112,6 +144,28 @@ func IsValidRegionCode(code string) bool {
 	}
 	_, exists := regions[RegionCode(strings.ToUpper(code))]
 	return exists
+}
+
+// IsValidRegionName vérifie si un nom de région est valide
+func IsValidRegionName(name string) bool {
+	if name == "" {
+		return false
+	}
+	_, exists := regionsByName[strings.ToLower(name)]
+	return exists
+}
+
+// ConvertNameToCode convertit un nom de région en code
+func ConvertNameToCode(name string) (string, error) {
+	if name == "" {
+		return "", nil
+	}
+	
+	code, exists := regionsByName[strings.ToLower(name)]
+	if !exists {
+		return "", errors.New("nom de région invalide")
+	}
+	return string(code), nil
 }
 
 // GetRegionName retourne le nom de la région par son code
