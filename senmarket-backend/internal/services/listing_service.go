@@ -38,19 +38,24 @@ func NewListingService(db *gorm.DB, cacheService *CacheService, quotaService *Qu
 // CreateListingWithQuota crée une nouvelle annonce avec vérification des quotas
 func (s *ListingService) CreateListingWithQuota(userID uuid.UUID, req *CreateListingRequest) (*models.Listing, error) {
 	// Vérifier si l'utilisateur peut créer une annonce
-	canCreate, _, err := s.quotaService.CanCreateFreeListing(userID)
+	canCreate, reason, err := s.quotaService.CanCreateFreeListing(userID)
 	if err != nil {
 		return nil, fmt.Errorf("erreur vérification quota: %w", err)
 	}
 
-	if !canCreate {
-		return nil, ErrQuotaExceeded
-	}
+	// 🔧 CHANGEMENT: Ne plus bloquer si canCreate = false, permettre création en draft
+	shouldPublishImmediately := canCreate
 
 	// Parser le CategoryID depuis string vers UUID
 	categoryUUID, err := uuid.Parse(req.CategoryID)
 	if err != nil {
 		return nil, fmt.Errorf("ID catégorie invalide: %w", err)
+	}
+
+	// 🔧 CORRECTION: Déterminer le statut selon la phase
+	status := "draft" // Par défaut
+	if shouldPublishImmediately {
+		status = "active" // Publication immédiate si gratuit
 	}
 
 	// Créer l'annonce
@@ -62,10 +67,10 @@ func (s *ListingService) CreateListingWithQuota(userID uuid.UUID, req *CreateLis
 		Currency:    "XOF", // Franc CFA par défaut
 		Region:      req.Region,
 		Images:      pq.StringArray(req.Images),
-		Status:      "draft", // Draft par défaut
+		Status:      status, // 🔧 STATUT DYNAMIQUE
 		IsFeatured:  req.Featured,
 		UserID:      userID,
-		CategoryID:  categoryUUID, // Utiliser directement l'UUID
+		CategoryID:  categoryUUID,
 		ViewsCount:  0,
 	}
 
@@ -74,9 +79,14 @@ func (s *ListingService) CreateListingWithQuota(userID uuid.UUID, req *CreateLis
 		return nil, fmt.Errorf("erreur création annonce: %w", err)
 	}
 
-	// Compter l'annonce créée dans le quota
-	if err := s.quotaService.ConsumeFreeListing(userID); err != nil {
-		log.Printf("⚠️ Erreur comptage annonce gratuite: %v", err)
+	// 🔧 CORRECTION: Compter seulement si annonce publiée gratuitement
+	if shouldPublishImmediately {
+		if err := s.quotaService.ConsumeFreeListing(userID); err != nil {
+			log.Printf("⚠️ Erreur comptage annonce gratuite: %v", err)
+		}
+		log.Printf("🎉 Annonce %s PUBLIÉE GRATUITEMENT pour utilisateur %s", listing.ID, userID)
+	} else {
+		log.Printf("📝 Annonce %s créée en BROUILLON (paiement requis) pour utilisateur %s - Raison: %s", listing.ID, userID, reason)
 	}
 
 	// Preload les relations
@@ -84,7 +94,6 @@ func (s *ListingService) CreateListingWithQuota(userID uuid.UUID, req *CreateLis
 		return nil, fmt.Errorf("erreur rechargement annonce: %w", err)
 	}
 
-	log.Printf("✅ Annonce %s créée pour utilisateur %s", listing.ID, userID)
 	return &listing, nil
 }
 
